@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "title": "Flow Finance",
+    "description": "Track your checking and savings accounts with ease."
+  },
+  "common": {
+    "appName": "Flow Finance",
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "currency": "EUR",
+    "demoMode": "Demo mode (mock data)"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "accounts": "Accounts",
+    "transactions": "Transactions",
+    "settings": "Settings",
+    "logout": "Log out"
+  },
+  "auth": {
+    "loginTitle": "Sign in",
+    "loginSubtitle": "Receive a magic link by email to access your space.",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "you@example.com",
+    "sendLink": "Send link",
+    "checkEmail": "Check your inbox for the sign-in link.",
+    "loginError": "Could not send the link. Please try again."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "totalBalance": "Total balance",
+    "monthlySpending": "Monthly spending",
+    "monthlyIncome": "Monthly income",
+    "recentTransactions": "Recent transactions",
+    "spendingChart": "Spending over 6 months",
+    "viewAll": "View all"
+  },
+  "accounts": {
+    "title": "Accounts",
+    "checking": "Checking account",
+    "savings": "Savings account",
+    "balance": "Balance",
+    "iban": "IBAN",
+    "connectBank": "Connect my bank",
+    "connectBankSoon": "Automatic bank sync will be available after deployment (Enable Banking)."
+  },
+  "transactions": {
+    "title": "Transactions",
+    "date": "Date",
+    "description": "Description",
+    "amount": "Amount",
+    "account": "Account",
+    "status": "Status",
+    "booked": "Booked",
+    "pending": "Pending",
+    "noResults": "No transactions found."
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageDescription": "Choose the interface language.",
+    "bankConnection": "Bank connection",
+    "bankStatus": "Status",
+    "bankNotConnected": "Not connected",
+    "bankConnected": "Connected",
+    "syncNow": "Sync now",
+    "consentExpires": "Consent expires on {date}",
+    "account": "User account",
+    "email": "Email"
+  },
+  "legal": {
+    "privacy": "Privacy policy",
+    "terms": "Terms of service"
+  }
+}

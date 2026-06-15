@@ -1,0 +1,77 @@
+{
+  "metadata": {
+    "title": "Flow Finance",
+    "description": "Suivez vos comptes courants et livrets en toute simplicité."
+  },
+  "common": {
+    "appName": "Flow Finance",
+    "loading": "Chargement…",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "search": "Rechercher",
+    "currency": "EUR",
+    "demoMode": "Mode démo (données fictives)"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "accounts": "Comptes",
+    "transactions": "Transactions",
+    "settings": "Paramètres",
+    "logout": "Déconnexion"
+  },
+  "auth": {
+    "loginTitle": "Connexion",
+    "loginSubtitle": "Recevez un lien magique par e-mail pour accéder à votre espace.",
+    "emailLabel": "Adresse e-mail",
+    "emailPlaceholder": "vous@exemple.com",
+    "sendLink": "Envoyer le lien",
+    "checkEmail": "Vérifiez votre boîte mail pour le lien de connexion.",
+    "loginError": "Impossible d'envoyer le lien. Réessayez."
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "totalBalance": "Solde total",
+    "monthlySpending": "Dépenses du mois",
+    "monthlyIncome": "Revenus du mois",
+    "recentTransactions": "Transactions récentes",
+    "spendingChart": "Dépenses sur 6 mois",
+    "viewAll": "Voir tout"
+  },
+  "accounts": {
+    "title": "Comptes",
+    "checking": "Compte courant",
+    "savings": "Livret",
+    "balance": "Solde",
+    "iban": "IBAN",
+    "connectBank": "Connecter ma banque",
+    "connectBankSoon": "La synchronisation bancaire automatique sera disponible après déploiement (Enable Banking)."
+  },
+  "transactions": {
+    "title": "Transactions",
+    "date": "Date",
+    "description": "Libellé",
+    "amount": "Montant",
+    "account": "Compte",
+    "status": "Statut",
+    "booked": "Comptabilisé",
+    "pending": "En attente",
+    "noResults": "Aucune transaction trouvée."
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "languageDescription": "Choisissez la langue de l'interface.",
+    "bankConnection": "Connexion bancaire",
+    "bankStatus": "Statut",
+    "bankNotConnected": "Non connectée",
+    "bankConnected": "Connectée",
+    "syncNow": "Synchroniser",
+    "consentExpires": "Consentement expire le {date}",
+    "account": "Compte utilisateur",
+    "email": "E-mail"
+  },
+  "legal": {
+    "privacy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation"
+  }
+}
