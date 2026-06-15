@@ -1,0 +1,161 @@
+/**
+ * @file mock-data.ts
+ * @description Données fictives pour le MVP phase 1 (mode démo sans Supabase configuré).
+ */
+
+import type { Account, TransactionWithAccount } from "@/types/database";
+
+export const MOCK_ACCOUNTS: Account[] = [
+  {
+    id: "acc-checking-1",
+    user_id: "demo",
+    connection_id: null,
+    external_uid: null,
+    name: "Compte courant",
+    iban: "FR76 1234 5678 9012 3456 7890 123",
+    type: "checking",
+    balance: 3247.82,
+    currency: "EUR",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-06-15T00:00:00Z",
+  },
+  {
+    id: "acc-savings-1",
+    user_id: "demo",
+    connection_id: null,
+    external_uid: null,
+    name: "Livret A",
+    iban: "FR76 9876 5432 1098 7654 3210 987",
+    type: "savings",
+    balance: 12500.0,
+    currency: "EUR",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-06-15T00:00:00Z",
+  },
+];
+
+export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
+  {
+    id: "tx-1",
+    account_id: "acc-checking-1",
+    entry_reference: "eb-ref-001",
+    booking_date: "2026-06-14",
+    amount: -42.5,
+    currency: "EUR",
+    description: "CARREFOUR MARKET",
+    status: "BOOK",
+    category_id: null,
+    created_at: "2026-06-14T10:00:00Z",
+    updated_at: "2026-06-14T10:00:00Z",
+    account_name: "Compte courant",
+    account_type: "checking",
+  },
+  {
+    id: "tx-2",
+    account_id: "acc-checking-1",
+    entry_reference: "eb-ref-002",
+    booking_date: "2026-06-13",
+    amount: -65.0,
+    currency: "EUR",
+    description: "SNCF CONNECT",
+    status: "BOOK",
+    category_id: null,
+    created_at: "2026-06-13T08:00:00Z",
+    updated_at: "2026-06-13T08:00:00Z",
+    account_name: "Compte courant",
+    account_type: "checking",
+  },
+  {
+    id: "tx-3",
+    account_id: "acc-checking-1",
+    entry_reference: "eb-ref-003",
+    booking_date: "2026-06-12",
+    amount: 2450.0,
+    currency: "EUR",
+    description: "VIREMENT SALAIRE",
+    status: "BOOK",
+    category_id: null,
+    created_at: "2026-06-12T06:00:00Z",
+    updated_at: "2026-06-12T06:00:00Z",
+    account_name: "Compte courant",
+    account_type: "checking",
+  },
+  {
+    id: "tx-4",
+    account_id: "acc-checking-1",
+    entry_reference: "eb-ref-004",
+    booking_date: "2026-06-10",
+    amount: -29.99,
+    currency: "EUR",
+    description: "NETFLIX",
+    status: "BOOK",
+    category_id: null,
+    created_at: "2026-06-10T12:00:00Z",
+    updated_at: "2026-06-10T12:00:00Z",
+    account_name: "Compte courant",
+    account_type: "checking",
+  },
+  {
+    id: "tx-5",
+    account_id: "acc-checking-1",
+    entry_reference: "eb-ref-005",
+    booking_date: "2026-06-09",
+    amount: -18.2,
+    currency: "EUR",
+    description: "UBER EATS",
+    status: "PDNG",
+    category_id: null,
+    created_at: "2026-06-09T20:00:00Z",
+    updated_at: "2026-06-09T20:00:00Z",
+    account_name: "Compte courant",
+    account_type: "checking",
+  },
+  {
+    id: "tx-6",
+    account_id: "acc-savings-1",
+    entry_reference: "eb-ref-006",
+    booking_date: "2026-06-01",
+    amount: 200.0,
+    currency: "EUR",
+    description: "VIREMENT EPARGNE",
+    status: "BOOK",
+    category_id: null,
+    created_at: "2026-06-01T09:00:00Z",
+    updated_at: "2026-06-01T09:00:00Z",
+    account_name: "Livret A",
+    account_type: "savings",
+  },
+];
+
+/** Agrégats mensuels pour le graphique dashboard (6 derniers mois). */
+export const MOCK_MONTHLY_SPENDING = [
+  { month: "Jan", amount: 1820 },
+  { month: "Fév", amount: 2100 },
+  { month: "Mar", amount: 1950 },
+  { month: "Avr", amount: 2340 },
+  { month: "Mai", amount: 1780 },
+  { month: "Jun", amount: 1560 },
+];
+
+/**
+ * Calcule le solde total à partir d'une liste de comptes.
+ */
+export function sumAccountBalances(accounts: Account[]): number {
+  return accounts.reduce((sum, account) => sum + account.balance, 0);
+}
+
+/**
+ * Filtre les transactions du mois calendaire en cours.
+ */
+export function getCurrentMonthTransactions(
+  transactions: TransactionWithAccount[],
+): TransactionWithAccount[] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  return transactions.filter((tx) => {
+    const date = new Date(tx.booking_date);
+    return date.getFullYear() === year && date.getMonth() === month;
+  });
+}
