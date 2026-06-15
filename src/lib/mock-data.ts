@@ -140,22 +140,4 @@ export const MOCK_MONTHLY_SPENDING = [
 /**
  * Calcule le solde total à partir d'une liste de comptes.
  */
-export function sumAccountBalances(accounts: Account[]): number {
-  return accounts.reduce((sum, account) => sum + account.balance, 0);
-}
-
-/**
- * Filtre les transactions du mois calendaire en cours.
- */
-export function getCurrentMonthTransactions(
-  transactions: TransactionWithAccount[],
-): TransactionWithAccount[] {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-
-  return transactions.filter((tx) => {
-    const date = new Date(tx.booking_date);
-    return date.getFullYear() === year && date.getMonth() === month;
-  });
-}
+export { sumAccountBalances, getCurrentMonthTransactions } from "@/lib/finance/aggregates";

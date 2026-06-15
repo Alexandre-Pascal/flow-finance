@@ -6,14 +6,13 @@ import { SpendingChart } from "@/components/features/spending-chart";
 import { TransactionsTable } from "@/components/features/transactions-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/format";
 import {
+  buildMonthlySpending,
   getCurrentMonthTransactions,
-  MOCK_ACCOUNTS,
-  MOCK_MONTHLY_SPENDING,
-  MOCK_TRANSACTIONS,
   sumAccountBalances,
-} from "@/lib/mock-data";
+} from "@/lib/finance/aggregates";
+import { getFinanceData } from "@/lib/finance/queries";
+import { formatCurrency } from "@/lib/format";
 
 export default async function DashboardPage({
   params,
@@ -24,8 +23,10 @@ export default async function DashboardPage({
   setRequestLocale(locale);
   const t = await getTranslations("dashboard");
 
-  const totalBalance = sumAccountBalances(MOCK_ACCOUNTS);
-  const monthTx = getCurrentMonthTransactions(MOCK_TRANSACTIONS);
+  const { accounts, transactions, monthlySpending } = await getFinanceData(locale);
+
+  const totalBalance = sumAccountBalances(accounts);
+  const monthTx = getCurrentMonthTransactions(transactions);
   const spending = monthTx
     .filter((tx) => tx.amount < 0)
     .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
@@ -33,9 +34,14 @@ export default async function DashboardPage({
     .filter((tx) => tx.amount > 0)
     .reduce((sum, tx) => sum + tx.amount, 0);
 
-  const recent = [...MOCK_TRANSACTIONS]
+  const recent = [...transactions]
     .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
     .slice(0, 5);
+
+  const chartData =
+    monthlySpending.length > 0
+      ? monthlySpending
+      : buildMonthlySpending(transactions, locale);
 
   return (
     <div className="space-y-6">
@@ -70,7 +76,7 @@ export default async function DashboardPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <SpendingChart data={MOCK_MONTHLY_SPENDING} title="" />
+            <SpendingChart data={chartData} title="" />
           </CardContent>
         </Card>
 

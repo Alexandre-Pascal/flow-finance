@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { TransactionsTable } from "@/components/features/transactions-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MOCK_TRANSACTIONS } from "@/lib/mock-data";
+import { getFinanceData } from "@/lib/finance/queries";
 
 export default async function TransactionsPage({
   params,
@@ -12,7 +12,9 @@ export default async function TransactionsPage({
   setRequestLocale(locale);
   const t = await getTranslations("transactions");
 
-  const sorted = [...MOCK_TRANSACTIONS].sort((a, b) =>
+  const { transactions } = await getFinanceData(locale);
+
+  const sorted = [...transactions].sort((a, b) =>
     b.booking_date.localeCompare(a.booking_date),
   );
 
