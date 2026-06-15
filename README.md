@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Flow Finance
 
-## Getting Started
+Tracker de finances personnelles — comptes courants et livrets, synchronisation bancaire via Open Banking (Enable Banking).
 
-First, run the development server:
+## Fonctionnalités
+
+- Tableau de bord : soldes, dépenses/revenus du mois, graphique
+- Liste des comptes (courant + livret)
+- Historique des transactions
+- Interface **FR / EN** (next-intl)
+- Auth Supabase (magic link) ou **mode démo** sans configuration
+- Sync bancaire Enable Banking (phase 2, après déploiement HTTPS)
+
+## Stack
+
+| Couche | Technologie |
+|--------|-------------|
+| Frontend | Next.js 16, React 19, Tailwind CSS 4, shadcn/ui |
+| i18n | next-intl |
+| Backend | Next.js Route Handlers |
+| Base de données | Supabase (Postgres + Auth + RLS) |
+| Banque | Enable Banking API (DSP2) |
+| Charts | Recharts |
+| Design | ui-ux-pro-max-skill |
+
+## Prérequis
+
+- Node.js 20+
+- npm
+- Compte [Supabase](https://supabase.com) (optionnel pour mode démo)
+- Compte [Enable Banking](https://enablebanking.com) (phase 2)
+
+## Installation
 
 ```bash
+git clone https://github.com/<votre-user>/flow-finance.git
+cd flow-finance
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ouvrir [http://localhost:3000/fr](http://localhost:3000/fr) — en l'absence de Supabase, le **mode démo** s'active automatiquement.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variables d'environnement
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Voir [`.env.example`](.env.example). Ne jamais committer `.env.local` ni les fichiers `.pem`.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Commande | Description |
+|----------|-------------|
+| `npm run dev` | Serveur de développement |
+| `npm run build` | Build production |
+| `npm run start` | Serveur production |
+| `npm run lint` | ESLint |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Base de données
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Appliquer la migration initiale dans le SQL Editor Supabase :
 
-## Deploy on Vercel
+```
+supabase/migrations/20260615120000_initial_schema.sql
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Voir [`docs/DATABASE.md`](docs/DATABASE.md).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Design system](docs/DESIGN_SYSTEM.md)
+- [Enable Banking](docs/ENABLE_BANKING.md)
+- [i18n](docs/I18N.md)
+- [Conventions de commentaires](docs/COMMENTING.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Roadmap
+
+- [x] Phase 1 — UI, i18n, auth, schéma DB, mode démo
+- [x] Phase 2 — Module Enable Banking (connect, callback, sync, cron)
+- [ ] Phase 3 — Catégorisation auto, budgets, export CSV
+
+## Licence
+
+MIT
