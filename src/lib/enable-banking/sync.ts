@@ -4,9 +4,54 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchTransactions } from "@/lib/enable-banking/client";
-import { mapEnableBankingTransaction } from "@/lib/enable-banking/types";
+import { fetchBalances, fetchTransactions } from "@/lib/enable-banking/client";
+import {
+  mapEnableBankingTransaction,
+  pickAccountBalance,
+} from "@/lib/enable-banking/types";
 import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Met à jour les soldes de tous les comptes liés à Enable Banking.
+ */
+export async function refreshAccountBalances(
+  userId: string,
+  supabaseClient?: SupabaseClient,
+): Promise<{ updated: number }> {
+  const supabase = supabaseClient ?? (await createClient());
+
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data: accounts, error: accountsError } = await supabase
+    .from("accounts")
+    .select("id, external_uid")
+    .eq("user_id", userId)
+    .not("external_uid", "is", null);
+
+  if (accountsError) throw accountsError;
+  if (!accounts?.length) return { updated: 0 };
+
+  let updated = 0;
+
+  for (const account of accounts) {
+    if (!account.external_uid) continue;
+
+    const { balances } = await fetchBalances(account.external_uid);
+    const balance = pickAccountBalance(balances);
+
+    const { error } = await supabase
+      .from("accounts")
+      .update({ balance })
+      .eq("id", account.id);
+
+    if (error) throw error;
+    updated += 1;
+  }
+
+  return { updated };
+}
 
 /**
  * Synchronise les transactions de tous les comptes liés à un utilisateur.
@@ -75,5 +120,18 @@ export async function syncUserTransactions(
     }
   }
 
+  return { synced };
+}
+
+/**
+ * Sync complète : soldes + transactions.
+ */
+export async function syncUserFinanceData(
+  userId: string,
+  strategy: "default" | "longest" = "default",
+  supabaseClient?: SupabaseClient,
+) {
+  await refreshAccountBalances(userId, supabaseClient);
+  const { synced } = await syncUserTransactions(userId, strategy, supabaseClient);
   return { synced };
 }

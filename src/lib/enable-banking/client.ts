@@ -7,6 +7,7 @@ import { createEnableBankingJwt } from "./jwt";
 import type {
   EnableBankingAspsp,
   EnableBankingAuthResponse,
+  EnableBankingBalancesResponse,
   EnableBankingSessionResponse,
   EnableBankingTransactionsResponse,
 } from "./types";
@@ -125,7 +126,9 @@ export async function fetchTransactions(
 /**
  * Récupère le solde courant d'un compte.
  */
-export async function fetchBalances(accountUid: string) {
+export async function fetchBalances(
+  accountUid: string,
+): Promise<EnableBankingBalancesResponse> {
   const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE}/accounts/${accountUid}/balances`, {
     headers,

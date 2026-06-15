@@ -5,7 +5,7 @@
 
 import { NextResponse } from "next/server";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
-import { syncUserTransactions } from "@/lib/enable-banking/sync";
+import { syncUserFinanceData, syncUserTransactions } from "@/lib/enable-banking/sync";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     let total = 0;
 
     for (const uid of users) {
-      const result = await syncUserTransactions(uid, "default", admin);
+      const result = await syncUserFinanceData(uid, "default", admin);
       total += result.synced;
     }
 
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   userId = user.id;
-  const result = await syncUserTransactions(userId, "default");
+  const result = await syncUserFinanceData(userId, "longest");
 
   return NextResponse.json(result);
 }

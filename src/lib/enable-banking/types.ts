@@ -29,6 +29,7 @@ export interface EnableBankingSessionResponse {
 export interface EnableBankingTransactionResource {
   entry_reference?: string;
   booking_date?: string;
+  credit_debit_indicator?: "CRDT" | "DBIT";
   transaction_amount?: {
     amount: string;
     currency: string;
@@ -37,9 +38,57 @@ export interface EnableBankingTransactionResource {
   status?: string;
 }
 
+export interface EnableBankingBalanceResource {
+  name?: string;
+  balance_amount?: {
+    amount: string;
+    currency: string;
+  };
+  balance_type?: string;
+}
+
+export interface EnableBankingBalancesResponse {
+  balances: EnableBankingBalanceResource[];
+}
+
 export interface EnableBankingTransactionsResponse {
   transactions: EnableBankingTransactionResource[];
   continuation_key?: string | null;
+}
+
+/**
+ * Convertit un montant EB (toujours positif) en montant signé pour l'app.
+ * Convention interne : négatif = dépense, positif = revenu.
+ * @see https://enablebanking.com/docs/api/reference — credit_debit_indicator
+ */
+export function mapSignedTransactionAmount(
+  amount: string | number | undefined,
+  indicator?: "CRDT" | "DBIT",
+): number {
+  const absolute = Math.abs(Number(amount ?? 0));
+  if (indicator === "DBIT") return -absolute;
+  if (indicator === "CRDT") return absolute;
+  return absolute;
+}
+
+/** Priorité des types de solde ISO 20022 retournés par les banques. */
+const BALANCE_TYPE_PRIORITY = ["CLAV", "ITAV", "CLBD", "OPBD", "ITBD"];
+
+/**
+ * Extrait le solde courant depuis la réponse balances Enable Banking.
+ */
+export function pickAccountBalance(
+  balances: EnableBankingBalanceResource[],
+): number {
+  for (const type of BALANCE_TYPE_PRIORITY) {
+    const match = balances.find((balance) => balance.balance_type === type);
+    if (match?.balance_amount?.amount) {
+      return Number(match.balance_amount.amount);
+    }
+  }
+
+  const first = balances[0]?.balance_amount?.amount;
+  return first ? Number(first) : 0;
 }
 
 /**
@@ -48,7 +97,10 @@ export interface EnableBankingTransactionsResponse {
 export function mapEnableBankingTransaction(
   tx: EnableBankingTransactionResource,
 ) {
-  const amount = Number(tx.transaction_amount?.amount ?? 0);
+  const amount = mapSignedTransactionAmount(
+    tx.transaction_amount?.amount,
+    tx.credit_debit_indicator,
+  );
   const description =
     tx.remittance_information?.join(" ") ?? "Transaction bancaire";
 
