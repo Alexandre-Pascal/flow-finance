@@ -8,7 +8,7 @@ Tracker de finances personnelles — comptes courants et livrets, synchronisatio
 - Liste des comptes (courant + livret)
 - Historique des transactions
 - Interface **FR / EN** (next-intl)
-- Auth Supabase (magic link) ou **mode démo** sans configuration
+- Auth Supabase (Google OAuth) ou **mode démo** sans configuration
 - Sync bancaire Enable Banking (phase 2, après déploiement HTTPS)
 
 ## Stack
@@ -64,6 +64,23 @@ supabase/migrations/20260615120000_initial_schema.sql
 ```
 
 Voir [`docs/DATABASE.md`](docs/DATABASE.md).
+
+## Authentification Google
+
+Configurer dans Supabase (**Authentication → Providers → Google**) :
+
+1. Créer des identifiants OAuth sur [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Type : **Web application**
+3. **Authorized redirect URI** (copier depuis Supabase) :
+   ```
+   https://xqgeqaibrsskxrnxjoug.supabase.co/auth/v1/callback
+   ```
+4. Coller **Client ID** et **Client Secret** dans Supabase → activer Google
+5. **Authentication → URL Configuration** → Redirect URLs :
+   ```
+   http://localhost:3000/auth/callback
+   https://flow-finance-omega.vercel.app/auth/callback
+   ```
 
 ## Documentation
 

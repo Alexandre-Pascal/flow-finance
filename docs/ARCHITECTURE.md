@@ -31,8 +31,8 @@ flowchart TB
 
 ## Flux d'authentification
 
-1. Utilisateur saisit son e-mail sur `/fr/login`
-2. Supabase envoie un magic link
+1. Utilisateur clique sur « Continuer avec Google » sur `/fr/login`
+2. Redirection Google → consentement
 3. Callback `/auth/callback` échange le code contre une session cookie
 4. Layout dashboard vérifie la session via `getAppUser()`
 

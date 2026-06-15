@@ -1,16 +1,19 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { TrendingUp } from "lucide-react";
-import { LoginForm } from "@/components/features/login-form";
+import { GoogleSignInButton } from "@/components/features/google-sign-in-button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAppUser } from "@/lib/auth";
 import { redirect } from "@/i18n/navigation";
 
 export default async function LoginPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { locale } = await params;
+  const { error } = await searchParams;
   setRequestLocale(locale);
 
   const user = await getAppUser();
@@ -35,7 +38,10 @@ export default async function LoginPage({
           <CardDescription>{t("loginSubtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
-          <LoginForm redirectTo={`/${locale}`} />
+          {error === "auth" ? (
+            <p className="mb-4 text-center text-sm text-destructive">{t("callbackError")}</p>
+          ) : null}
+          <GoogleSignInButton redirectTo={`/${locale}`} />
         </CardContent>
       </Card>
     </div>

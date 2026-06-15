@@ -21,12 +21,10 @@
   },
   "auth": {
     "loginTitle": "Sign in",
-    "loginSubtitle": "Receive a magic link by email to access your space.",
-    "emailLabel": "Email address",
-    "emailPlaceholder": "you@example.com",
-    "sendLink": "Send link",
-    "checkEmail": "Check your inbox for the sign-in link.",
-    "loginError": "Could not send the link. Please try again."
+    "loginSubtitle": "Sign in with your Google account to access your space.",
+    "continueWithGoogle": "Continue with Google",
+    "loginError": "Could not sign in. Please try again.",
+    "callbackError": "Sign-in failed. Please try again."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -44,7 +42,9 @@
     "balance": "Balance",
     "iban": "IBAN",
     "connectBank": "Connect my bank",
-    "connectBankSoon": "Automatic bank sync will be available after deployment (Enable Banking)."
+    "connectBankSoon": "Set up Enable Banking environment variables to enable sync.",
+    "emptyTitle": "No accounts connected",
+    "emptyDescription": "Connect your bank to sync checking and savings accounts."
   },
   "transactions": {
     "title": "Transactions",
@@ -66,6 +66,7 @@
     "bankNotConnected": "Not connected",
     "bankConnected": "Connected",
     "syncNow": "Sync now",
+    "connectBank": "Connect my bank",
     "consentExpires": "Consent expires on {date}",
     "account": "User account",
     "email": "Email"

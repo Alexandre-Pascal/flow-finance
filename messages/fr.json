@@ -21,12 +21,10 @@
   },
   "auth": {
     "loginTitle": "Connexion",
-    "loginSubtitle": "Recevez un lien magique par e-mail pour accéder à votre espace.",
-    "emailLabel": "Adresse e-mail",
-    "emailPlaceholder": "vous@exemple.com",
-    "sendLink": "Envoyer le lien",
-    "checkEmail": "Vérifiez votre boîte mail pour le lien de connexion.",
-    "loginError": "Impossible d'envoyer le lien. Réessayez."
+    "loginSubtitle": "Connectez-vous avec votre compte Google pour accéder à votre espace.",
+    "continueWithGoogle": "Continuer avec Google",
+    "loginError": "Impossible de se connecter. Réessayez.",
+    "callbackError": "La connexion a échoué. Réessayez."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -44,7 +42,9 @@
     "balance": "Solde",
     "iban": "IBAN",
     "connectBank": "Connecter ma banque",
-    "connectBankSoon": "La synchronisation bancaire automatique sera disponible après déploiement (Enable Banking)."
+    "connectBankSoon": "Configurez Enable Banking dans les variables d'environnement pour activer la synchronisation.",
+    "emptyTitle": "Aucun compte connecté",
+    "emptyDescription": "Connectez votre banque pour synchroniser vos comptes courants et livrets."
   },
   "transactions": {
     "title": "Transactions",
@@ -66,6 +66,7 @@
     "bankNotConnected": "Non connectée",
     "bankConnected": "Connectée",
     "syncNow": "Synchroniser",
+    "connectBank": "Connecter ma banque",
     "consentExpires": "Consentement expire le {date}",
     "account": "Compte utilisateur",
     "email": "E-mail"

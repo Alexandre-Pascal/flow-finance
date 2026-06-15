@@ -3,15 +3,17 @@
  * @description Déconnexion Supabase Auth.
  */
 
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
+import { NextResponse, type NextRequest } from "next/server";
+import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 
-export async function POST(request: Request) {
-  const supabase = await createClient();
-  if (supabase) {
-    await supabase.auth.signOut();
-  }
-
+export async function POST(request: NextRequest) {
   const { origin } = new URL(request.url);
-  return NextResponse.redirect(`${origin}/fr/login`);
+  const response = NextResponse.redirect(`${origin}/fr/login`);
+  const supabase = createRouteHandlerClient(request, response);
+
+  await supabase.auth.signOut();
+  revalidatePath("/", "layout");
+
+  return response;
 }
