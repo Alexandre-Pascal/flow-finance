@@ -7,9 +7,22 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchBalances, fetchTransactions } from "@/lib/enable-banking/client";
 import {
   mapEnableBankingTransaction,
+  mapEnableBankingTransactions,
   pickAccountBalance,
+  type EnableBankingTransactionResource,
 } from "@/lib/enable-banking/types";
+import { inferIndicatorsFromBalanceSequence } from "@/lib/enable-banking/transaction-sign";
 import { createClient } from "@/lib/supabase/server";
+
+function sortStoredTransactions<
+  T extends { booking_date: string; entry_reference: string },
+>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
+    const dateCompare = a.booking_date.localeCompare(b.booking_date);
+    if (dateCompare !== 0) return dateCompare;
+    return a.entry_reference.localeCompare(b.entry_reference);
+  });
+}
 
 /**
  * Met à jour les soldes de tous les comptes liés à Enable Banking.
@@ -54,10 +67,65 @@ export async function refreshAccountBalances(
 }
 
 /**
+ * Recalcule le montant signé de toutes les transactions stockées (raw_json).
+ */
+export async function remapStoredTransactions(
+  userId: string,
+  supabaseClient?: SupabaseClient,
+): Promise<{ remapped: number }> {
+  const supabase = supabaseClient ?? (await createClient());
+
+  if (!supabase) {
+    throw new Error("Supabase is not configured.");
+  }
+
+  const { data: accounts, error: accountsError } = await supabase
+    .from("accounts")
+    .select("id")
+    .eq("user_id", userId);
+
+  if (accountsError) throw accountsError;
+  if (!accounts?.length) return { remapped: 0 };
+
+  let remapped = 0;
+
+  for (const account of accounts) {
+    const { data: rows, error } = await supabase
+      .from("transactions")
+      .select("id, booking_date, entry_reference, raw_json")
+      .eq("account_id", account.id)
+      .not("raw_json", "is", null);
+
+    if (error) throw error;
+    if (!rows?.length) continue;
+
+    const sortedRows = sortStoredTransactions(rows);
+    const rawTransactions = sortedRows.map(
+      (row) => row.raw_json as EnableBankingTransactionResource,
+    );
+    const balanceIndicators = inferIndicatorsFromBalanceSequence(rawTransactions);
+
+    for (let index = 0; index < sortedRows.length; index += 1) {
+      const mapped = mapEnableBankingTransaction(
+        rawTransactions[index],
+        balanceIndicators[index],
+      );
+
+      const { error: updateError } = await supabase
+        .from("transactions")
+        .update({ amount: mapped.amount })
+        .eq("id", sortedRows[index].id);
+
+      if (updateError) throw updateError;
+      remapped += 1;
+    }
+  }
+
+  return { remapped };
+}
+
+/**
  * Synchronise les transactions de tous les comptes liés à un utilisateur.
- * @param userId - UUID Supabase Auth
- * @param strategy - `longest` pour première sync, `default` ensuite
- * @param supabaseClient - Client optionnel (service role pour cron)
  */
 export async function syncUserTransactions(
   userId: string,
@@ -89,6 +157,7 @@ export async function syncUserTransactions(
         ? new Date(account.updated_at).toISOString().slice(0, 10)
         : undefined;
 
+    const apiTransactions: EnableBankingTransactionResource[] = [];
     let continuationKey: string | undefined;
     let hasMore = true;
 
@@ -99,24 +168,22 @@ export async function syncUserTransactions(
         continuationKey,
       });
 
-      const rows = response.transactions.map((tx) => {
-        const mapped = mapEnableBankingTransaction(tx);
-        return {
-          account_id: account.id,
-          ...mapped,
-        };
-      });
-
-      if (rows.length > 0) {
-        const { error } = await supabase.from("transactions").upsert(rows, {
-          onConflict: "account_id,entry_reference",
-        });
-        if (error) throw error;
-        synced += rows.length;
-      }
-
+      apiTransactions.push(...response.transactions);
       continuationKey = response.continuation_key ?? undefined;
       hasMore = Boolean(continuationKey);
+    }
+
+    const rows = mapEnableBankingTransactions(apiTransactions).map((mapped) => ({
+      account_id: account.id,
+      ...mapped,
+    }));
+
+    if (rows.length > 0) {
+      const { error } = await supabase.from("transactions").upsert(rows, {
+        onConflict: "account_id,entry_reference",
+      });
+      if (error) throw error;
+      synced += rows.length;
     }
   }
 
@@ -124,7 +191,7 @@ export async function syncUserTransactions(
 }
 
 /**
- * Sync complète : soldes + transactions.
+ * Sync complète : soldes + transactions + recalcul historique.
  */
 export async function syncUserFinanceData(
   userId: string,
@@ -133,5 +200,10 @@ export async function syncUserFinanceData(
 ) {
   await refreshAccountBalances(userId, supabaseClient);
   const { synced } = await syncUserTransactions(userId, strategy, supabaseClient);
-  return { synced };
+  const { remapped } =
+    strategy === "longest"
+      ? await remapStoredTransactions(userId, supabaseClient)
+      : { remapped: 0 };
+
+  return { synced, remapped };
 }

@@ -5,6 +5,15 @@
 
 export type CreditDebitIndicator = "CRDT" | "DBIT";
 
+interface TransactionSignInput {
+  credit_debit_indicator?: string;
+  remittance_information?: string[];
+  balance_after_transaction?: {
+    amount: string;
+    currency?: string;
+  };
+}
+
 /** Libellés courants Crédit Agricole / banques FR → sortie de compte. */
 const DEBIT_DESCRIPTION_PATTERNS = [
   /^PAIEMENT PAR CARTE\b/,
@@ -69,15 +78,49 @@ export function inferIndicatorFromDescription(
 }
 
 /**
- * Résout l'indicateur final : API d'abord, libellé en secours.
+ * Devine le sens via l'évolution du solde après chaque opération.
+ * Utile quand credit_debit_indicator est absent (historique CA).
  */
-export function resolveCreditDebitIndicator(
-  apiIndicator: string | undefined,
-  description: string,
+export function inferIndicatorsFromBalanceSequence(
+  transactions: TransactionSignInput[],
+): (CreditDebitIndicator | undefined)[] {
+  const indicators: (CreditDebitIndicator | undefined)[] = new Array(
+    transactions.length,
+  );
+  let previousBalance: number | null = null;
+
+  for (let index = 0; index < transactions.length; index += 1) {
+    const balanceAfter = transactions[index].balance_after_transaction?.amount;
+    if (balanceAfter === undefined) continue;
+
+    const currentBalance = Number(balanceAfter);
+
+    if (previousBalance !== null) {
+      const delta = currentBalance - previousBalance;
+      if (delta < -0.001) indicators[index] = "DBIT";
+      if (delta > 0.001) indicators[index] = "CRDT";
+    }
+
+    previousBalance = currentBalance;
+  }
+
+  return indicators;
+}
+
+/**
+ * Résout l'indicateur : API → libellé → solde (dans cet ordre).
+ */
+export function resolveTransactionIndicator(
+  tx: TransactionSignInput,
+  balanceInferred?: CreditDebitIndicator,
 ): CreditDebitIndicator | undefined {
+  const description =
+    tx.remittance_information?.join(" ") ?? "Transaction bancaire";
+
   return (
-    normalizeCreditDebitIndicator(apiIndicator) ??
-    inferIndicatorFromDescription(description)
+    normalizeCreditDebitIndicator(tx.credit_debit_indicator) ??
+    inferIndicatorFromDescription(description) ??
+    balanceInferred
   );
 }
 

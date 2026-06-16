@@ -13,10 +13,10 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ synced?: string; error?: string }>;
+  searchParams: Promise<{ synced?: string; remapped?: string; error?: string }>;
 }) {
   const { locale } = await params;
-  const { synced, error } = await searchParams;
+  const { synced, remapped, error } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("settings");
   const tNav = await getTranslations("nav");
@@ -34,7 +34,12 @@ export default async function SettingsPage({
 
       {synced ? (
         <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
-          {t("syncSuccess", { count: Number(synced) })}
+          {remapped
+            ? t("syncSuccessWithRemap", {
+                count: Number(synced),
+                remapped: Number(remapped),
+              })
+            : t("syncSuccess", { count: Number(synced) })}
         </p>
       ) : null}
       {error === "sync" ? (

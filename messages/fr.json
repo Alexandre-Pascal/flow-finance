@@ -67,6 +67,7 @@
     "bankConnected": "Connectée",
     "syncNow": "Synchroniser",
     "syncSuccess": "{count} transactions synchronisées.",
+    "syncSuccessWithRemap": "{count} transactions synchronisées, {remapped} recalculées.",
     "syncError": "La synchronisation a échoué. Réessayez.",
     "connectBank": "Connecter ma banque",
     "consentExpires": "Consentement expire le {date}",

@@ -72,9 +72,11 @@ export async function POST(request: Request) {
 
   try {
     const result = await syncUserFinanceData(user.id, "longest");
-    return NextResponse.redirect(
-      `${origin}/${locale}/settings?synced=${result.synced}`,
-    );
+    const params = new URLSearchParams({ synced: String(result.synced) });
+    if (result.remapped > 0) {
+      params.set("remapped", String(result.remapped));
+    }
+    return NextResponse.redirect(`${origin}/${locale}/settings?${params.toString()}`);
   } catch {
     return NextResponse.redirect(`${origin}/${locale}/settings?error=sync`);
   }

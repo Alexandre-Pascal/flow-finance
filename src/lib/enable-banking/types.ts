@@ -3,6 +3,13 @@
  * @description Types et mappers pour les réponses Enable Banking API.
  */
 
+import {
+  inferIndicatorsFromBalanceSequence,
+  mapSignedTransactionAmount,
+  resolveTransactionIndicator,
+  type CreditDebitIndicator,
+} from "@/lib/enable-banking/transaction-sign";
+
 export interface EnableBankingAspsp {
   name: string;
   country: string;
@@ -29,8 +36,12 @@ export interface EnableBankingSessionResponse {
 export interface EnableBankingTransactionResource {
   entry_reference?: string;
   booking_date?: string;
-  credit_debit_indicator?: "CRDT" | "DBIT";
+  credit_debit_indicator?: string;
   transaction_amount?: {
+    amount: string;
+    currency: string;
+  };
+  balance_after_transaction?: {
     amount: string;
     currency: string;
   };
@@ -56,10 +67,7 @@ export interface EnableBankingTransactionsResponse {
   continuation_key?: string | null;
 }
 
-import {
-  mapSignedTransactionAmount,
-  resolveCreditDebitIndicator,
-} from "@/lib/enable-banking/transaction-sign";
+/** Priorité des types de solde ISO 20022 retournés par les banques. */
 const BALANCE_TYPE_PRIORITY = ["CLAV", "ITAV", "CLBD", "OPBD", "ITBD"];
 
 /**
@@ -79,18 +87,40 @@ export function pickAccountBalance(
   return first ? Number(first) : 0;
 }
 
+function sortTransactionsChronologically(
+  transactions: EnableBankingTransactionResource[],
+): EnableBankingTransactionResource[] {
+  return [...transactions].sort((a, b) => {
+    const dateCompare = (a.booking_date ?? "").localeCompare(b.booking_date ?? "");
+    if (dateCompare !== 0) return dateCompare;
+    return (a.entry_reference ?? "").localeCompare(b.entry_reference ?? "");
+  });
+}
+
+/**
+ * Mappe un lot de transactions en utilisant la séquence de soldes si dispo.
+ */
+export function mapEnableBankingTransactions(
+  transactions: EnableBankingTransactionResource[],
+) {
+  const sorted = sortTransactionsChronologically(transactions);
+  const balanceIndicators = inferIndicatorsFromBalanceSequence(sorted);
+
+  return sorted.map((tx, index) =>
+    mapEnableBankingTransaction(tx, balanceIndicators[index]),
+  );
+}
+
 /**
  * Mappe une transaction Enable Banking vers le format interne d'upsert.
  */
 export function mapEnableBankingTransaction(
   tx: EnableBankingTransactionResource,
+  balanceInferred?: CreditDebitIndicator,
 ) {
   const description =
     tx.remittance_information?.join(" ") ?? "Transaction bancaire";
-  const indicator = resolveCreditDebitIndicator(
-    tx.credit_debit_indicator,
-    description,
-  );
+  const indicator = resolveTransactionIndicator(tx, balanceInferred);
   const amount = mapSignedTransactionAmount(
     tx.transaction_amount?.amount,
     indicator,
