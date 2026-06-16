@@ -67,6 +67,10 @@ export function SubscriptionsManager({
         setError(t("schemaError"));
         return;
       }
+      if (result.error === "inactive") {
+        setError(t("inactiveError"));
+        return;
+      }
       if (result.error) {
         setError(t("saveError"));
         return;

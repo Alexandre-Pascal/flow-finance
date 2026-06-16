@@ -88,7 +88,7 @@
     "description": "Identifiez vos prélèvements PayPal par montant et jour du mois : Netflix, Spotify, etc.",
     "addTitle": "Ajouter un abonnement",
     "pickCluster": "Choisir un prélèvement PayPal",
-    "pickClusterHint": "Même montant mais jours différents = services différents (ex. deux abonnements à 9,99 €).",
+    "pickClusterHint": "Même montant : chaque ligne correspond à un prélèvement distinct (max. 1 par mois). Seuls les actifs (payés le mois dernier) sont proposés.",
     "clusterLabel": "{amount} · ~le {day} · {count}x",
     "pickAmount": "Choisir un montant PayPal non identifié",
     "pickAmountHint": "Chaque montant distinct correspond en général à un service différent.",
@@ -109,6 +109,7 @@
     "demoError": "Indisponible en mode démo.",
     "saveError": "Impossible d'enregistrer. Réessayez.",
     "schemaError": "La base de données n'est pas à jour. Exécutez les migrations Supabase (recurring_payments).",
+    "inactiveError": "Ce prélèvement ne semble plus actif (aucun paiement le mois dernier).",
     "rematchWarning": "Abonnement enregistré, mais le rattachement aux transactions a échoué. Synchronisez à nouveau."
   },
   "accounts": {

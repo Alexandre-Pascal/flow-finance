@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth";
-import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
+import {
+  isPayPalClusterStillActive,
+  mapRecurringPayment,
+} from "@/lib/finance/recurring-payments";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,6 +14,7 @@ export type RecurringPaymentActionError =
   | "invalid"
   | "config"
   | "schema"
+  | "inactive"
   | "save"
   | "rematch";
 
@@ -34,6 +38,42 @@ function isSchemaError(message: string, code?: string): boolean {
     normalized.includes("recurring_payment_manual") ||
     normalized.includes("does not exist")
   );
+}
+
+async function loadUserTransactionsForValidation(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  userId: string,
+) {
+  const { data: accounts, error: accountsError } = await supabase
+    .from("accounts")
+    .select("id, name, type")
+    .eq("user_id", userId);
+
+  if (accountsError) throw accountsError;
+  if (!accounts?.length) {
+    return [];
+  }
+
+  const accountIds = accounts.map((account) => account.id);
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
+
+  const { data: rows, error } = await supabase
+    .from("transactions")
+    .select("id, account_id, amount, description, booking_date, recurring_payment_id")
+    .in("account_id", accountIds)
+    .lt("amount", 0);
+
+  if (error) throw error;
+
+  return (rows ?? []).map((row) => ({
+    id: String(row.id),
+    account_id: String(row.account_id),
+    amount: Number(row.amount),
+    description: String(row.description),
+    booking_date: String(row.booking_date),
+    recurring_payment_id: row.recurring_payment_id ? String(row.recurring_payment_id) : null,
+    account_name: String(accountById.get(row.account_id)?.name ?? ""),
+  }));
 }
 
 export async function createRecurringPaymentAction(formData: FormData) {
@@ -63,6 +103,24 @@ export async function createRecurringPaymentAction(formData: FormData) {
   const supabase = await createClient();
   if (!supabase) {
     return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  if (
+    billingDay !== null &&
+    descriptionPattern.toUpperCase().includes("PAYPAL")
+  ) {
+    try {
+      const [transactions, rules] = await Promise.all([
+        loadUserTransactionsForValidation(supabase, user.id),
+        getRecurringPaymentsForUser(user.id),
+      ]);
+      if (!isPayPalClusterStillActive(transactions, amount, billingDay, new Date(), rules)) {
+        return { error: "inactive" as const satisfies RecurringPaymentActionError };
+      }
+    } catch (validationError) {
+      console.error("[createRecurringPayment] active check failed:", validationError);
+      return { error: "save" as const satisfies RecurringPaymentActionError };
+    }
   }
 
   const { error } = await supabase.from("recurring_payments").insert({

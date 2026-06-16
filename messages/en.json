@@ -88,7 +88,7 @@
     "description": "Identify PayPal debits by amount and day of month: Netflix, Spotify, etc.",
     "addTitle": "Add a subscription",
     "pickCluster": "Pick a PayPal debit",
-    "pickClusterHint": "Same amount on different days usually means different services (e.g. two €9.99 subs).",
+    "pickClusterHint": "Same amount: each chip is a distinct debit (max 1 per month). Only active ones (paid last month) are listed.",
     "clusterLabel": "{amount} · ~day {day} · {count}x",
     "pickAmount": "Pick an unidentified PayPal amount",
     "pickAmountHint": "Each distinct amount usually maps to a different service.",
@@ -109,6 +109,7 @@
     "demoError": "Not available in demo mode.",
     "saveError": "Could not save. Please try again.",
     "schemaError": "Database schema is out of date. Run the Supabase migrations (recurring_payments).",
+    "inactiveError": "This debit no longer looks active (no payment last month).",
     "rematchWarning": "Subscription saved, but linking transactions failed. Sync again."
   },
   "accounts": {

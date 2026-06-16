@@ -75,28 +75,13 @@ export function dayDistance(dayA: number, dayB: number): number {
   return Math.min(diff, 31 - diff);
 }
 
-function clusterBookingDays(days: number[], gap = 5): number[][] {
-  if (days.length === 0) {
-    return [];
-  }
+type PayPalLaneTx = Pick<
+  TransactionWithAccount,
+  "id" | "amount" | "description" | "booking_date" | "recurring_payment_id"
+>;
 
-  const sorted = [...days].sort((a, b) => a - b);
-  const clusters: number[][] = [[sorted[0]]];
-
-  for (let index = 1; index < sorted.length; index += 1) {
-    const current = sorted[index];
-    const previous = sorted[index - 1];
-    const cluster = clusters[clusters.length - 1];
-
-    if (current - previous <= gap) {
-      cluster.push(current);
-      continue;
-    }
-
-    clusters.push([current]);
-  }
-
-  return clusters;
+function roundPayPalAmount(amount: number): number {
+  return Math.round(Math.abs(amount) * 100) / 100;
 }
 
 function medianDay(days: number[]): number {
@@ -105,6 +90,164 @@ function medianDay(days: number[]): number {
   return sorted.length % 2 === 0
     ? Math.round((sorted[middle - 1] + sorted[middle]) / 2)
     : sorted[middle];
+}
+
+function listUnidentifiedPayPalDebits(
+  transactions: TransactionWithAccount[],
+  rules: RecurringPayment[],
+): PayPalLaneTx[] {
+  return transactions.filter((tx) => {
+    if (!isPayPalDebit(tx) || tx.recurring_payment_id) {
+      return false;
+    }
+
+    return !findMatchingRecurringPayment(tx, rules);
+  });
+}
+
+/**
+ * Sépare les prélèvements d'un même montant en « voies » distinctes :
+ * au plus une transaction par mois calendaire par voie (deux abonnements
+ * identiques en montant apparaissent comme deux doubles mensuels).
+ */
+function splitPayPalAmountIntoLanes(txs: PayPalLaneTx[]): PayPalLaneTx[][] {
+  const sorted = [...txs].sort((a, b) => a.booking_date.localeCompare(b.booking_date));
+  const lanes: PayPalLaneTx[][] = [];
+
+  for (const tx of sorted) {
+    const monthKey = tx.booking_date.slice(0, 7);
+    const txDay = getBookingDay(tx.booking_date);
+
+    let bestLaneIndex = -1;
+    let bestDistance = Infinity;
+
+    for (let index = 0; index < lanes.length; index += 1) {
+      const lane = lanes[index];
+      if (lane.some((entry) => entry.booking_date.slice(0, 7) === monthKey)) {
+        continue;
+      }
+
+      const laneDay = medianDay(lane.map((entry) => getBookingDay(entry.booking_date)));
+      const distance = dayDistance(txDay, laneDay);
+      if (distance <= BILLING_DAY_TOLERANCE && distance < bestDistance) {
+        bestDistance = distance;
+        bestLaneIndex = index;
+      }
+    }
+
+    if (bestLaneIndex >= 0) {
+      lanes[bestLaneIndex].push(tx);
+      continue;
+    }
+
+    lanes.push([tx]);
+  }
+
+  return lanes.filter((lane) => lane.length > 0);
+}
+
+function laneBillingDay(lane: PayPalLaneTx[]): number {
+  return medianDay(lane.map((tx) => getBookingDay(tx.booking_date)));
+}
+
+function findPayPalLaneByBillingDay(
+  lanes: PayPalLaneTx[][],
+  billingDay: number,
+): PayPalLaneTx[] | null {
+  let bestLane: PayPalLaneTx[] | null = null;
+  let bestDistance = Infinity;
+
+  for (const lane of lanes) {
+    const distance = dayDistance(laneBillingDay(lane), billingDay);
+    if (distance <= BILLING_DAY_TOLERANCE && distance < bestDistance) {
+      bestDistance = distance;
+      bestLane = lane;
+    }
+  }
+
+  return bestLane;
+}
+
+function isPayPalLaneStillActive(
+  lane: Pick<TransactionWithAccount, "booking_date">[],
+  referenceDate = new Date(),
+): boolean {
+  if (lane.length === 0) {
+    return false;
+  }
+
+  const previousMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1),
+  );
+  const currentMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
+  );
+
+  const hasInPreviousMonth = lane.some(
+    (tx) => tx.booking_date.slice(0, 7) === previousMonthKey,
+  );
+  if (hasInPreviousMonth) {
+    return true;
+  }
+
+  return lane.every((tx) => tx.booking_date.slice(0, 7) === currentMonthKey);
+}
+
+export function transactionMatchesPayPalCluster(
+  tx: Pick<TransactionWithAccount, "amount" | "description" | "booking_date">,
+  amount: number,
+  billingDay: number,
+): boolean {
+  if (tx.amount >= 0) {
+    return false;
+  }
+
+  if (!tx.description.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN)) {
+    return false;
+  }
+
+  const txAmount = Math.round(Math.abs(tx.amount) * 100) / 100;
+  if (txAmount !== amount) {
+    return false;
+  }
+
+  return dayDistance(getBookingDay(tx.booking_date), billingDay) <= BILLING_DAY_TOLERANCE;
+}
+
+/**
+ * Un cluster est « actif » s'il a été prélevé le mois calendaire précédent
+ * (fenêtre autour du jour habituel), ou s'il s'agit d'un nouvel abonnement
+ * uniquement visible sur le mois en cours.
+ */
+export function isPayPalClusterStillActive(
+  transactions: PayPalLaneTx[],
+  amount: number,
+  billingDay: number,
+  referenceDate = new Date(),
+  rules: RecurringPayment[] = [],
+): boolean {
+  const unidentified = rules.length
+    ? listUnidentifiedPayPalDebits(transactions as TransactionWithAccount[], rules)
+    : transactions.filter(
+        (tx) =>
+          tx.amount < 0 &&
+          tx.description.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN) &&
+          !tx.recurring_payment_id,
+      );
+
+  const amountTxs = unidentified.filter(
+    (tx) => roundPayPalAmount(tx.amount) === amount,
+  );
+  const lane = findPayPalLaneByBillingDay(
+    splitPayPalAmountIntoLanes(amountTxs),
+    billingDay,
+  );
+
+  if (!lane) {
+    return false;
+  }
+
+  return isPayPalLaneStillActive(lane, referenceDate);
 }
 
 export function isPayPalDebit(tx: TransactionWithAccount): boolean {
@@ -182,48 +325,33 @@ export function listUnknownPayPalAmounts(
   transactions: TransactionWithAccount[],
   rules: RecurringPayment[],
 ): PayPalClusterSuggestion[] {
-  const unidentified = transactions.filter((tx) => {
-    if (!isPayPalDebit(tx) || tx.recurring_payment_id) {
-      return false;
-    }
-
-    return !findMatchingRecurringPayment(tx, rules);
-  });
-
-  const byAmount = new Map<number, number[]>();
+  const unidentified = listUnidentifiedPayPalDebits(transactions, rules);
+  const byAmount = new Map<number, PayPalLaneTx[]>();
 
   for (const tx of unidentified) {
-    const amount = Math.round(Math.abs(tx.amount) * 100) / 100;
-    const days = byAmount.get(amount) ?? [];
-    days.push(getBookingDay(tx.booking_date));
-    byAmount.set(amount, days);
+    const amount = roundPayPalAmount(tx.amount);
+    const group = byAmount.get(amount) ?? [];
+    group.push(tx);
+    byAmount.set(amount, group);
   }
 
   const suggestions: PayPalClusterSuggestion[] = [];
 
-  for (const [amount, days] of byAmount.entries()) {
-    for (const cluster of clusterBookingDays(days)) {
-      const billingDay = medianDay(cluster);
-      const txsForCluster = unidentified.filter((tx) => {
-        const txAmount = Math.round(Math.abs(tx.amount) * 100) / 100;
-        if (txAmount !== amount) {
-          return false;
-        }
+  for (const [amount, amountTxs] of byAmount.entries()) {
+    for (const lane of splitPayPalAmountIntoLanes(amountTxs)) {
+      const billingDay = laneBillingDay(lane);
 
-        return dayDistance(getBookingDay(tx.booking_date), billingDay) <= BILLING_DAY_TOLERANCE;
-      });
-
-      if (txsForCluster.length === 0) {
+      if (!isPayPalLaneStillActive(lane)) {
         continue;
       }
 
       suggestions.push({
         amount,
         billingDay,
-        count: txsForCluster.length,
-        lastDate: txsForCluster.reduce(
+        count: lane.length,
+        lastDate: lane.reduce(
           (latest, tx) => (tx.booking_date > latest ? tx.booking_date : latest),
-          txsForCluster[0].booking_date,
+          lane[0].booking_date,
         ),
       });
     }
@@ -233,7 +361,7 @@ export function listUnknownPayPalAmounts(
 }
 
 export function clusterSuggestionKey(suggestion: PayPalClusterSuggestion): string {
-  return `${suggestion.amount.toFixed(2)}-${suggestion.billingDay}`;
+  return `${suggestion.amount.toFixed(2)}-${suggestion.billingDay}-${suggestion.lastDate}`;
 }
 
 export function buildMonthlySubscriptionOverview(
