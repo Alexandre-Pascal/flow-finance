@@ -70,10 +70,13 @@ export default async function DashboardPage({
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base font-medium">
               {t("spendingChart")}
             </CardTitle>
+            <Button variant="ghost" size="sm" className="cursor-pointer" asChild>
+              <Link href="/analytics">{t("viewAnalytics")}</Link>
+            </Button>
           </CardHeader>
           <CardContent>
             <SpendingChart data={chartData} title="" />

@@ -11,6 +11,7 @@ import {
   ArrowLeftRight,
   Settings,
   TrendingUp,
+  BarChart3,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/", icon: LayoutDashboard, labelKey: "dashboard" as const },
+  { href: "/analytics", icon: BarChart3, labelKey: "analytics" as const },
   { href: "/accounts", icon: Wallet, labelKey: "accounts" as const },
   {
     href: "/transactions",

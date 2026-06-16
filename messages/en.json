@@ -14,6 +14,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "analytics": "Analytics",
     "accounts": "Accounts",
     "transactions": "Transactions",
     "settings": "Settings",
@@ -33,7 +34,29 @@
     "monthlyIncome": "Monthly income",
     "recentTransactions": "Recent transactions",
     "spendingChart": "Spending over 6 months",
-    "viewAll": "View all"
+    "viewAll": "View all",
+    "viewAnalytics": "Compare months"
+  },
+  "analytics": {
+    "title": "Analytics",
+    "subtitle": "Compare your income and spending month by month.",
+    "period6": "6 months",
+    "period12": "12 months",
+    "periodAll": "All",
+    "currentIncome": "Income this month",
+    "currentExpenses": "Spending this month",
+    "currentNet": "Net balance this month",
+    "vsPreviousMonth": "{percent}% vs prev. month",
+    "chartTitle": "Income vs spending",
+    "chartSubtitle": "Grouped bars per month with net balance trend line.",
+    "income": "Income",
+    "expenses": "Spending",
+    "net": "Net balance",
+    "tableTitle": "Monthly breakdown",
+    "month": "Month",
+    "savingsRate": "Savings rate",
+    "periodTotal": "Period total",
+    "empty": "No transactions to analyze yet. Connect your bank to get started."
   },
   "accounts": {
     "title": "Accounts",
