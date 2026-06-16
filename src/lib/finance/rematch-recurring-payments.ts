@@ -42,7 +42,7 @@ export async function rematchRecurringPaymentsForUser(
   for (const account of accounts) {
     const { data: transactions, error } = await supabase
       .from("transactions")
-      .select("id, amount, description, recurring_payment_id")
+      .select("id, amount, description, booking_date, recurring_payment_id, recurring_payment_manual")
       .eq("account_id", account.id)
       .lt("amount", 0);
 
@@ -50,10 +50,15 @@ export async function rematchRecurringPaymentsForUser(
     if (!transactions?.length) continue;
 
     for (const tx of transactions) {
+      if (tx.recurring_payment_manual) {
+        continue;
+      }
+
       const rule = findMatchingRecurringPayment(
         {
           amount: Number(tx.amount),
           description: String(tx.description),
+          booking_date: String(tx.booking_date),
         },
         recurringRules,
       );

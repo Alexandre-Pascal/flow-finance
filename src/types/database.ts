@@ -54,6 +54,7 @@ export interface Transaction {
   status: TransactionStatus;
   category_id: string | null;
   recurring_payment_id: string | null;
+  recurring_payment_manual: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +66,7 @@ export interface RecurringPayment {
   amount: number;
   amount_tolerance: number;
   description_pattern: string;
+  billing_day: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -10,12 +10,17 @@ import type {
 } from "@/types/database";
 
 export const DEFAULT_PAYPAL_PATTERN = "PAYPAL";
+export const BILLING_DAY_TOLERANCE = 3;
 
-export interface PayPalAmountSuggestion {
+export interface PayPalClusterSuggestion {
   amount: number;
+  billingDay: number;
   count: number;
   lastDate: string;
 }
+
+/** @deprecated Use PayPalClusterSuggestion */
+export type PayPalAmountSuggestion = PayPalClusterSuggestion;
 
 export interface MonthlySubscriptionRow {
   monthKey: string;
@@ -52,9 +57,54 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
     amount: Number(row.amount),
     amount_tolerance: Number(row.amount_tolerance),
     description_pattern: String(row.description_pattern),
+    billing_day:
+      row.billing_day === null || row.billing_day === undefined
+        ? null
+        : Number(row.billing_day),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
+}
+
+export function getBookingDay(bookingDate: string): number {
+  return Number(bookingDate.slice(8, 10));
+}
+
+export function dayDistance(dayA: number, dayB: number): number {
+  const diff = Math.abs(dayA - dayB);
+  return Math.min(diff, 31 - diff);
+}
+
+function clusterBookingDays(days: number[], gap = 5): number[][] {
+  if (days.length === 0) {
+    return [];
+  }
+
+  const sorted = [...days].sort((a, b) => a - b);
+  const clusters: number[][] = [[sorted[0]]];
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const current = sorted[index];
+    const previous = sorted[index - 1];
+    const cluster = clusters[clusters.length - 1];
+
+    if (current - previous <= gap) {
+      cluster.push(current);
+      continue;
+    }
+
+    clusters.push([current]);
+  }
+
+  return clusters;
+}
+
+function medianDay(days: number[]): number {
+  const sorted = [...days].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? Math.round((sorted[middle - 1] + sorted[middle]) / 2)
+    : sorted[middle];
 }
 
 export function isPayPalDebit(tx: TransactionWithAccount): boolean {
@@ -65,7 +115,7 @@ export function isPayPalDebit(tx: TransactionWithAccount): boolean {
 }
 
 export function matchesRecurringPayment(
-  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  tx: Pick<TransactionWithAccount, "amount" | "description" | "booking_date">,
   rule: RecurringPayment,
 ): boolean {
   if (tx.amount >= 0) {
@@ -79,61 +129,111 @@ export function matchesRecurringPayment(
     return false;
   }
 
-  return Math.abs(absAmount - rule.amount) <= rule.amount_tolerance;
+  if (Math.abs(absAmount - rule.amount) > rule.amount_tolerance) {
+    return false;
+  }
+
+  if (rule.billing_day === null) {
+    return true;
+  }
+
+  const txDay = getBookingDay(tx.booking_date);
+  return dayDistance(txDay, rule.billing_day) <= BILLING_DAY_TOLERANCE;
 }
 
 export function findMatchingRecurringPayment(
-  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  tx: Pick<TransactionWithAccount, "amount" | "description" | "booking_date">,
   rules: RecurringPayment[],
 ): RecurringPayment | null {
-  for (const rule of rules) {
-    if (matchesRecurringPayment(tx, rule)) {
-      return rule;
+  const amountMatches = rules.filter((rule) => matchesRecurringPayment(tx, rule));
+
+  if (amountMatches.length === 0) {
+    return null;
+  }
+
+  if (amountMatches.length === 1) {
+    return amountMatches[0];
+  }
+
+  const txDay = getBookingDay(tx.booking_date);
+  const withBillingDay = amountMatches.filter((rule) => rule.billing_day !== null);
+
+  if (withBillingDay.length > 0) {
+    let best: RecurringPayment | null = null;
+    let bestDistance = Infinity;
+
+    for (const rule of withBillingDay) {
+      const distance = dayDistance(txDay, rule.billing_day!);
+      if (distance <= BILLING_DAY_TOLERANCE && distance < bestDistance) {
+        bestDistance = distance;
+        best = rule;
+      }
+    }
+
+    if (best) {
+      return best;
     }
   }
 
-  return null;
+  return amountMatches.find((rule) => rule.billing_day === null) ?? null;
 }
 
 export function listUnknownPayPalAmounts(
   transactions: TransactionWithAccount[],
   rules: RecurringPayment[],
-): PayPalAmountSuggestion[] {
-  const buckets = new Map<string, PayPalAmountSuggestion>();
-
-  for (const tx of transactions) {
-    if (!isPayPalDebit(tx)) {
-      continue;
+): PayPalClusterSuggestion[] {
+  const unidentified = transactions.filter((tx) => {
+    if (!isPayPalDebit(tx) || tx.recurring_payment_id) {
+      return false;
     }
 
-    if (tx.recurring_payment_id) {
-      continue;
-    }
+    return !findMatchingRecurringPayment(tx, rules);
+  });
 
-    if (findMatchingRecurringPayment(tx, rules)) {
-      continue;
-    }
+  const byAmount = new Map<number, number[]>();
 
+  for (const tx of unidentified) {
     const amount = Math.round(Math.abs(tx.amount) * 100) / 100;
-    const key = amount.toFixed(2);
-    const existing = buckets.get(key);
-
-    if (existing) {
-      existing.count += 1;
-      if (tx.booking_date > existing.lastDate) {
-        existing.lastDate = tx.booking_date;
-      }
-      continue;
-    }
-
-    buckets.set(key, {
-      amount,
-      count: 1,
-      lastDate: tx.booking_date,
-    });
+    const days = byAmount.get(amount) ?? [];
+    days.push(getBookingDay(tx.booking_date));
+    byAmount.set(amount, days);
   }
 
-  return [...buckets.values()].sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  const suggestions: PayPalClusterSuggestion[] = [];
+
+  for (const [amount, days] of byAmount.entries()) {
+    for (const cluster of clusterBookingDays(days)) {
+      const billingDay = medianDay(cluster);
+      const txsForCluster = unidentified.filter((tx) => {
+        const txAmount = Math.round(Math.abs(tx.amount) * 100) / 100;
+        if (txAmount !== amount) {
+          return false;
+        }
+
+        return dayDistance(getBookingDay(tx.booking_date), billingDay) <= BILLING_DAY_TOLERANCE;
+      });
+
+      if (txsForCluster.length === 0) {
+        continue;
+      }
+
+      suggestions.push({
+        amount,
+        billingDay,
+        count: txsForCluster.length,
+        lastDate: txsForCluster.reduce(
+          (latest, tx) => (tx.booking_date > latest ? tx.booking_date : latest),
+          txsForCluster[0].booking_date,
+        ),
+      });
+    }
+  }
+
+  return suggestions.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+}
+
+export function clusterSuggestionKey(suggestion: PayPalClusterSuggestion): string {
+  return `${suggestion.amount.toFixed(2)}-${suggestion.billingDay}`;
 }
 
 export function buildMonthlySubscriptionOverview(

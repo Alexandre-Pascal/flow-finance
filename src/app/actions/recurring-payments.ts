@@ -23,10 +23,19 @@ export async function createRecurringPaymentAction(formData: FormData) {
 
   const name = String(formData.get("name") ?? "").trim();
   const amount = Number(formData.get("amount"));
+  const billingDayRaw = String(formData.get("billing_day") ?? "").trim();
+  const billingDay = billingDayRaw ? Number(billingDayRaw) : null;
   const descriptionPattern =
     String(formData.get("description_pattern") ?? "PAYPAL").trim() || "PAYPAL";
 
   if (!name || !Number.isFinite(amount) || amount <= 0) {
+    return { error: "invalid" as const };
+  }
+
+  if (
+    billingDay !== null &&
+    (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31)
+  ) {
     return { error: "invalid" as const };
   }
 
@@ -39,6 +48,7 @@ export async function createRecurringPaymentAction(formData: FormData) {
     user_id: user.id,
     name,
     amount,
+    billing_day: billingDay,
     description_pattern: descriptionPattern,
   });
 

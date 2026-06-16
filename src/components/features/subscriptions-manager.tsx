@@ -17,12 +17,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { PayPalAmountSuggestion } from "@/lib/finance/recurring-payments";
+import {
+  clusterSuggestionKey,
+  type PayPalClusterSuggestion,
+} from "@/lib/finance/recurring-payments";
 import type { RecurringPayment } from "@/types/database";
 
 interface SubscriptionsManagerProps {
   subscriptions: RecurringPayment[];
-  suggestions: PayPalAmountSuggestion[];
+  suggestions: PayPalClusterSuggestion[];
   locale: string;
   isDemo: boolean;
 }
@@ -35,11 +38,15 @@ export function SubscriptionsManager({
 }: SubscriptionsManagerProps) {
   const t = useTranslations("subscriptions");
   const [isPending, startTransition] = useTransition();
-  const [selectedAmount, setSelectedAmount] = useState(
-    suggestions[0] ? String(suggestions[0].amount) : "",
+  const [selectedClusterKey, setSelectedClusterKey] = useState(
+    suggestions[0] ? clusterSuggestionKey(suggestions[0]) : "",
   );
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const selectedSuggestion = suggestions.find(
+    (suggestion) => clusterSuggestionKey(suggestion) === selectedClusterKey,
+  );
 
   function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -97,31 +104,43 @@ export function SubscriptionsManager({
 
             {suggestions.length > 0 ? (
               <div className="space-y-2">
-                <Label htmlFor="subscription-amount">{t("pickAmount")}</Label>
+                <Label htmlFor="subscription-amount">{t("pickCluster")}</Label>
                 <div className="flex flex-wrap gap-2">
-                  {suggestions.map((suggestion) => (
-                    <Button
-                      key={suggestion.amount}
-                      type="button"
-                      variant={
-                        selectedAmount === String(suggestion.amount)
-                          ? "default"
-                          : "outline"
-                      }
-                      className="cursor-pointer"
-                      onClick={() => setSelectedAmount(String(suggestion.amount))}
-                    >
-                      {formatCurrency(-suggestion.amount, locale)} · {suggestion.count}x
-                    </Button>
-                  ))}
+                  {suggestions.map((suggestion) => {
+                    const key = clusterSuggestionKey(suggestion);
+                    return (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant={selectedClusterKey === key ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => setSelectedClusterKey(key)}
+                      >
+                        {t("clusterLabel", {
+                          amount: formatCurrency(-suggestion.amount, locale),
+                          day: suggestion.billingDay,
+                          count: suggestion.count,
+                        })}
+                      </Button>
+                    );
+                  })}
                 </div>
-                <p className="text-xs text-muted-foreground">{t("pickAmountHint")}</p>
+                <p className="text-xs text-muted-foreground">{t("pickClusterHint")}</p>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">{t("noSuggestions")}</p>
             )}
 
-            <input type="hidden" name="amount" value={selectedAmount} />
+            <input
+              type="hidden"
+              name="amount"
+              value={selectedSuggestion ? String(selectedSuggestion.amount) : ""}
+            />
+            <input
+              type="hidden"
+              name="billing_day"
+              value={selectedSuggestion ? String(selectedSuggestion.billingDay) : ""}
+            />
             <input type="hidden" name="description_pattern" value="PAYPAL" />
 
             <div className="space-y-2">
@@ -139,7 +158,9 @@ export function SubscriptionsManager({
             <Button
               type="submit"
               className="cursor-pointer"
-              disabled={isPending || !selectedAmount || !name.trim()}
+              disabled={
+                isPending || !selectedSuggestion || !name.trim()
+              }
             >
               <Plus className="size-4" aria-hidden />
               {t("addButton")}
@@ -161,7 +182,14 @@ export function SubscriptionsManager({
                   <div>
                     <p className="font-medium text-foreground">{subscription.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatCurrency(-subscription.amount, locale)} · {t("paypalMatch")}
+                      {subscription.billing_day
+                        ? t("subscriptionMetaWithDay", {
+                            amount: formatCurrency(-subscription.amount, locale),
+                            day: subscription.billing_day,
+                          })
+                        : t("subscriptionMeta", {
+                            amount: formatCurrency(-subscription.amount, locale),
+                          })}
                     </p>
                   </div>
                   {!isDemo ? (
@@ -189,10 +217,15 @@ export function SubscriptionsManager({
             <ul className="space-y-2 text-sm text-muted-foreground">
               {suggestions.map((suggestion) => (
                 <li
-                  key={suggestion.amount}
+                  key={clusterSuggestionKey(suggestion)}
                   className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2"
                 >
-                  <span>{formatCurrency(-suggestion.amount, locale)}</span>
+                  <span>
+                    {t("unidentifiedCluster", {
+                      amount: formatCurrency(-suggestion.amount, locale),
+                      day: suggestion.billingDay,
+                    })}
+                  </span>
                   <span>
                     {t("unidentifiedMeta", {
                       count: suggestion.count,

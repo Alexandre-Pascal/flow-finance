@@ -61,6 +61,7 @@ function mapTransaction(
     recurring_payment_id: row.recurring_payment_id
       ? String(row.recurring_payment_id)
       : null,
+    recurring_payment_manual: Boolean(row.recurring_payment_manual),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     account_name: account.name,
