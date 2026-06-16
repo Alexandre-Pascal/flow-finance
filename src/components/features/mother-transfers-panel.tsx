@@ -6,7 +6,7 @@
 "use client";
 
 import { Gift } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bar,
@@ -28,14 +28,18 @@ import {
 } from "@/components/ui/table";
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
+  isMotherTransfer,
   sliceMonthlyTransferOverview,
   sumMonthlyTransferOverview,
   type MonthlyTransferOverview,
 } from "@/lib/finance/tracked-transfers";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { TransactionWithAccount } from "@/types/database";
 
 interface MotherTransfersPanelProps {
   data: MonthlyTransferOverview[];
+  transactions: TransactionWithAccount[];
   locale: string;
   period: MonthlyPeriod;
 }
@@ -73,6 +77,7 @@ function TransferTooltip({
 
 export function MotherTransfersPanel({
   data,
+  transactions,
   locale,
   period,
 }: MotherTransfersPanelProps) {
@@ -83,11 +88,32 @@ export function MotherTransfersPanel({
     [data, period, locale],
   );
 
+  const currentMonthKey = filtered.at(-1)?.monthKey ?? "";
+  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
+
+  useEffect(() => {
+    setSelectedMonthKey(currentMonthKey);
+  }, [currentMonthKey, period]);
+
   const totals = useMemo(() => sumMonthlyTransferOverview(filtered), [filtered]);
   const currentMonth = filtered.at(-1);
+  const selectedMonth = useMemo(
+    () => filtered.find((row) => row.monthKey === selectedMonthKey),
+    [filtered, selectedMonthKey],
+  );
   const monthsWithTransfers = useMemo(
     () => [...filtered].filter((row) => row.amount > 0).reverse(),
     [filtered],
+  );
+  const selectedTransfers = useMemo(
+    () =>
+      transactions
+        .filter(
+          (tx) =>
+            isMotherTransfer(tx) && tx.booking_date.startsWith(selectedMonthKey),
+        )
+        .sort((a, b) => b.booking_date.localeCompare(a.booking_date)),
+    [transactions, selectedMonthKey],
   );
 
   const averagePerActiveMonth =
@@ -219,6 +245,13 @@ export function MotherTransfersPanel({
                 fill="var(--accent)"
                 radius={[4, 4, 0, 0]}
                 maxBarSize={32}
+                className="cursor-pointer"
+                onClick={(bar) => {
+                  const row = bar?.payload as MonthlyTransferOverview | undefined;
+                  if (row?.monthKey) {
+                    setSelectedMonthKey(row.monthKey);
+                  }
+                }}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -235,7 +268,14 @@ export function MotherTransfersPanel({
             </TableHeader>
             <TableBody>
               {monthsWithTransfers.map((row) => (
-                <TableRow key={row.monthKey}>
+                <TableRow
+                  key={row.monthKey}
+                  className={cn(
+                    "cursor-pointer",
+                    selectedMonthKey === row.monthKey && "bg-muted/60",
+                  )}
+                  onClick={() => setSelectedMonthKey(row.monthKey)}
+                >
                   <TableCell className="font-medium">{row.monthFull}</TableCell>
                   <TableCell className="text-right font-medium text-accent">
                     {formatCurrency(row.amount, locale)}
@@ -252,6 +292,46 @@ export function MotherTransfersPanel({
             {t("motherTransferNoneInPeriod")}
           </p>
         )}
+
+        {selectedMonth ? (
+          <div className="rounded-lg border border-border bg-card/80">
+            <div className="border-b border-border px-4 py-3">
+              <p className="text-sm font-medium text-foreground">
+                {t("monthDetailTitle", { month: selectedMonth.monthFull })}
+              </p>
+            </div>
+            {selectedTransfers.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("monthDetailDate")}</TableHead>
+                    <TableHead>{t("motherTransferDetailDescription")}</TableHead>
+                    <TableHead className="text-right">{t("motherTransferAmount")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedTransfers.map((tx) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(tx.booking_date, locale)}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate text-sm">
+                        {tx.description}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-accent">
+                        {formatCurrency(tx.amount, locale)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                {t("monthDetailEmpty")}
+              </p>
+            )}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

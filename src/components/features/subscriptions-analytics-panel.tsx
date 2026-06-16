@@ -6,7 +6,7 @@
 "use client";
 
 import { Repeat } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bar,
@@ -33,6 +33,7 @@ import {
   type MonthlySubscriptionRow,
 } from "@/lib/finance/recurring-payments";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 
 interface SubscriptionsAnalyticsPanelProps {
@@ -55,6 +56,22 @@ export function SubscriptionsAnalyticsPanel({
   const filtered = useMemo(
     () => sliceMonthlySubscriptionOverview(data, period, locale),
     [data, period, locale],
+  );
+
+  const currentMonthKey = filtered.at(-1)?.monthKey ?? "";
+  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
+
+  useEffect(() => {
+    setSelectedMonthKey(currentMonthKey);
+  }, [currentMonthKey, period]);
+
+  const selectedMonth = useMemo(
+    () => filtered.find((row) => row.monthKey === selectedMonthKey),
+    [filtered, selectedMonthKey],
+  );
+  const monthsWithSubscriptions = useMemo(
+    () => [...filtered].filter((row) => row.total > 0).reverse(),
+    [filtered],
   );
 
   const activeSubscriptions = useMemo(
@@ -160,7 +177,19 @@ export function SubscriptionsAnalyticsPanel({
                   cursor={{ fill: "var(--muted)" }}
                   formatter={(value) => formatCurrency(Number(value), locale)}
                 />
-                <Bar dataKey="total" fill="var(--destructive)" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                <Bar
+                  dataKey="total"
+                  fill="var(--destructive)"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={32}
+                  className="cursor-pointer"
+                  onClick={(bar) => {
+                    const row = bar?.payload as MonthlySubscriptionRow | undefined;
+                    if (row?.monthKey) {
+                      setSelectedMonthKey(row.monthKey);
+                    }
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -204,6 +233,80 @@ export function SubscriptionsAnalyticsPanel({
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-medium">
+            {t("subscriptionsMonthTableTitle")}
+          </CardTitle>
+          <CardDescription>{t("subscriptionsMonthTableHint")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {monthsWithSubscriptions.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("month")}</TableHead>
+                  <TableHead className="text-right">{t("subscriptionsMonthAmount")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthsWithSubscriptions.map((row) => (
+                  <TableRow
+                    key={row.monthKey}
+                    className={cn(
+                      "cursor-pointer",
+                      selectedMonthKey === row.monthKey && "bg-muted/60",
+                    )}
+                    onClick={() => setSelectedMonthKey(row.monthKey)}
+                  >
+                    <TableCell className="font-medium">{row.monthFull}</TableCell>
+                    <TableCell className="text-right font-medium text-destructive">
+                      {formatCurrency(row.total, locale)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("subscriptionsMonthEmpty")}</p>
+          )}
+
+          {selectedMonth ? (
+            <div className="rounded-lg border border-border bg-muted/30">
+              <div className="border-b border-border px-4 py-3">
+                <p className="text-sm font-medium text-foreground">
+                  {t("monthDetailTitle", { month: selectedMonth.monthFull })}
+                </p>
+              </div>
+              {selectedMonth.items.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("subscriptionsService")}</TableHead>
+                      <TableHead className="text-right">{t("subscriptionsMonthAmount")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedMonth.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell className="text-right text-destructive">
+                          {formatCurrency(item.amount, locale)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  {t("monthDetailEmpty")}
+                </p>
+              )}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

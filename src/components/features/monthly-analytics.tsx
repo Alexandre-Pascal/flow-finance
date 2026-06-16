@@ -493,6 +493,7 @@ export function MonthlyAnalytics({
         <TabsContent value="mother" className="mt-0">
           <MotherTransfersPanel
             data={motherTransferData}
+            transactions={transactions}
             locale={locale}
             period={period}
           />
