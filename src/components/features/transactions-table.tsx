@@ -48,7 +48,10 @@ function ExpenseTypeBadge({
   sublabel?: string;
 }) {
   return (
-    <Badge variant="outline" className="max-w-[140px] gap-1.5 font-normal">
+    <Badge
+      variant="outline"
+      className="h-8 w-full max-w-[180px] justify-start gap-1.5 px-3 font-normal"
+    >
       {color ? (
         <span
           className="size-2 shrink-0 rounded-full"
