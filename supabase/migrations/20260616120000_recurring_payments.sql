@@ -28,4 +28,6 @@ create trigger recurring_payments_updated_at
 alter table public.recurring_payments enable row level security;
 
 create policy "recurring_payments_all_own" on public.recurring_payments
-  for all using (auth.uid() = user_id);
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

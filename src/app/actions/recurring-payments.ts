@@ -6,6 +6,14 @@ import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { createClient } from "@/lib/supabase/server";
 
+export type RecurringPaymentActionError =
+  | "demo"
+  | "invalid"
+  | "config"
+  | "schema"
+  | "save"
+  | "rematch";
+
 function revalidateFinancePages() {
   revalidatePath("/fr/settings");
   revalidatePath("/en/settings");
@@ -15,10 +23,23 @@ function revalidateFinancePages() {
   revalidatePath("/en/transactions");
 }
 
+function isSchemaError(message: string, code?: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    code === "42P01" ||
+    code === "PGRST204" ||
+    code === "PGRST205" ||
+    normalized.includes("recurring_payments") ||
+    normalized.includes("billing_day") ||
+    normalized.includes("recurring_payment_manual") ||
+    normalized.includes("does not exist")
+  );
+}
+
 export async function createRecurringPaymentAction(formData: FormData) {
   const user = await requireAuth();
   if (user.isDemo) {
-    return { error: "demo" as const };
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
   }
 
   const name = String(formData.get("name") ?? "").trim();
@@ -29,19 +50,19 @@ export async function createRecurringPaymentAction(formData: FormData) {
     String(formData.get("description_pattern") ?? "PAYPAL").trim() || "PAYPAL";
 
   if (!name || !Number.isFinite(amount) || amount <= 0) {
-    return { error: "invalid" as const };
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
   }
 
   if (
     billingDay !== null &&
     (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31)
   ) {
-    return { error: "invalid" as const };
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
   }
 
   const supabase = await createClient();
   if (!supabase) {
-    return { error: "config" as const };
+    return { error: "config" as const satisfies RecurringPaymentActionError };
   }
 
   const { error } = await supabase.from("recurring_payments").insert({
@@ -53,10 +74,24 @@ export async function createRecurringPaymentAction(formData: FormData) {
   });
 
   if (error) {
-    return { error: "save" as const };
+    console.error("[createRecurringPayment] insert failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
   }
 
-  await rematchRecurringPaymentsForUser(user.id, supabase);
+  try {
+    await rematchRecurringPaymentsForUser(user.id, supabase);
+  } catch (rematchError) {
+    console.error("[createRecurringPayment] rematch failed:", rematchError);
+    revalidateFinancePages();
+    return {
+      success: true as const,
+      warning: "rematch" as const satisfies RecurringPaymentActionError,
+    };
+  }
+
   revalidateFinancePages();
 
   return { success: true as const };
@@ -65,26 +100,30 @@ export async function createRecurringPaymentAction(formData: FormData) {
 export async function deleteRecurringPaymentAction(formData: FormData) {
   const user = await requireAuth();
   if (user.isDemo) {
-    return { error: "demo" as const };
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
   }
 
   const id = String(formData.get("id") ?? "");
   if (!id) {
-    return { error: "invalid" as const };
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
   }
 
   const supabase = await createClient();
   if (!supabase) {
-    return { error: "config" as const };
+    return { error: "config" as const satisfies RecurringPaymentActionError };
   }
 
   const { error: clearError } = await supabase
     .from("transactions")
-    .update({ recurring_payment_id: null })
+    .update({ recurring_payment_id: null, recurring_payment_manual: false })
     .eq("recurring_payment_id", id);
 
   if (clearError) {
-    return { error: "save" as const };
+    console.error("[deleteRecurringPayment] clear failed:", clearError);
+    if (isSchemaError(clearError.message, clearError.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
   }
 
   const { error } = await supabase
@@ -94,10 +133,21 @@ export async function deleteRecurringPaymentAction(formData: FormData) {
     .eq("user_id", user.id);
 
   if (error) {
-    return { error: "save" as const };
+    console.error("[deleteRecurringPayment] delete failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
   }
 
-  await rematchRecurringPaymentsForUser(user.id, supabase);
+  try {
+    await rematchRecurringPaymentsForUser(user.id, supabase);
+  } catch (rematchError) {
+    console.error("[deleteRecurringPayment] rematch failed:", rematchError);
+    revalidateFinancePages();
+    return { success: true as const, warning: "rematch" as const };
+  }
+
   revalidateFinancePages();
 
   return { success: true as const };

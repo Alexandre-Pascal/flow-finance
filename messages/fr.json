@@ -107,7 +107,9 @@
     "unidentifiedMeta": "{count}x · dernier {date}",
     "demoHint": "Connectez Supabase pour enregistrer vos abonnements.",
     "demoError": "Indisponible en mode démo.",
-    "saveError": "Impossible d'enregistrer. Réessayez."
+    "saveError": "Impossible d'enregistrer. Réessayez.",
+    "schemaError": "La base de données n'est pas à jour. Exécutez les migrations Supabase (recurring_payments).",
+    "rematchWarning": "Abonnement enregistré, mais le rattachement aux transactions a échoué. Synchronisez à nouveau."
   },
   "accounts": {
     "title": "Comptes",

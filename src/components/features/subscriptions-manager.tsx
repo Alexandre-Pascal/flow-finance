@@ -8,6 +8,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
+import { useRouter } from "@/i18n/navigation";
 import {
   createRecurringPaymentAction,
   deleteRecurringPaymentAction,
@@ -28,6 +29,7 @@ interface SubscriptionsManagerProps {
   suggestions: PayPalClusterSuggestion[];
   locale: string;
   isDemo: boolean;
+  schemaReady: boolean;
 }
 
 export function SubscriptionsManager({
@@ -35,8 +37,10 @@ export function SubscriptionsManager({
   suggestions,
   locale,
   isDemo,
+  schemaReady,
 }: SubscriptionsManagerProps) {
   const t = useTranslations("subscriptions");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [selectedClusterKey, setSelectedClusterKey] = useState(
     suggestions[0] ? clusterSuggestionKey(suggestions[0]) : "",
@@ -59,11 +63,22 @@ export function SubscriptionsManager({
         setError(t("demoError"));
         return;
       }
+      if (result.error === "schema") {
+        setError(t("schemaError"));
+        return;
+      }
       if (result.error) {
         setError(t("saveError"));
         return;
       }
+      if ("warning" in result && result.warning === "rematch") {
+        setError(t("rematchWarning"));
+        router.refresh();
+        return;
+      }
       setName("");
+      setError(null);
+      router.refresh();
     });
   }
 
@@ -73,6 +88,10 @@ export function SubscriptionsManager({
     formData.set("id", id);
     startTransition(async () => {
       const result = await deleteRecurringPaymentAction(formData);
+      if (result.error === "schema") {
+        setError(t("schemaError"));
+        return;
+      }
       if (result.error) {
         setError(t("saveError"));
       }
@@ -92,13 +111,19 @@ export function SubscriptionsManager({
           </p>
         ) : null}
 
+        {!isDemo && !schemaReady ? (
+          <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {t("schemaError")}
+          </p>
+        ) : null}
+
         {error ? (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </p>
         ) : null}
 
-        {!isDemo ? (
+        {!isDemo && schemaReady ? (
           <form onSubmit={handleCreate} className="space-y-4 rounded-lg border border-border p-4">
             <p className="text-sm font-medium text-foreground">{t("addTitle")}</p>
 

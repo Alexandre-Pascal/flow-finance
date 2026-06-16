@@ -24,7 +24,7 @@ export default async function SettingsPage({
   const tNav = await getTranslations("nav");
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
-  const { accounts, bankConnection, transactions, recurringPayments, isDemo } =
+  const { accounts, bankConnection, transactions, recurringPayments, isDemo, subscriptionsSchemaReady } =
     await getFinanceData(locale);
   const paypalSuggestions = listUnknownPayPalAmounts(
     transactions,
@@ -116,6 +116,7 @@ export default async function SettingsPage({
         suggestions={paypalSuggestions}
         locale={locale}
         isDemo={isDemo}
+        schemaReady={subscriptionsSchemaReady}
       />
 
       <Card>

@@ -22,6 +22,7 @@ export interface FinanceData {
   accounts: Account[];
   transactions: TransactionWithAccount[];
   recurringPayments: RecurringPayment[];
+  subscriptionsSchemaReady: boolean;
   monthlySpending: { month: string; amount: number }[];
   bankConnection: BankConnection | null;
   isDemo: boolean;
@@ -91,6 +92,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       accounts: [],
       transactions: [],
       recurringPayments: [],
+      subscriptionsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -100,7 +102,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
   const [
     { data: accountRows },
     { data: connectionRow },
-    { data: recurringRows },
+    { data: recurringRows, error: recurringError },
   ] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase
@@ -169,6 +171,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     accounts,
     transactions,
     recurringPayments,
+    subscriptionsSchemaReady: !recurringError,
     monthlySpending: buildMonthlySpending(transactions, "fr"),
     bankConnection: connectionRow
       ? mapBankConnection(connectionRow as Record<string, unknown>)
@@ -189,6 +192,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       accounts: [],
       transactions: [],
       recurringPayments: [],
+      subscriptionsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -203,6 +207,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       monthlySpending: MOCK_MONTHLY_SPENDING,
       bankConnection: null,
       isDemo: true,
+      subscriptionsSchemaReady: true,
     };
   }
 

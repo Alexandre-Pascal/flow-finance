@@ -107,7 +107,9 @@
     "unidentifiedMeta": "{count}x · last {date}",
     "demoHint": "Connect Supabase to save your subscriptions.",
     "demoError": "Not available in demo mode.",
-    "saveError": "Could not save. Please try again."
+    "saveError": "Could not save. Please try again.",
+    "schemaError": "Database schema is out of date. Run the Supabase migrations (recurring_payments).",
+    "rematchWarning": "Subscription saved, but linking transactions failed. Sync again."
   },
   "accounts": {
     "title": "Accounts",
