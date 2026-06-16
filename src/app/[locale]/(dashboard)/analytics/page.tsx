@@ -44,6 +44,7 @@ export default async function AnalyticsPage({
         motherTransferData={motherTransferData}
         subscriptionData={subscriptionData}
         subscriptions={recurringPayments}
+        transactions={transactions}
         locale={locale}
       />
     </div>

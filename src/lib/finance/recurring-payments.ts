@@ -43,6 +43,14 @@ export interface MonthlySubscriptionRow {
   items: { id: string; name: string; amount: number }[];
 }
 
+export interface ActiveSubscriptionRow {
+  id: string;
+  name: string;
+  cadence: RecurringCadence;
+  monthlyAmount: number;
+  billingAmount: number;
+}
+
 function monthKeyFromDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -541,4 +549,175 @@ export function sliceMonthlySubscriptionOverview(
   }
 
   return result;
+}
+
+export function inferCadenceFromPaymentDates(dates: string[]): RecurringCadence | null {
+  const sorted = [...dates].sort();
+  const monthKeys = new Set(sorted.map((date) => date.slice(0, 7)));
+  const years = new Set(sorted.map((date) => date.slice(0, 4)));
+
+  if (sorted.length >= MIN_SUGGESTION_OCCURRENCES && monthKeys.size >= MIN_SUGGESTION_OCCURRENCES) {
+    const gaps: number[] = [];
+    for (let index = 1; index < sorted.length; index += 1) {
+      const previous = new Date(sorted[index - 1]);
+      const current = new Date(sorted[index]);
+      gaps.push(
+        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+    }
+
+    const monthlyGaps = gaps.filter((gap) => gap >= 25 && gap <= 38);
+    if (monthlyGaps.length >= gaps.length * 0.6) {
+      return "monthly";
+    }
+  }
+
+  if (sorted.length >= MIN_SUGGESTION_OCCURRENCES && years.size >= MIN_SUGGESTION_OCCURRENCES) {
+    const gaps: number[] = [];
+    for (let index = 1; index < sorted.length; index += 1) {
+      const previous = new Date(sorted[index - 1]);
+      const current = new Date(sorted[index]);
+      gaps.push(
+        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+    }
+
+    const yearlyGaps = gaps.filter((gap) => gap >= 335 && gap <= 395);
+    if (yearlyGaps.length >= Math.max(1, gaps.length * 0.5)) {
+      return "yearly";
+    }
+
+    if (monthKeys.size <= years.size + 1) {
+      return "yearly";
+    }
+  }
+
+  if (sorted.length >= 2) {
+    const gaps: number[] = [];
+    for (let index = 1; index < sorted.length; index += 1) {
+      const previous = new Date(sorted[index - 1]);
+      const current = new Date(sorted[index]);
+      gaps.push(
+        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
+      );
+    }
+
+    const yearlyGaps = gaps.filter((gap) => gap >= 335 && gap <= 395);
+    if (yearlyGaps.length >= Math.max(1, gaps.length * 0.5)) {
+      return "yearly";
+    }
+
+    const monthlyGaps = gaps.filter((gap) => gap >= 25 && gap <= 38);
+    if (monthlyGaps.length >= gaps.length * 0.6) {
+      return "monthly";
+    }
+  }
+
+  return null;
+}
+
+export function resolveEffectiveCadence(
+  rule: RecurringPayment,
+  paymentDates: string[],
+): RecurringCadence {
+  if (rule.cadence === "yearly") {
+    return "yearly";
+  }
+
+  const inferred = inferCadenceFromPaymentDates(paymentDates);
+  if (inferred === "yearly") {
+    return "yearly";
+  }
+
+  return rule.cadence ?? "monthly";
+}
+
+export function listActiveSubscriptions(
+  transactions: TransactionWithAccount[],
+  rules: RecurringPayment[],
+  locale: string,
+  referenceDate = new Date(),
+): ActiveSubscriptionRow[] {
+  const previousMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1),
+  );
+  const currentMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
+  );
+  const rollingYearStart = new Date(referenceDate);
+  rollingYearStart.setFullYear(rollingYearStart.getFullYear() - 1);
+
+  const lastPaymentByRule = new Map<string, string>();
+  const paymentDatesByRule = new Map<string, string[]>();
+
+  for (const tx of transactions) {
+    if (tx.amount >= 0 || !tx.recurring_payment_id) {
+      continue;
+    }
+
+    const dates = paymentDatesByRule.get(tx.recurring_payment_id) ?? [];
+    dates.push(tx.booking_date);
+    paymentDatesByRule.set(tx.recurring_payment_id, dates);
+
+    const existing = lastPaymentByRule.get(tx.recurring_payment_id);
+    if (!existing || tx.booking_date > existing) {
+      lastPaymentByRule.set(tx.recurring_payment_id, tx.booking_date);
+    }
+  }
+
+  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
+  const active: ActiveSubscriptionRow[] = [];
+
+  for (const rule of rules) {
+    const lastPaymentDate = lastPaymentByRule.get(rule.id);
+    if (!lastPaymentDate) {
+      continue;
+    }
+
+    const cadence = resolveEffectiveCadence(
+      rule,
+      paymentDatesByRule.get(rule.id) ?? [],
+    );
+    const paymentDate = new Date(lastPaymentDate);
+    const paymentMonthKey = lastPaymentDate.slice(0, 7);
+    const isActive =
+      cadence === "yearly"
+        ? paymentDate >= rollingYearStart
+        : paymentMonthKey === previousMonthKey || paymentMonthKey === currentMonthKey;
+
+    if (!isActive) {
+      continue;
+    }
+
+    active.push({
+      id: rule.id,
+      name: rule.name,
+      cadence,
+      billingAmount: rule.amount,
+      monthlyAmount:
+        cadence === "yearly"
+          ? Math.round((rule.amount / 12) * 100) / 100
+          : rule.amount,
+    });
+  }
+
+  return active.sort((a, b) => a.name.localeCompare(b.name, intlLocale));
+}
+
+/** @deprecated Use listActiveSubscriptions */
+export function listActiveSubscriptionsLastMonth(
+  data: MonthlySubscriptionRow[],
+  locale: string,
+  referenceDate = new Date(),
+): MonthlySubscriptionRow["items"] {
+  const previousMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1),
+  );
+  const row = data.find((entry) => entry.monthKey === previousMonthKey);
+  if (!row) {
+    return [];
+  }
+
+  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
+  return [...row.items].sort((a, b) => a.name.localeCompare(b.name, intlLocale));
 }

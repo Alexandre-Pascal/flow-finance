@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -28,15 +28,17 @@ import {
 } from "@/components/ui/table";
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
+  listActiveSubscriptions,
   sliceMonthlySubscriptionOverview,
   type MonthlySubscriptionRow,
 } from "@/lib/finance/recurring-payments";
 import { formatCurrency } from "@/lib/format";
-import type { RecurringPayment } from "@/types/database";
+import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 
 interface SubscriptionsAnalyticsPanelProps {
   data: MonthlySubscriptionRow[];
   subscriptions: RecurringPayment[];
+  transactions: TransactionWithAccount[];
   locale: string;
   period: MonthlyPeriod;
 }
@@ -44,6 +46,7 @@ interface SubscriptionsAnalyticsPanelProps {
 export function SubscriptionsAnalyticsPanel({
   data,
   subscriptions,
+  transactions,
   locale,
   period,
 }: SubscriptionsAnalyticsPanelProps) {
@@ -54,16 +57,23 @@ export function SubscriptionsAnalyticsPanel({
     [data, period, locale],
   );
 
+  const activeSubscriptions = useMemo(
+    () => listActiveSubscriptions(transactions, subscriptions, locale),
+    [transactions, subscriptions, locale],
+  );
+
   const currentMonth = filtered.at(-1);
   const periodTotal = useMemo(
     () =>
       Math.round(filtered.reduce((sum, row) => sum + row.total, 0) * 100) / 100,
     [filtered],
   );
-  const monthlyEstimate = useMemo(
+  const activeMonthlyTotal = useMemo(
     () =>
-      subscriptions.reduce((sum, item) => sum + item.amount, 0),
-    [subscriptions],
+      Math.round(
+        activeSubscriptions.reduce((sum, item) => sum + item.monthlyAmount, 0) * 100,
+      ) / 100,
+    [activeSubscriptions],
   );
 
   if (subscriptions.length === 0) {
@@ -115,10 +125,10 @@ export function SubscriptionsAnalyticsPanel({
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-semibold tracking-tight text-destructive">
-              {formatCurrency(monthlyEstimate, locale)}
+              {formatCurrency(activeMonthlyTotal, locale)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t("subscriptionsCount", { count: subscriptions.length })}
+              {t("subscriptionsCount", { count: activeSubscriptions.length })}
             </p>
           </CardContent>
         </Card>
@@ -160,43 +170,39 @@ export function SubscriptionsAnalyticsPanel({
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-medium">{t("subscriptionsTableTitle")}</CardTitle>
+          <CardDescription>{t("subscriptionsTableHint")}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t("subscriptionsService")}</TableHead>
-                <TableHead className="text-right">{t("subscriptionsMonthlyAmount")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {subscriptions.map((subscription) => (
-                <TableRow key={subscription.id}>
-                  <TableCell className="font-medium">{subscription.name}</TableCell>
-                  <TableCell className="text-right text-destructive">
-                    {formatCurrency(subscription.amount, locale)}
-                  </TableCell>
+        <CardContent>
+          {activeSubscriptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("subscriptionsActiveEmpty")}</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("subscriptionsService")}</TableHead>
+                  <TableHead className="text-right">{t("subscriptionsMonthlyAmount")}</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-
-          {[...filtered].reverse().map((row) =>
-            row.items.length > 0 ? (
-              <div key={row.monthKey} className="space-y-2">
-                <p className="text-sm font-medium text-foreground">{row.monthFull}</p>
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  {row.items.map((item) => (
-                    <li key={item.id} className="flex justify-between gap-4">
-                      <span>{item.name}</span>
-                      <span className="font-medium text-foreground">
-                        {formatCurrency(item.amount, locale)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null,
+              </TableHeader>
+              <TableBody>
+                {activeSubscriptions.map((subscription) => (
+                  <TableRow key={subscription.id}>
+                    <TableCell className="font-medium">
+                      <div>{subscription.name}</div>
+                      {subscription.cadence === "yearly" ? (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          {t("subscriptionsYearlyBilling", {
+                            amount: formatCurrency(subscription.billingAmount, locale),
+                          })}
+                        </p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right text-destructive">
+                      {formatCurrency(subscription.monthlyAmount, locale)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

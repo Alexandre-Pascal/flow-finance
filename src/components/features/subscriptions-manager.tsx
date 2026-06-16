@@ -8,7 +8,11 @@
 import { Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
-import { deleteRecurringPaymentAction } from "@/app/actions/recurring-payments";
+import { useRouter } from "@/i18n/navigation";
+import {
+  deleteRecurringPaymentAction,
+  updateRecurringPaymentCadenceAction,
+} from "@/app/actions/recurring-payments";
 import { SubscriptionSuggestionSection } from "@/components/features/subscription-suggestion-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,8 +73,28 @@ export function SubscriptionsManager({
   schemaReady,
 }: SubscriptionsManagerProps) {
   const t = useTranslations("subscriptions");
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  function handleCadenceChange(id: string, cadence: "monthly" | "yearly") {
+    setError(null);
+    const formData = new FormData();
+    formData.set("id", id);
+    formData.set("cadence", cadence);
+    startTransition(async () => {
+      const result = await updateRecurringPaymentCadenceAction(formData);
+      if (result.error === "schema") {
+        setError(t("schemaError"));
+        return;
+      }
+      if (result.error) {
+        setError(t("saveError"));
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function handleDelete(id: string) {
     setError(null);
@@ -130,19 +154,45 @@ export function SubscriptionsManager({
                       {subscriptionMeta(subscription, t, locale)}
                     </p>
                   </div>
-                  {!isDemo ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="cursor-pointer text-destructive hover:text-destructive"
-                      disabled={isPending}
-                      onClick={() => handleDelete(subscription.id)}
-                      aria-label={t("delete")}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  ) : null}
+                  <div className="flex items-center gap-2">
+                    {!isDemo ? (
+                      <div className="flex rounded-md border border-border p-0.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={subscription.cadence === "monthly" ? "default" : "ghost"}
+                          className="h-7 cursor-pointer px-2 text-xs"
+                          disabled={isPending}
+                          onClick={() => handleCadenceChange(subscription.id, "monthly")}
+                        >
+                          {t("cadenceMonthly")}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={subscription.cadence === "yearly" ? "default" : "ghost"}
+                          className="h-7 cursor-pointer px-2 text-xs"
+                          disabled={isPending}
+                          onClick={() => handleCadenceChange(subscription.id, "yearly")}
+                        >
+                          {t("cadenceYearly")}
+                        </Button>
+                      </div>
+                    ) : null}
+                    {!isDemo ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="cursor-pointer text-destructive hover:text-destructive"
+                        disabled={isPending}
+                        onClick={() => handleDelete(subscription.id)}
+                        aria-label={t("delete")}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>

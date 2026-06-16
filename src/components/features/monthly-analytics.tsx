@@ -39,7 +39,7 @@ import {
 } from "@/lib/finance/aggregates";
 import { type MonthlyTransferOverview } from "@/lib/finance/tracked-transfers";
 import type { MonthlySubscriptionRow } from "@/lib/finance/recurring-payments";
-import type { RecurringPayment } from "@/types/database";
+import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MotherTransfersPanel } from "@/components/features/mother-transfers-panel";
@@ -50,6 +50,7 @@ interface MonthlyAnalyticsProps {
   motherTransferData: MonthlyTransferOverview[];
   subscriptionData: MonthlySubscriptionRow[];
   subscriptions: RecurringPayment[];
+  transactions: TransactionWithAccount[];
   locale: string;
 }
 
@@ -167,6 +168,7 @@ export function MonthlyAnalytics({
   motherTransferData,
   subscriptionData,
   subscriptions,
+  transactions,
   locale,
 }: MonthlyAnalyticsProps) {
   const t = useTranslations("analytics");
@@ -500,6 +502,7 @@ export function MonthlyAnalytics({
           <SubscriptionsAnalyticsPanel
             data={subscriptionData}
             subscriptions={subscriptions}
+            transactions={transactions}
             locale={locale}
             period={period}
           />

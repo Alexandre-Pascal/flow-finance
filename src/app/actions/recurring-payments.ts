@@ -241,6 +241,78 @@ export async function deleteRecurringPaymentAction(formData: FormData) {
   return { success: true as const };
 }
 
+export async function updateRecurringPaymentCadenceAction(formData: FormData) {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
+  }
+
+  const id = String(formData.get("id") ?? "");
+  const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+
+  if (!id) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  let billingMonth: number | null = null;
+  if (cadence === "yearly") {
+    const { data: accounts } = await supabase
+      .from("accounts")
+      .select("id")
+      .eq("user_id", user.id);
+
+    const accountIds = accounts?.map((account) => account.id) ?? [];
+    if (accountIds.length > 0) {
+      const { data: lastTx } = await supabase
+        .from("transactions")
+        .select("booking_date")
+        .in("account_id", accountIds)
+        .eq("recurring_payment_id", id)
+        .lt("amount", 0)
+        .order("booking_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastTx?.booking_date) {
+        billingMonth = Number(String(lastTx.booking_date).slice(5, 7));
+      }
+    }
+  }
+
+  const { error } = await supabase
+    .from("recurring_payments")
+    .update({
+      cadence,
+      billing_month: cadence === "yearly" ? billingMonth : null,
+    })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[updateRecurringPaymentCadence] update failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  try {
+    await rematchRecurringPaymentsForUser(user.id, supabase);
+  } catch (rematchError) {
+    console.error("[updateRecurringPaymentCadence] rematch failed:", rematchError);
+    revalidateFinancePages();
+    return { success: true as const, warning: "rematch" as const };
+  }
+
+  revalidateFinancePages();
+  return { success: true as const };
+}
+
 function parseSuggestionFromFormData(formData: FormData): RecurringClusterSuggestion | null {
   const amount = Number(formData.get("amount"));
   const billingDay = Number(formData.get("billing_day"));

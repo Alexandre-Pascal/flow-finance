@@ -9,6 +9,7 @@ import {
   dayDistance,
   findMatchingRecurringPayment,
   getBookingDay,
+  inferCadenceFromPaymentDates,
   isLaneSuggestible,
   isPayPalDebit,
   MIN_SUGGESTION_OCCURRENCES,
@@ -90,54 +91,6 @@ function listUnidentifiedGeneralDebits(
 
     return !findMatchingRecurringPayment(tx, rules);
   });
-}
-
-function inferCadence(txs: RecurringLaneTx[]): RecurringCadence | null {
-  const dates = txs.map((tx) => tx.booking_date).sort();
-  const monthKeys = new Set(dates.map((date) => date.slice(0, 7)));
-  const years = new Set(dates.map((date) => date.slice(0, 4)));
-
-  if (dates.length >= MIN_MONTHLY_OCCURRENCES && monthKeys.size >= MIN_MONTHLY_OCCURRENCES) {
-    return "monthly";
-  }
-
-  if (dates.length >= MIN_YEARLY_OCCURRENCES && years.size >= MIN_YEARLY_OCCURRENCES) {
-    const gaps: number[] = [];
-    for (let index = 1; index < dates.length; index += 1) {
-      const previous = new Date(dates[index - 1]);
-      const current = new Date(dates[index]);
-      gaps.push(
-        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
-      );
-    }
-
-    const yearlyGaps = gaps.filter((gap) => gap >= 335 && gap <= 395);
-    if (yearlyGaps.length >= Math.max(1, gaps.length * 0.5)) {
-      return "yearly";
-    }
-
-    if (monthKeys.size <= years.size + 1) {
-      return "yearly";
-    }
-  }
-
-  if (dates.length >= 2) {
-    const gaps: number[] = [];
-    for (let index = 1; index < dates.length; index += 1) {
-      const previous = new Date(dates[index - 1]);
-      const current = new Date(dates[index]);
-      gaps.push(
-        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
-      );
-    }
-
-    const monthlyGaps = gaps.filter((gap) => gap >= 25 && gap <= 38);
-    if (monthlyGaps.length >= gaps.length * 0.6) {
-      return "monthly";
-    }
-  }
-
-  return null;
 }
 
 function splitMonthlyLanes(txs: RecurringLaneTx[]): RecurringLaneTx[][] {
@@ -303,7 +256,7 @@ export function listUnknownGeneralRecurringClusters(
       continue;
     }
 
-    const cadence = inferCadence(groupTxs);
+    const cadence = inferCadenceFromPaymentDates(groupTxs.map((tx) => tx.booking_date));
     if (!cadence) {
       continue;
     }
