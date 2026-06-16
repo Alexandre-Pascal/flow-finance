@@ -12,6 +12,7 @@ import { useRouter } from "@/i18n/navigation";
 import {
   createCategoryAction,
   deleteCategoryAction,
+  rematchCategoriesAction,
 } from "@/app/actions/categories";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,17 +24,24 @@ import type { Category } from "@/types/database";
 interface CategoriesManagerProps {
   categories: Category[];
   isDemo: boolean;
+  schemaReady?: boolean;
 }
 
-export function CategoriesManager({ categories, isDemo }: CategoriesManagerProps) {
+export function CategoriesManager({
+  categories,
+  isDemo,
+  schemaReady = true,
+}: CategoriesManagerProps) {
   const t = useTranslations("categories");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const uniqueCategories = dedupeCategories(categories);
 
   function handleCreate(formData: FormData) {
     setError(null);
+    setSuccess(null);
     startTransition(async () => {
       const result = await createCategoryAction(formData);
       if (result.error === "demo") {
@@ -54,6 +62,7 @@ export function CategoriesManager({ categories, isDemo }: CategoriesManagerProps
 
   function handleDelete(id: string) {
     setError(null);
+    setSuccess(null);
     const formData = new FormData();
     formData.set("id", id);
     startTransition(async () => {
@@ -70,6 +79,28 @@ export function CategoriesManager({ categories, isDemo }: CategoriesManagerProps
     });
   }
 
+  function handleRematch() {
+    setError(null);
+    setSuccess(null);
+    startTransition(async () => {
+      const result = await rematchCategoriesAction();
+      if (result.error === "demo") {
+        setError(t("demoError"));
+        return;
+      }
+      if (result.error === "schema") {
+        setError(t("schemaError"));
+        return;
+      }
+      if (result.error) {
+        setError(t("rematchError"));
+        return;
+      }
+      setSuccess(t("rematchSuccess", { count: result.matched ?? 0 }));
+      router.refresh();
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -77,9 +108,21 @@ export function CategoriesManager({ categories, isDemo }: CategoriesManagerProps
         <CardDescription>{t("description")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        {!schemaReady ? (
+          <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            {t("schemaError")}
+          </p>
+        ) : null}
+
         {error ? (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error}
+          </p>
+        ) : null}
+
+        {success ? (
+          <p className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground">
+            {success}
           </p>
         ) : null}
 
@@ -161,6 +204,16 @@ export function CategoriesManager({ categories, isDemo }: CategoriesManagerProps
             ))}
           </ul>
         )}
+
+        <Button
+          type="button"
+          variant="outline"
+          disabled={isPending || isDemo || !schemaReady}
+          className="cursor-pointer"
+          onClick={handleRematch}
+        >
+          {t("rematchButton")}
+        </Button>
       </CardContent>
     </Card>
   );

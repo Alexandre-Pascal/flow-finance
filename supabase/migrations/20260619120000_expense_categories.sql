@@ -1,7 +1,4 @@
--- Catégories de dépenses : apprentissage par montant et verrouillage manuel
-
-alter table public.categories
-  add column if not exists amount_hints numeric[] not null default '{}';
+-- Catégories de dépenses : verrouillage manuel des affectations
 
 alter table public.transactions
   add column if not exists category_manual boolean not null default false;

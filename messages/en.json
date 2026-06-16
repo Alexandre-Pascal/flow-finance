@@ -166,19 +166,22 @@
   },
   "categories": {
     "title": "Expense categories",
-    "description": "Create categories and keywords to automatically classify spending (restaurants, fuel, groceries…).",
+    "description": "Create categories and keywords to automatically classify spending based on bank descriptions.",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. Restaurants",
     "keywordsLabel": "Keywords (optional)",
     "keywordsPlaceholder": "RESTAURANT, UBER EATS, MAC DO",
-    "keywordsHint": "Comma-separated. Matching descriptions are pre-classified. Manual assignment also learns a keyword.",
+    "keywordsHint": "Comma-separated. Matching descriptions are classified automatically. Manual corrections memorize a keyword from the description.",
     "keywordsList": "Keywords: {keywords}",
     "addButton": "Add category",
     "empty": "No categories yet.",
     "delete": "Delete",
     "demoError": "Not available in demo mode.",
     "schemaError": "Run the categories migration in Supabase.",
-    "saveError": "Could not save the category."
+    "saveError": "Could not save the category.",
+    "rematchButton": "Recalculate categories",
+    "rematchSuccess": "{count} expenses classified automatically.",
+    "rematchError": "Could not recalculate categories."
   },
   "settings": {
     "title": "Settings",

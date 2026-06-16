@@ -6,14 +6,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   dedupeCategories,
-  ensureDefaultCategories,
   findMatchingCategory,
+  shouldAutoCategorize,
+  syncDefaultCategories,
 } from "@/lib/finance/expense-categories";
 import { createClient } from "@/lib/supabase/server";
 
 export async function rematchCategoriesForUser(
   userId: string,
   supabaseClient?: SupabaseClient,
+  options?: { onlyUncategorized?: boolean },
 ): Promise<{ matched: number }> {
   const supabase = supabaseClient ?? (await createClient());
 
@@ -21,7 +23,7 @@ export async function rematchCategoriesForUser(
     throw new Error("Supabase is not configured.");
   }
 
-  const { categories: loadedCategories } = await ensureDefaultCategories(
+  const { categories: loadedCategories } = await syncDefaultCategories(
     supabase,
     userId,
   );
@@ -40,19 +42,27 @@ export async function rematchCategoriesForUser(
   let matched = 0;
 
   for (const account of accounts) {
-    const { data: transactions, error } = await supabase
+    let query = supabase
       .from("transactions")
       .select(
         "id, amount, description, category_id, category_manual, recurring_payment_id",
       )
       .eq("account_id", account.id)
-      .lt("amount", 0);
+      .lt("amount", 0)
+      .eq("category_manual", false)
+      .is("recurring_payment_id", null);
+
+    if (options?.onlyUncategorized) {
+      query = query.is("category_id", null);
+    }
+
+    const { data: transactions, error } = await query;
 
     if (error) throw error;
     if (!transactions?.length) continue;
 
     for (const tx of transactions) {
-      if (tx.category_manual || tx.recurring_payment_id) {
+      if (!shouldAutoCategorize(String(tx.description))) {
         continue;
       }
 

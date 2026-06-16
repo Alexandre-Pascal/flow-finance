@@ -95,7 +95,6 @@ export interface Category {
   name: string;
   color: string;
   keyword_rules: string[];
-  amount_hints: number[];
   created_at: string;
 }
 

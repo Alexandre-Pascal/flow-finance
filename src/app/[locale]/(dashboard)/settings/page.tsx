@@ -25,7 +25,7 @@ export default async function SettingsPage({
   const tNav = await getTranslations("nav");
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
-  const { accounts, bankConnection, transactions, recurringPayments, categories, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady } =
+  const { accounts, bankConnection, transactions, recurringPayments, categories, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady, categoriesSchemaReady } =
     await getFinanceData(locale);
   const recurringSuggestions = listRecurringClusterSuggestions(
     transactions,
@@ -124,7 +124,11 @@ export default async function SettingsPage({
         schemaReady={subscriptionsSchemaReady}
       />
 
-      <CategoriesManager categories={categories} isDemo={isDemo} />
+      <CategoriesManager
+        categories={categories}
+        isDemo={isDemo}
+        schemaReady={categoriesSchemaReady}
+      />
 
       <Card>
         <CardHeader>

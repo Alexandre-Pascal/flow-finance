@@ -6,8 +6,8 @@
 import { getAppUser, type AppUser } from "@/lib/auth";
 import {
   dedupeCategories,
-  ensureDefaultCategories,
   mapCategory,
+  syncDefaultCategories,
 } from "@/lib/finance/expense-categories";
 import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
@@ -33,6 +33,7 @@ export interface FinanceData {
   recurringPayments: RecurringPayment[];
   dismissedSuggestionKeys: string[];
   subscriptionsSchemaReady: boolean;
+  categoriesSchemaReady: boolean;
   monthlySpending: { month: string; amount: number }[];
   bankConnection: BankConnection | null;
   isDemo: boolean;
@@ -109,6 +110,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       recurringPayments: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
+      categoriesSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -155,17 +157,38 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
   );
 
   let categories: Category[] = [];
+  let categoriesSchemaReady = true;
+  let needsFullRematch = false;
+
   try {
-    const { categories: loadedCategories, seeded } = await ensureDefaultCategories(
+    const { categories: loadedCategories, changed } = await syncDefaultCategories(
       supabase,
       user.id,
     );
     categories = dedupeCategories(loadedCategories);
-    if (seeded) {
-      await rematchCategoriesForUser(user.id, supabase);
-    }
+    needsFullRematch = changed;
   } catch {
-    categories = [];
+    categoriesSchemaReady = false;
+    const { data: categoryRows } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", user.id);
+
+    categories = dedupeCategories(
+      (categoryRows ?? []).map((row) =>
+        mapCategory(row as Record<string, unknown>),
+      ),
+    );
+  }
+
+  if (categories.length > 0) {
+    try {
+      await rematchCategoriesForUser(user.id, supabase, {
+        onlyUncategorized: !needsFullRematch,
+      });
+    } catch {
+      categoriesSchemaReady = false;
+    }
   }
 
   const categoryById = new Map(
@@ -218,6 +241,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     recurringPayments,
     dismissedSuggestionKeys: (dismissalRows ?? []).map((row) => String(row.cluster_key)),
     subscriptionsSchemaReady: !recurringError && !dismissalError,
+    categoriesSchemaReady,
     monthlySpending: buildMonthlySpending(transactions, "fr"),
     bankConnection: connectionRow
       ? mapBankConnection(connectionRow as Record<string, unknown>)
@@ -241,6 +265,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       recurringPayments: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
+      categoriesSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -258,6 +283,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       bankConnection: null,
       isDemo: true,
       subscriptionsSchemaReady: true,
+      categoriesSchemaReady: true,
     };
   }
 

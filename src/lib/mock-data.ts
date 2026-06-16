@@ -41,7 +41,6 @@ export const MOCK_CATEGORIES: Category[] = [
     name: "Courses",
     color: "#22C55E",
     keyword_rules: ["CARREFOUR", "LECLERC"],
-    amount_hints: [42.5],
     created_at: "2026-01-01T00:00:00Z",
   },
   {
@@ -50,7 +49,6 @@ export const MOCK_CATEGORIES: Category[] = [
     name: "Restaurants",
     color: "#EF4444",
     keyword_rules: ["UBER EATS", "RESTAURANT"],
-    amount_hints: [18.2],
     created_at: "2026-01-01T00:00:00Z",
   },
 ];

@@ -1,13 +1,13 @@
 /**
  * @file expense-categories.ts
- * @description Catégories de dépenses, matching par mots-clés et montants appris.
+ * @description Catégories de dépenses, matching par mots-clés.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { extractMerchantKey } from "@/lib/finance/recurring-detection";
 import type { Category } from "@/types/database";
 
-export const CATEGORY_AMOUNT_TOLERANCE = 0.5;
+// La catégorisation se fait uniquement via le libellé bancaire.
 
 export const DEFAULT_CATEGORY_COLORS = [
   "#EF4444",
@@ -27,38 +27,270 @@ export const DEFAULT_EXPENSE_CATEGORIES: Array<{
   {
     name: "Restaurants",
     color: "#EF4444",
-    keyword_rules: ["RESTAURANT", "RESTO", "BRASSERIE", "MAC DO", "MCDONALD", "BURGER"],
+    keyword_rules: [
+      "RESTAURANT",
+      "RESTO",
+      "BRASSERIE",
+      "MAC DONALD",
+      "MCDONALD",
+      "BURGER KING",
+      "KFC",
+      "PRET A MANGER",
+      "BOULANGERIE",
+      "PANETIERE",
+      "FOURNIL",
+      "UBER EATS",
+      "MUY ET MUCHO",
+      "BM RESTAURATION",
+      "AU FUT ET A MESU",
+      "LA GUINGUETTE",
+      "LE CHIQUITO",
+      "O DEUX FRERES",
+      "PANAME",
+      "LA MIE SAVEURS",
+      "SUNDAY*",
+      "LOFT 89",
+      "L ALCHIMISTE",
+      "L APARTE",
+      "GD CAFE",
+      "LSP*LE COMPTOIR",
+      "LA STRADA",
+      "FEUILLETTE",
+      "ORKA",
+      "LA CASA DI",
+      "LE NEUF",
+      "DIVONA PIZZA",
+      "STALIREST",
+      "AU BRUIT QUI COU",
+      "LE SAN VICENS",
+      "DISTRI CAFE",
+      "TOUAJIN",
+      "SELECTA",
+      "LOU PASCALOU",
+      "LE COMPTOIR",
+      "LA MALAVITA",
+      "LOU CANTOU",
+      "LE GRAND TETRAS",
+      "SA UMBRESSO",
+      "LA PANETIERE",
+    ],
   },
   {
     name: "Essence",
     color: "#F97316",
-    keyword_rules: ["TOTAL", "ESSO", "SHELL", "BP ", "STATION", "CARBURANT"],
+    keyword_rules: [
+      "E.LECLERC STATIO",
+      "LECLERC STATIO",
+      "INTER STATION",
+      "INTER HORACE",
+      "GASOPAS",
+      "ESSO",
+      "SHELL",
+      "BP ",
+      "CARBURANT",
+      "STATIO PRA",
+    ],
   },
   {
     name: "Péage",
     color: "#EAB308",
-    keyword_rules: ["SANEF", "APRR", "ASF", "PEAGE", "PÉAGE", "AUTOROUTE", "VINCI"],
+    keyword_rules: [
+      "AUTOROUTES DU SUD",
+      "SANEF",
+      "APRR",
+      "ASF-",
+      "ASF ",
+      "PEAGE",
+      "PÉAGE",
+      "VINCI",
+    ],
   },
   {
     name: "Courses",
     color: "#22C55E",
     keyword_rules: [
       "CARREFOUR",
-      "LECLERC",
+      "PRADIS LECLERC",
+      "CENTRE LECLERC",
+      "LECLERC ONET",
+      "LECLERC CAPDENAC",
+      "LECLERC FOIX",
       "AUCHAN",
       "INTERMARCHE",
+      "INTER IROLY",
       "LIDL",
       "SUPER U",
+      "UEP*DAC SUPER U",
+      "UEP*SUPER U",
+      "UEP*DAC",
       "MONOPRIX",
       "FRANPRIX",
+      "ALDI",
+      "EUROMERCAT",
+      "HIPER PAS",
+      "CAPEL 4 SAISONS",
+      "EPICERIE",
+      "SAVILAO",
+      "OUTLET DISTRIBUT",
+      "CARREFOUR CITY",
+      "CARREFOUR CONTACT",
+      "CARREFOUR MONTAUBAN",
+      "RMS 31 CARREFOUR",
+      "MAR & CAS",
+      "HIPER PAS",
     ],
   },
   {
     name: "Retrait",
     color: "#3B82F6",
-    keyword_rules: ["RETRAIT DAB", "RETRAIT CB", "DAB ", "DISTRIBUTEUR"],
+    keyword_rules: [
+      "RETRAIT AU DISTRIBUTEUR",
+      "RETRAIT DAB",
+      "RETRAIT CB",
+      "DISTRIBUTEUR",
+    ],
+  },
+  {
+    name: "Transport",
+    color: "#6366F1",
+    keyword_rules: [
+      "SNCF",
+      "OUIGO",
+      "NAVIGO",
+      "TISSEO",
+      "SERVICE NAVIGO",
+      "EASYPARK",
+      "HORODATEURS",
+      "FREEBIKE",
+      "SOCIETE D EXPLOITATI",
+      "2THELOO",
+    ],
+  },
+  {
+    name: "Loisirs",
+    color: "#A855F7",
+    keyword_rules: [
+      "BOWLING",
+      "DECATHLON",
+      "INTERSPORT",
+      "KING JOUET",
+      "QUIZZ ROOM",
+      "SPORT TICKETING",
+      "DECKDIS",
+      "FORF P.STAT",
+      "ALTI FONT ROMEU",
+      "KEEP COOL",
+      "FF ATHLETISME",
+      "DOWNTOWN FACTORY",
+      "ZEVENT",
+      "FORF P.",
+    ],
+  },
+  {
+    name: "Hébergement",
+    color: "#14B8A6",
+    keyword_rules: [
+      "BOOKING.COM",
+      "HOTEL AT BOOKING",
+      "AIRBNB",
+      "HOTEL IBIS",
+      "HOTEL ",
+    ],
+  },
+  {
+    name: "Shopping",
+    color: "#F43F5E",
+    keyword_rules: [
+      "AMAZON PAYMENTS",
+      "AMAZON PRIME FR",
+      "KIABI",
+      "ACTION DECAZEVILLE",
+      "ACTION ",
+      "BRICOMARCHE",
+      "MR BRICOLAGE",
+      "VINTED",
+      "LEBONCOIN",
+      "CORDONNERIE",
+      "COMMERCIALISATION PI",
+    ],
+  },
+  {
+    name: "Santé",
+    color: "#06B6D4",
+    keyword_rules: ["PHARMACIE", "OPHT", "ASSOCIATION OPHT"],
+  },
+  {
+    name: "Administration",
+    color: "#64748B",
+    keyword_rules: ["ED DES AFFAIRES CRIMINEL", "ED AFF CRIM"],
+  },
+  {
+    name: "Épargne",
+    color: "#0D9488",
+    keyword_rules: ["MENS.PEL"],
+  },
+  {
+    name: "Virements émis",
+    color: "#78716C",
+    keyword_rules: [
+      "VIREMENT EMIS WERO",
+      "VIREMENT EMIS WEB",
+      "VIREMENT EMIS VIR INST",
+    ],
+  },
+  {
+    name: "Jeux & apps",
+    color: "#D946EF",
+    keyword_rules: ["SUPERCELL", "CURSOR"],
+  },
+  {
+    name: "Poste",
+    color: "#CA8A04",
+    keyword_rules: ["LAPOSTE"],
+  },
+  {
+    name: "Dons",
+    color: "#84CC16",
+    keyword_rules: ["HELLO ASSO", "HELLOASSO"],
+  },
+  {
+    name: "Frais bancaires",
+    color: "#94A3B8",
+    keyword_rules: ["COTISATION CARTE", "FRAIS PRELEVEMENT", "FRAIS Prélèvement"],
   },
 ];
+
+function mergeKeywordRules(existing: string[], defaults: string[]): string[] {
+  const merged = new Map<string, string>();
+
+  for (const keyword of [...existing, ...defaults]) {
+    const normalized = normalizeKeyword(keyword);
+    if (normalized) {
+      merged.set(normalized, keyword.trim());
+    }
+  }
+
+  return [...merged.values()];
+}
+
+function keywordRulesSignature(rules: string[]): string {
+  return [...rules].map(normalizeKeyword).sort().join("\0");
+}
+
+/** Exclut les dépenses déjà gérées par les abonnements ou hors périmètre. */
+export function shouldAutoCategorize(description: string): boolean {
+  const normalized = description.toUpperCase();
+
+  if (normalized.includes("PRELEVEMENT") && normalized.includes("PAYPAL")) {
+    return false;
+  }
+
+  if (normalized.includes("VIREMENT EN VOTRE FAVEUR")) {
+    return false;
+  }
+
+  return true;
+}
 
 export function mapCategory(row: Record<string, unknown>): Category {
   return {
@@ -68,9 +300,6 @@ export function mapCategory(row: Record<string, unknown>): Category {
     color: String(row.color),
     keyword_rules: Array.isArray(row.keyword_rules)
       ? row.keyword_rules.map(String)
-      : [],
-    amount_hints: Array.isArray(row.amount_hints)
-      ? row.amount_hints.map((value) => Number(value))
       : [],
     created_at: String(row.created_at),
   };
@@ -96,26 +325,6 @@ export function matchesCategoryByKeywords(
   return category.keyword_rules.some((keyword) =>
     descriptionMatchesKeyword(description, keyword),
   );
-}
-
-export function matchesCategoryByAmount(
-  amount: number,
-  category: Category,
-  description: string,
-): boolean {
-  if (category.amount_hints.length === 0) {
-    return false;
-  }
-
-  const debitAmount = Math.round(Math.abs(amount) * 100) / 100;
-
-  return category.amount_hints.some((hint) => {
-    if (Math.abs(debitAmount - hint) > CATEGORY_AMOUNT_TOLERANCE) {
-      return false;
-    }
-
-    return matchesCategoryByKeywords(description, category);
-  });
 }
 
 export function findMatchingCategory(
@@ -146,12 +355,6 @@ export function findMatchingCategory(
     return bestKeywordMatch;
   }
 
-  for (const category of categories) {
-    if (matchesCategoryByAmount(tx.amount, category, tx.description)) {
-      return category;
-    }
-  }
-
   return null;
 }
 
@@ -163,10 +366,8 @@ export function buildLearnedKeyword(description: string): string | null {
 export function mergeCategoryLearning(
   category: Category,
   description: string,
-  amount: number,
-): Pick<Category, "keyword_rules" | "amount_hints"> {
+): Pick<Category, "keyword_rules"> {
   const keywordRules = [...category.keyword_rules];
-  const amountHints = [...category.amount_hints];
   const learnedKeyword = buildLearnedKeyword(description);
 
   if (
@@ -178,18 +379,8 @@ export function mergeCategoryLearning(
     keywordRules.push(learnedKeyword);
   }
 
-  const debitAmount = Math.round(Math.abs(amount) * 100) / 100;
-  const hasCloseHint = amountHints.some(
-    (hint) => Math.abs(hint - debitAmount) <= CATEGORY_AMOUNT_TOLERANCE,
-  );
-
-  if (!hasCloseHint) {
-    amountHints.push(debitAmount);
-  }
-
   return {
     keyword_rules: keywordRules,
-    amount_hints: amountHints,
   };
 }
 
@@ -214,10 +405,10 @@ export function dedupeCategories(categories: Category[]): Category[] {
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, "fr"));
 }
 
-export async function ensureDefaultCategories(
+export async function syncDefaultCategories(
   supabase: SupabaseClient,
   userId: string,
-): Promise<{ categories: Category[]; seeded: boolean }> {
+): Promise<{ categories: Category[]; changed: boolean }> {
   const { data: existing, error } = await supabase
     .from("categories")
     .select("*")
@@ -228,46 +419,73 @@ export async function ensureDefaultCategories(
   }
 
   const existingRows = existing ?? [];
-  const existingNames = new Set(
-    existingRows.map((row) => String(row.name).trim().toLowerCase()),
+  const byName = new Map(
+    existingRows.map((row) => [String(row.name).trim().toLowerCase(), row]),
   );
+  let changed = false;
 
-  const missingDefaults = DEFAULT_EXPENSE_CATEGORIES.filter(
-    (category) => !existingNames.has(category.name.trim().toLowerCase()),
-  );
+  for (const definition of DEFAULT_EXPENSE_CATEGORIES) {
+    const key = definition.name.trim().toLowerCase();
+    const row = byName.get(key);
 
-  if (missingDefaults.length === 0) {
-    return {
-      categories: dedupeCategories(
-        existingRows.map((row) => mapCategory(row as Record<string, unknown>)),
-      ),
-      seeded: false,
-    };
+    if (row) {
+      const currentRules = Array.isArray(row.keyword_rules)
+        ? row.keyword_rules.map(String)
+        : [];
+      const mergedRules = mergeKeywordRules(currentRules, definition.keyword_rules);
+
+      if (keywordRulesSignature(currentRules) !== keywordRulesSignature(mergedRules)) {
+        const { error: updateError } = await supabase
+          .from("categories")
+          .update({ keyword_rules: mergedRules })
+          .eq("id", row.id);
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        changed = true;
+      }
+
+      continue;
+    }
+
+    const { error: insertError } = await supabase.from("categories").insert({
+      user_id: userId,
+      name: definition.name,
+      color: definition.color,
+      keyword_rules: definition.keyword_rules,
+    });
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    changed = true;
   }
 
-  const { data: inserted, error: insertError } = await supabase
+  const { data: refreshed, error: refreshError } = await supabase
     .from("categories")
-    .insert(
-      missingDefaults.map((category) => ({
-        user_id: userId,
-        name: category.name,
-        color: category.color,
-        keyword_rules: category.keyword_rules,
-      })),
-    )
-    .select("*");
+    .select("*")
+    .eq("user_id", userId);
 
-  if (insertError) {
-    throw insertError;
+  if (refreshError) {
+    throw refreshError;
   }
-
-  const merged = [
-    ...existingRows.map((row) => mapCategory(row as Record<string, unknown>)),
-    ...(inserted ?? []).map((row) => mapCategory(row as Record<string, unknown>)),
-  ];
 
   return {
-    categories: dedupeCategories(merged),
-    seeded: true,
+    categories: dedupeCategories(
+      (refreshed ?? []).map((row) => mapCategory(row as Record<string, unknown>)),
+    ),
+    changed,
   };
+}
+
+/** @deprecated Alias conservé pour les imports existants. */
+export async function ensureDefaultCategories(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ categories: Category[]; seeded: boolean }> {
+  const { categories, changed } = await syncDefaultCategories(supabase, userId);
+  return { categories, seeded: changed };
 }

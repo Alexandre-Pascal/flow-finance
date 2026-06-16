@@ -4,10 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth";
 import {
   DEFAULT_CATEGORY_COLORS,
-  dedupeCategories,
-  ensureDefaultCategories,
   mapCategory,
   mergeCategoryLearning,
+  syncDefaultCategories,
 } from "@/lib/finance/expense-categories";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
 import { createClient } from "@/lib/supabase/server";
@@ -37,7 +36,6 @@ function isSchemaError(message: string, code?: string): boolean {
     code === "PGRST205" ||
     normalized.includes("categories") ||
     normalized.includes("category_manual") ||
-    normalized.includes("amount_hints") ||
     normalized.includes("does not exist")
   );
 }
@@ -69,10 +67,13 @@ export async function createCategoryAction(
     return { error: "config" };
   }
 
-  const existing = await ensureDefaultCategories(supabase, user.id);
+  const { categories: existingCategories } = await syncDefaultCategories(
+    supabase,
+    user.id,
+  );
   const color =
     DEFAULT_CATEGORY_COLORS[
-      existing.categories.length % DEFAULT_CATEGORY_COLORS.length
+      existingCategories.length % DEFAULT_CATEGORY_COLORS.length
     ];
 
   const { error } = await supabase.from("categories").insert({
@@ -220,11 +221,7 @@ export async function assignTransactionCategoryAction(
 
     if (categoryRow) {
       const category = mapCategory(categoryRow as Record<string, unknown>);
-      const learned = mergeCategoryLearning(
-        category,
-        String(tx.description),
-        Number(tx.amount),
-      );
+      const learned = mergeCategoryLearning(category, String(tx.description));
 
       const { error: learnError } = await supabase
         .from("categories")
@@ -241,4 +238,28 @@ export async function assignTransactionCategoryAction(
 
   revalidateFinancePages();
   return {};
+}
+
+export async function rematchCategoriesAction(): Promise<{
+  error?: CategoryActionError;
+  matched?: number;
+}> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  try {
+    const { matched } = await rematchCategoriesForUser(user.id, supabase);
+    revalidateFinancePages();
+    return { matched };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return isSchemaError(message) ? { error: "schema" } : { error: "rematch" };
+  }
 }
