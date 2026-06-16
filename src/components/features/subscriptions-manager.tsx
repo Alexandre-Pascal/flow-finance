@@ -1,6 +1,6 @@
 /**
  * @file subscriptions-manager.tsx
- * @description Gestion des abonnements (règles par montant PayPal).
+ * @description Gestion des abonnements et prélèvements récurrents.
  */
 
 "use client";
@@ -20,16 +20,82 @@ import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   clusterSuggestionKey,
-  type PayPalClusterSuggestion,
+  type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
 import type { RecurringPayment } from "@/types/database";
 
 interface SubscriptionsManagerProps {
   subscriptions: RecurringPayment[];
-  suggestions: PayPalClusterSuggestion[];
+  suggestions: RecurringClusterSuggestion[];
   locale: string;
   isDemo: boolean;
   schemaReady: boolean;
+}
+
+function suggestionLabel(
+  suggestion: RecurringClusterSuggestion,
+  t: ReturnType<typeof useTranslations<"subscriptions">>,
+  locale: string,
+): string {
+  if (suggestion.source === "paypal") {
+    return t("clusterLabelPaypal", {
+      amount: formatCurrency(-suggestion.amount, locale),
+      day: suggestion.billingDay,
+      count: suggestion.count,
+    });
+  }
+
+  if (suggestion.cadence === "yearly") {
+    return t("clusterLabelYearly", {
+      amount: formatCurrency(-suggestion.amount, locale),
+      preview: suggestion.descriptionPreview,
+      month: suggestion.billingMonth ?? 1,
+      day: suggestion.billingDay,
+      count: suggestion.count,
+    });
+  }
+
+  return t("clusterLabelMonthly", {
+    amount: formatCurrency(-suggestion.amount, locale),
+    preview: suggestion.descriptionPreview,
+    day: suggestion.billingDay,
+    count: suggestion.count,
+  });
+}
+
+function subscriptionMeta(
+  subscription: RecurringPayment,
+  t: ReturnType<typeof useTranslations<"subscriptions">>,
+  locale: string,
+): string {
+  const amount = formatCurrency(-subscription.amount, locale);
+
+  if (subscription.cadence === "yearly") {
+    return subscription.billing_month && subscription.billing_day
+      ? t("subscriptionMetaYearly", {
+          amount,
+          month: subscription.billing_month,
+          day: subscription.billing_day,
+        })
+      : t("subscriptionMetaYearlyShort", { amount });
+  }
+
+  if (subscription.description_pattern.toUpperCase().includes("PAYPAL")) {
+    return subscription.billing_day
+      ? t("subscriptionMetaWithDay", { amount, day: subscription.billing_day })
+      : t("subscriptionMeta", { amount });
+  }
+
+  return subscription.billing_day
+    ? t("subscriptionMetaGeneralWithDay", {
+        amount,
+        day: subscription.billing_day,
+        pattern: subscription.description_pattern,
+      })
+    : t("subscriptionMetaGeneral", {
+        amount,
+        pattern: subscription.description_pattern,
+      });
 }
 
 export function SubscriptionsManager({
@@ -142,14 +208,10 @@ export function SubscriptionsManager({
                         key={key}
                         type="button"
                         variant={selectedClusterKey === key ? "default" : "outline"}
-                        className="cursor-pointer"
+                        className="h-auto max-w-full cursor-pointer whitespace-normal py-2 text-left"
                         onClick={() => setSelectedClusterKey(key)}
                       >
-                        {t("clusterLabel", {
-                          amount: formatCurrency(-suggestion.amount, locale),
-                          day: suggestion.billingDay,
-                          count: suggestion.count,
-                        })}
+                        {suggestionLabel(suggestion, t, locale)}
                       </Button>
                     );
                   })}
@@ -170,7 +232,25 @@ export function SubscriptionsManager({
               name="billing_day"
               value={selectedSuggestion ? String(selectedSuggestion.billingDay) : ""}
             />
-            <input type="hidden" name="description_pattern" value="PAYPAL" />
+            <input
+              type="hidden"
+              name="billing_month"
+              value={
+                selectedSuggestion?.billingMonth
+                  ? String(selectedSuggestion.billingMonth)
+                  : ""
+              }
+            />
+            <input
+              type="hidden"
+              name="cadence"
+              value={selectedSuggestion?.cadence ?? "monthly"}
+            />
+            <input
+              type="hidden"
+              name="description_pattern"
+              value={selectedSuggestion?.descriptionPattern ?? "PAYPAL"}
+            />
 
             <div className="space-y-2">
               <Label htmlFor="subscription-name">{t("nameLabel")}</Label>
@@ -211,14 +291,7 @@ export function SubscriptionsManager({
                   <div>
                     <p className="font-medium text-foreground">{subscription.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {subscription.billing_day
-                        ? t("subscriptionMetaWithDay", {
-                            amount: formatCurrency(-subscription.amount, locale),
-                            day: subscription.billing_day,
-                          })
-                        : t("subscriptionMeta", {
-                            amount: formatCurrency(-subscription.amount, locale),
-                          })}
+                      {subscriptionMeta(subscription, t, locale)}
                     </p>
                   </div>
                   {!isDemo ? (
@@ -247,15 +320,28 @@ export function SubscriptionsManager({
               {suggestions.map((suggestion) => (
                 <li
                   key={clusterSuggestionKey(suggestion)}
-                  className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2"
+                  className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2"
                 >
-                  <span>
-                    {t("unidentifiedCluster", {
-                      amount: formatCurrency(-suggestion.amount, locale),
-                      day: suggestion.billingDay,
-                    })}
+                  <span className="min-w-0 truncate">
+                    {suggestion.source === "paypal"
+                      ? t("unidentifiedClusterPaypal", {
+                          amount: formatCurrency(-suggestion.amount, locale),
+                          day: suggestion.billingDay,
+                        })
+                      : suggestion.cadence === "yearly"
+                        ? t("unidentifiedClusterYearly", {
+                            amount: formatCurrency(-suggestion.amount, locale),
+                            preview: suggestion.descriptionPreview,
+                            month: suggestion.billingMonth ?? 1,
+                            day: suggestion.billingDay,
+                          })
+                        : t("unidentifiedClusterMonthly", {
+                            amount: formatCurrency(-suggestion.amount, locale),
+                            preview: suggestion.descriptionPreview,
+                            day: suggestion.billingDay,
+                          })}
                   </span>
-                  <span>
+                  <span className="shrink-0">
                     {t("unidentifiedMeta", {
                       count: suggestion.count,
                       date: formatDate(suggestion.lastDate, locale),

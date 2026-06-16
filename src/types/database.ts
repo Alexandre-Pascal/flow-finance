@@ -59,6 +59,8 @@ export interface Transaction {
   updated_at: string;
 }
 
+export type RecurringCadence = "monthly" | "yearly";
+
 export interface RecurringPayment {
   id: string;
   user_id: string;
@@ -67,6 +69,8 @@ export interface RecurringPayment {
   amount_tolerance: number;
   description_pattern: string;
   billing_day: number | null;
+  cadence: RecurringCadence;
+  billing_month: number | null;
   created_at: string;
   updated_at: string;
 }

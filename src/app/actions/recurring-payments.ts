@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth";
 import {
+  isGeneralRecurringClusterStillActive,
+  isPayPalPattern,
+} from "@/lib/finance/recurring-detection";
+import {
   isPayPalClusterStillActive,
   mapRecurringPayment,
 } from "@/lib/finance/recurring-payments";
@@ -35,6 +39,8 @@ function isSchemaError(message: string, code?: string): boolean {
     code === "PGRST205" ||
     normalized.includes("recurring_payments") ||
     normalized.includes("billing_day") ||
+    normalized.includes("billing_month") ||
+    normalized.includes("cadence") ||
     normalized.includes("recurring_payment_manual") ||
     normalized.includes("does not exist")
   );
@@ -86,6 +92,9 @@ export async function createRecurringPaymentAction(formData: FormData) {
   const amount = Number(formData.get("amount"));
   const billingDayRaw = String(formData.get("billing_day") ?? "").trim();
   const billingDay = billingDayRaw ? Number(billingDayRaw) : null;
+  const billingMonthRaw = String(formData.get("billing_month") ?? "").trim();
+  const billingMonth = billingMonthRaw ? Number(billingMonthRaw) : null;
+  const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
   const descriptionPattern =
     String(formData.get("description_pattern") ?? "PAYPAL").trim() || "PAYPAL";
 
@@ -100,21 +109,37 @@ export async function createRecurringPaymentAction(formData: FormData) {
     return { error: "invalid" as const satisfies RecurringPaymentActionError };
   }
 
+  if (
+    cadence === "yearly" &&
+    (billingMonth === null ||
+      !Number.isInteger(billingMonth) ||
+      billingMonth < 1 ||
+      billingMonth > 12)
+  ) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
   const supabase = await createClient();
   if (!supabase) {
     return { error: "config" as const satisfies RecurringPaymentActionError };
   }
 
-  if (
-    billingDay !== null &&
-    descriptionPattern.toUpperCase().includes("PAYPAL")
-  ) {
+  if (billingDay !== null) {
     try {
       const [transactions, rules] = await Promise.all([
         loadUserTransactionsForValidation(supabase, user.id),
         getRecurringPaymentsForUser(user.id),
       ]);
-      if (!isPayPalClusterStillActive(transactions, amount, billingDay, new Date(), rules)) {
+      const stillActive = isPayPalPattern(descriptionPattern)
+        ? isPayPalClusterStillActive(transactions, amount, billingDay, new Date(), rules)
+        : isGeneralRecurringClusterStillActive(transactions, rules, {
+            amount,
+            billingDay,
+            billingMonth: cadence === "yearly" ? billingMonth : null,
+            cadence,
+            descriptionPattern,
+          });
+      if (!stillActive) {
         return { error: "inactive" as const satisfies RecurringPaymentActionError };
       }
     } catch (validationError) {
@@ -128,6 +153,8 @@ export async function createRecurringPaymentAction(formData: FormData) {
     name,
     amount,
     billing_day: billingDay,
+    billing_month: cadence === "yearly" ? billingMonth : null,
+    cadence,
     description_pattern: descriptionPattern,
   });
 

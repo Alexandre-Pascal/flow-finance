@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { getAppUser } from "@/lib/auth";
 import { getFinanceData } from "@/lib/finance/queries";
-import { listUnknownPayPalAmounts } from "@/lib/finance/recurring-payments";
+import { listRecurringClusterSuggestions } from "@/lib/finance/recurring-suggestions";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
@@ -26,7 +26,7 @@ export default async function SettingsPage({
   const bankReady = isEnableBankingConfigured();
   const { accounts, bankConnection, transactions, recurringPayments, isDemo, subscriptionsSchemaReady } =
     await getFinanceData(locale);
-  const paypalSuggestions = listUnknownPayPalAmounts(
+  const recurringSuggestions = listRecurringClusterSuggestions(
     transactions,
     recurringPayments,
   );
@@ -113,7 +113,7 @@ export default async function SettingsPage({
 
       <SubscriptionsManager
         subscriptions={recurringPayments}
-        suggestions={paypalSuggestions}
+        suggestions={recurringSuggestions}
         locale={locale}
         isDemo={isDemo}
         schemaReady={subscriptionsSchemaReady}

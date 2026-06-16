@@ -12,12 +12,21 @@ import type {
 export const DEFAULT_PAYPAL_PATTERN = "PAYPAL";
 export const BILLING_DAY_TOLERANCE = 3;
 
-export interface PayPalClusterSuggestion {
+export type RecurringCadence = "monthly" | "yearly";
+
+export interface RecurringClusterSuggestion {
   amount: number;
   billingDay: number;
+  billingMonth: number | null;
+  cadence: RecurringCadence;
   count: number;
   lastDate: string;
+  descriptionPattern: string;
+  descriptionPreview: string;
+  source: "paypal" | "general";
 }
+
+export type PayPalClusterSuggestion = RecurringClusterSuggestion;
 
 /** @deprecated Use PayPalClusterSuggestion */
 export type PayPalAmountSuggestion = PayPalClusterSuggestion;
@@ -61,6 +70,11 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
       row.billing_day === null || row.billing_day === undefined
         ? null
         : Number(row.billing_day),
+    cadence: row.cadence === "yearly" ? "yearly" : "monthly",
+    billing_month:
+      row.billing_month === null || row.billing_month === undefined
+        ? null
+        : Number(row.billing_month),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -68,6 +82,15 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
 
 export function getBookingDay(bookingDate: string): number {
   return Number(bookingDate.slice(8, 10));
+}
+
+export function getBookingMonth(bookingDate: string): number {
+  return Number(bookingDate.slice(5, 7));
+}
+
+export function monthDistance(monthA: number, monthB: number): number {
+  const diff = Math.abs(monthA - monthB);
+  return Math.min(diff, 12 - diff);
 }
 
 export function dayDistance(dayA: number, dayB: number): number {
@@ -276,6 +299,24 @@ export function matchesRecurringPayment(
     return false;
   }
 
+  const cadence = rule.cadence ?? "monthly";
+
+  if (cadence === "yearly") {
+    if (rule.billing_month !== null) {
+      const txMonth = getBookingMonth(tx.booking_date);
+      if (monthDistance(txMonth, rule.billing_month) > 1) {
+        return false;
+      }
+    }
+
+    if (rule.billing_day === null) {
+      return true;
+    }
+
+    const txDay = getBookingDay(tx.booking_date);
+    return dayDistance(txDay, rule.billing_day) <= BILLING_DAY_TOLERANCE;
+  }
+
   if (rule.billing_day === null) {
     return true;
   }
@@ -299,6 +340,7 @@ export function findMatchingRecurringPayment(
   }
 
   const txDay = getBookingDay(tx.booking_date);
+  const txMonth = getBookingMonth(tx.booking_date);
   const withBillingDay = amountMatches.filter((rule) => rule.billing_day !== null);
 
   if (withBillingDay.length > 0) {
@@ -306,8 +348,19 @@ export function findMatchingRecurringPayment(
     let bestDistance = Infinity;
 
     for (const rule of withBillingDay) {
-      const distance = dayDistance(txDay, rule.billing_day!);
-      if (distance <= BILLING_DAY_TOLERANCE && distance < bestDistance) {
+      const dayDistanceValue = dayDistance(txDay, rule.billing_day!);
+      const monthDistanceValue =
+        rule.cadence === "yearly" && rule.billing_month !== null
+          ? monthDistance(txMonth, rule.billing_month)
+          : 0;
+      const distance = rule.cadence === "yearly" ? monthDistanceValue * 32 + dayDistanceValue : dayDistanceValue;
+
+      if (
+        (rule.cadence === "yearly"
+          ? monthDistanceValue <= 1 && dayDistanceValue <= BILLING_DAY_TOLERANCE
+          : dayDistanceValue <= BILLING_DAY_TOLERANCE) &&
+        distance < bestDistance
+      ) {
         bestDistance = distance;
         best = rule;
       }
@@ -348,11 +401,16 @@ export function listUnknownPayPalAmounts(
       suggestions.push({
         amount,
         billingDay,
+        billingMonth: null,
+        cadence: "monthly",
         count: lane.length,
         lastDate: lane.reduce(
           (latest, tx) => (tx.booking_date > latest ? tx.booking_date : latest),
           lane[0].booking_date,
         ),
+        descriptionPattern: DEFAULT_PAYPAL_PATTERN,
+        descriptionPreview: "PayPal",
+        source: "paypal",
       });
     }
   }
@@ -360,8 +418,16 @@ export function listUnknownPayPalAmounts(
   return suggestions.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
 }
 
-export function clusterSuggestionKey(suggestion: PayPalClusterSuggestion): string {
-  return `${suggestion.amount.toFixed(2)}-${suggestion.billingDay}-${suggestion.lastDate}`;
+export function clusterSuggestionKey(suggestion: RecurringClusterSuggestion): string {
+  return [
+    suggestion.source,
+    suggestion.cadence,
+    suggestion.amount.toFixed(2),
+    suggestion.billingDay,
+    suggestion.billingMonth ?? "x",
+    suggestion.descriptionPattern,
+    suggestion.lastDate,
+  ].join("-");
 }
 
 export function buildMonthlySubscriptionOverview(
