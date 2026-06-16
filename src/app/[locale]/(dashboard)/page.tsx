@@ -23,7 +23,8 @@ export default async function DashboardPage({
   setRequestLocale(locale);
   const t = await getTranslations("dashboard");
 
-  const { accounts, transactions, monthlySpending } = await getFinanceData(locale);
+  const { accounts, transactions, categories, monthlySpending, isDemo } =
+    await getFinanceData(locale);
 
   const totalBalance = sumAccountBalances(accounts);
   const monthTx = getCurrentMonthTransactions(transactions);
@@ -95,8 +96,10 @@ export default async function DashboardPage({
           <CardContent>
             <TransactionsTable
               transactions={recent}
+              categories={categories}
               locale={locale}
               compact
+              isDemo={isDemo}
             />
           </CardContent>
         </Card>

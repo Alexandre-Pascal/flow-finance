@@ -3,7 +3,7 @@
  * @description Données fictives pour le MVP phase 1 (mode démo sans Supabase configuré).
  */
 
-import type { Account, TransactionWithAccount } from "@/types/database";
+import type { Account, Category, TransactionWithAccount } from "@/types/database";
 
 export const MOCK_ACCOUNTS: Account[] = [
   {
@@ -34,6 +34,27 @@ export const MOCK_ACCOUNTS: Account[] = [
   },
 ];
 
+export const MOCK_CATEGORIES: Category[] = [
+  {
+    id: "cat-courses",
+    user_id: "demo",
+    name: "Courses",
+    color: "#22C55E",
+    keyword_rules: ["CARREFOUR", "LECLERC"],
+    amount_hints: [42.5],
+    created_at: "2026-01-01T00:00:00Z",
+  },
+  {
+    id: "cat-restaurants",
+    user_id: "demo",
+    name: "Restaurants",
+    color: "#EF4444",
+    keyword_rules: ["UBER EATS", "RESTAURANT"],
+    amount_hints: [18.2],
+    created_at: "2026-01-01T00:00:00Z",
+  },
+];
+
 export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
   {
     id: "tx-1",
@@ -44,13 +65,16 @@ export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
     currency: "EUR",
     description: "CARREFOUR MARKET",
     status: "BOOK",
-    category_id: null,
+    category_id: "cat-courses",
+    category_manual: false,
     recurring_payment_id: null,
     recurring_payment_manual: false,
     created_at: "2026-06-14T10:00:00Z",
     updated_at: "2026-06-14T10:00:00Z",
     account_name: "Compte courant",
     account_type: "checking",
+    category_name: "Courses",
+    category_color: "#22C55E",
   },
   {
     id: "tx-2",
@@ -62,6 +86,7 @@ export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
     description: "SNCF CONNECT",
     status: "BOOK",
     category_id: null,
+    category_manual: false,
     recurring_payment_id: null,
     recurring_payment_manual: false,
     created_at: "2026-06-13T08:00:00Z",
@@ -79,6 +104,7 @@ export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
     description: "VIREMENT SALAIRE",
     status: "BOOK",
     category_id: null,
+    category_manual: false,
     recurring_payment_id: null,
     recurring_payment_manual: false,
     created_at: "2026-06-12T06:00:00Z",
@@ -96,12 +122,14 @@ export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
     description: "NETFLIX",
     status: "BOOK",
     category_id: null,
-    recurring_payment_id: null,
+    category_manual: false,
+    recurring_payment_id: "sub-netflix",
     recurring_payment_manual: false,
     created_at: "2026-06-10T12:00:00Z",
     updated_at: "2026-06-10T12:00:00Z",
     account_name: "Compte courant",
     account_type: "checking",
+    recurring_payment_name: "Netflix",
   },
   {
     id: "tx-5",
@@ -112,13 +140,16 @@ export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
     currency: "EUR",
     description: "UBER EATS",
     status: "PDNG",
-    category_id: null,
+    category_id: "cat-restaurants",
+    category_manual: false,
     recurring_payment_id: null,
     recurring_payment_manual: false,
     created_at: "2026-06-09T20:00:00Z",
     updated_at: "2026-06-09T20:00:00Z",
     account_name: "Compte courant",
     account_type: "checking",
+    category_name: "Restaurants",
+    category_color: "#EF4444",
   },
   {
     id: "tx-6",
@@ -130,6 +161,7 @@ export const MOCK_TRANSACTIONS: TransactionWithAccount[] = [
     description: "VIREMENT EPARGNE",
     status: "BOOK",
     category_id: null,
+    category_manual: false,
     recurring_payment_id: null,
     recurring_payment_manual: false,
     created_at: "2026-06-01T09:00:00Z",

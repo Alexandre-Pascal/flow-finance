@@ -13,6 +13,7 @@ import {
 } from "@/lib/enable-banking/types";
 import { inferIndicatorsFromBalanceSequence } from "@/lib/enable-banking/transaction-sign";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
+import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
 import { createClient } from "@/lib/supabase/server";
 
 function sortStoredTransactions<
@@ -210,6 +211,7 @@ export async function syncUserFinanceData(
     userId,
     supabaseClient,
   );
+  await rematchCategoriesForUser(userId, supabaseClient);
 
   return { synced, remapped, matched };
 }

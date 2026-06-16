@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { LanguageSwitcher } from "@/components/features/language-switcher";
+import { CategoriesManager } from "@/components/features/categories-manager";
 import { SubscriptionsManager } from "@/components/features/subscriptions-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +25,7 @@ export default async function SettingsPage({
   const tNav = await getTranslations("nav");
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
-  const { accounts, bankConnection, transactions, recurringPayments, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady } =
+  const { accounts, bankConnection, transactions, recurringPayments, categories, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady } =
     await getFinanceData(locale);
   const recurringSuggestions = listRecurringClusterSuggestions(
     transactions,
@@ -122,6 +123,8 @@ export default async function SettingsPage({
         isDemo={isDemo}
         schemaReady={subscriptionsSchemaReady}
       />
+
+      <CategoriesManager categories={categories} isDemo={isDemo} />
 
       <Card>
         <CardHeader>

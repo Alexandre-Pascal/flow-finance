@@ -53,6 +53,7 @@ export interface Transaction {
   description: string;
   status: TransactionStatus;
   category_id: string | null;
+  category_manual: boolean;
   recurring_payment_id: string | null;
   recurring_payment_manual: boolean;
   created_at: string;
@@ -94,6 +95,7 @@ export interface Category {
   name: string;
   color: string;
   keyword_rules: string[];
+  amount_hints: number[];
   created_at: string;
 }
 
@@ -102,4 +104,6 @@ export interface TransactionWithAccount extends Transaction {
   account_name: string;
   account_type: AccountType;
   recurring_payment_name?: string | null;
+  category_name?: string | null;
+  category_color?: string | null;
 }

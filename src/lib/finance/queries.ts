@@ -4,9 +4,16 @@
  */
 
 import { getAppUser, type AppUser } from "@/lib/auth";
+import {
+  dedupeCategories,
+  ensureDefaultCategories,
+  mapCategory,
+} from "@/lib/finance/expense-categories";
 import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
+import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
 import {
   MOCK_ACCOUNTS,
+  MOCK_CATEGORIES,
   MOCK_MONTHLY_SPENDING,
   MOCK_TRANSACTIONS,
 } from "@/lib/mock-data";
@@ -14,6 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   Account,
   BankConnection,
+  Category,
   RecurringPayment,
   TransactionWithAccount,
 } from "@/types/database";
@@ -21,6 +29,7 @@ import type {
 export interface FinanceData {
   accounts: Account[];
   transactions: TransactionWithAccount[];
+  categories: Category[];
   recurringPayments: RecurringPayment[];
   dismissedSuggestionKeys: string[];
   subscriptionsSchemaReady: boolean;
@@ -49,6 +58,7 @@ function mapTransaction(
   row: Record<string, unknown>,
   account: Account,
   recurringPaymentName?: string | null,
+  category?: { name: string; color: string } | null,
 ): TransactionWithAccount {
   return {
     id: String(row.id),
@@ -60,6 +70,7 @@ function mapTransaction(
     description: String(row.description),
     status: row.status as TransactionWithAccount["status"],
     category_id: row.category_id ? String(row.category_id) : null,
+    category_manual: Boolean(row.category_manual),
     recurring_payment_id: row.recurring_payment_id
       ? String(row.recurring_payment_id)
       : null,
@@ -69,6 +80,8 @@ function mapTransaction(
     account_name: account.name,
     account_type: account.type,
     recurring_payment_name: recurringPaymentName ?? null,
+    category_name: category?.name ?? null,
+    category_color: category?.color ?? null,
   };
 }
 
@@ -92,6 +105,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     return {
       accounts: [],
       transactions: [],
+      categories: [],
       recurringPayments: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
@@ -140,6 +154,27 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     ]),
   );
 
+  let categories: Category[] = [];
+  try {
+    const { categories: loadedCategories, seeded } = await ensureDefaultCategories(
+      supabase,
+      user.id,
+    );
+    categories = dedupeCategories(loadedCategories);
+    if (seeded) {
+      await rematchCategoriesForUser(user.id, supabase);
+    }
+  } catch {
+    categories = [];
+  }
+
+  const categoryById = new Map(
+    categories.map((category) => [
+      category.id,
+      { name: category.name, color: category.color },
+    ]),
+  );
+
   let transactions: TransactionWithAccount[] = [];
 
   if (accounts.length > 0) {
@@ -161,6 +196,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       const recurringPaymentId = row.recurring_payment_id
         ? String(row.recurring_payment_id)
         : null;
+      const categoryId = row.category_id ? String(row.category_id) : null;
 
       return mapTransaction(
         row as Record<string, unknown>,
@@ -168,6 +204,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
         recurringPaymentId
           ? recurringNameById.get(recurringPaymentId) ?? null
           : null,
+        categoryId ? categoryById.get(categoryId) ?? null : null,
       );
     });
   }
@@ -177,6 +214,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
   return {
     accounts,
     transactions,
+    categories,
     recurringPayments,
     dismissedSuggestionKeys: (dismissalRows ?? []).map((row) => String(row.cluster_key)),
     subscriptionsSchemaReady: !recurringError && !dismissalError,
@@ -199,6 +237,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
     return {
       accounts: [],
       transactions: [],
+      categories: [],
       recurringPayments: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
@@ -212,6 +251,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
     return {
       accounts: MOCK_ACCOUNTS,
       transactions: MOCK_TRANSACTIONS,
+      categories: MOCK_CATEGORIES,
       recurringPayments: [],
       monthlySpending: MOCK_MONTHLY_SPENDING,
       dismissedSuggestionKeys: [],
