@@ -40,6 +40,8 @@
   "analytics": {
     "title": "Analytics",
     "subtitle": "Compare your income and spending month by month.",
+    "viewOverview": "Income & spending",
+    "viewMotherTransfers": "Transfers from Sophie",
     "period6": "6 months",
     "period12": "12 months",
     "periodAll": "All",
@@ -56,7 +58,19 @@
     "month": "Month",
     "savingsRate": "Savings rate",
     "periodTotal": "Period total",
-    "empty": "No transactions to analyze yet. Connect your bank to get started."
+    "empty": "No transactions to analyze yet. Connect your bank to get started.",
+    "motherTransferTitle": "Transfers from Sophie",
+    "motherTransferSubtitle": "Incoming transfers matching « VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE ».",
+    "motherTransferThisMonth": "This month",
+    "motherTransferPeriodTotal": "Period total",
+    "motherTransferAverage": "Avg. per active month",
+    "motherTransferAmount": "Amount received",
+    "motherTransferCount": "{count} transfers",
+    "motherTransferOperations": "{count, plural, one {# transfer} other {# transfers}}",
+    "motherTransferOperationsShort": "Transfers",
+    "motherTransferActiveMonths": "across {count, plural, one {# month} other {# months}} with a transfer",
+    "motherTransferNoneInPeriod": "No matching transfers in this period.",
+    "motherTransferNoneFound": "No matching transfers found in synced history."
   },
   "accounts": {
     "title": "Accounts",

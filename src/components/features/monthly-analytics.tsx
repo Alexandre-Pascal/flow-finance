@@ -29,7 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   computeMonthDelta,
   sliceMonthlyOverview,
@@ -37,11 +37,14 @@ import {
   type MonthlyOverview,
   type MonthlyPeriod,
 } from "@/lib/finance/aggregates";
+import { type MonthlyTransferOverview } from "@/lib/finance/tracked-transfers";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { MotherTransfersPanel } from "@/components/features/mother-transfers-panel";
 
 interface MonthlyAnalyticsProps {
   data: MonthlyOverview[];
+  motherTransferData: MonthlyTransferOverview[];
   locale: string;
 }
 
@@ -152,8 +155,15 @@ function DeltaBadge({
   );
 }
 
-export function MonthlyAnalytics({ data, locale }: MonthlyAnalyticsProps) {
+type AnalyticsView = "overview" | "mother";
+
+export function MonthlyAnalytics({
+  data,
+  motherTransferData,
+  locale,
+}: MonthlyAnalyticsProps) {
   const t = useTranslations("analytics");
+  const [view, setView] = useState<AnalyticsView>("overview");
   const [period, setPeriod] = useState<MonthlyPeriod>(12);
 
   const filtered = useMemo(
@@ -176,7 +186,7 @@ export function MonthlyAnalytics({ data, locale }: MonthlyAnalyticsProps) {
     ? computeMonthDelta(currentMonth.net, previousMonth.net)
     : null;
 
-  if (data.length === 0) {
+  if (data.length === 0 && motherTransferData.length === 0) {
     return (
       <Card>
         <CardContent className="flex min-h-48 items-center justify-center py-10 text-center text-sm text-muted-foreground">
@@ -188,26 +198,51 @@ export function MonthlyAnalytics({ data, locale }: MonthlyAnalyticsProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs
-          value={String(period)}
-          onValueChange={(value) => setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))}
-        >
-          <TabsList>
-            <TabsTrigger value="6" className="cursor-pointer px-3">
-              {t("period6")}
+      <Tabs
+        value={view}
+        onValueChange={(value) => setView(value as AnalyticsView)}
+        className="gap-6"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="h-auto w-full sm:w-auto">
+            <TabsTrigger value="overview" className="cursor-pointer px-4 py-2">
+              {t("viewOverview")}
             </TabsTrigger>
-            <TabsTrigger value="12" className="cursor-pointer px-3">
-              {t("period12")}
-            </TabsTrigger>
-            <TabsTrigger value="all" className="cursor-pointer px-3">
-              {t("periodAll")}
+            <TabsTrigger value="mother" className="cursor-pointer px-4 py-2">
+              {t("viewMotherTransfers")}
             </TabsTrigger>
           </TabsList>
-        </Tabs>
-      </div>
 
-      {currentMonth ? (
+          <Tabs
+            value={String(period)}
+            onValueChange={(value) =>
+              setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))
+            }
+          >
+            <TabsList>
+              <TabsTrigger value="6" className="cursor-pointer px-3">
+                {t("period6")}
+              </TabsTrigger>
+              <TabsTrigger value="12" className="cursor-pointer px-3">
+                {t("period12")}
+              </TabsTrigger>
+              <TabsTrigger value="all" className="cursor-pointer px-3">
+                {t("periodAll")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <TabsContent value="overview" className="mt-0 space-y-6">
+          {data.length === 0 ? (
+            <Card>
+              <CardContent className="flex min-h-48 items-center justify-center py-10 text-center text-sm text-muted-foreground">
+                {t("empty")}
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {currentMonth ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card className="transition-shadow duration-200 hover:shadow-md">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -276,7 +311,7 @@ export function MonthlyAnalytics({ data, locale }: MonthlyAnalyticsProps) {
         </div>
       ) : null}
 
-      <Card>
+              <Card>
         <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base font-medium">{t("chartTitle")}</CardTitle>
@@ -439,6 +474,18 @@ export function MonthlyAnalytics({ data, locale }: MonthlyAnalyticsProps) {
           </div>
         </CardContent>
       </Card>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="mother" className="mt-0">
+          <MotherTransfersPanel
+            data={motherTransferData}
+            locale={locale}
+            period={period}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

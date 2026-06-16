@@ -2,6 +2,10 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { MonthlyAnalytics } from "@/components/features/monthly-analytics";
 import { buildMonthlyOverview } from "@/lib/finance/aggregates";
 import { getFinanceData } from "@/lib/finance/queries";
+import {
+  buildMonthlyTransferOverview,
+  isMotherTransfer,
+} from "@/lib/finance/tracked-transfers";
 
 export default async function AnalyticsPage({
   params,
@@ -14,6 +18,11 @@ export default async function AnalyticsPage({
 
   const { transactions } = await getFinanceData(locale);
   const monthlyOverview = buildMonthlyOverview(transactions, locale);
+  const motherTransferData = buildMonthlyTransferOverview(
+    transactions,
+    locale,
+    isMotherTransfer,
+  );
 
   return (
     <div className="space-y-6">
@@ -22,7 +31,11 @@ export default async function AnalyticsPage({
         <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
-      <MonthlyAnalytics data={monthlyOverview} locale={locale} />
+      <MonthlyAnalytics
+        data={monthlyOverview}
+        motherTransferData={motherTransferData}
+        locale={locale}
+      />
     </div>
   );
 }
