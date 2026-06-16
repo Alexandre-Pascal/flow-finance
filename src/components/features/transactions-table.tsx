@@ -5,13 +5,14 @@
 
 "use client";
 
-import { CalendarDays, ListFilter } from "lucide-react";
+import { CalendarDays, ListFilter, Search } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { assignTransactionCategoryAction } from "@/app/actions/categories";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -231,6 +232,7 @@ export function TransactionsTable({
   );
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
 
   const monthOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -263,9 +265,22 @@ export function TransactionsTable({
   }, [transactions, selectedMonths]);
 
   const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
     return transactions.filter((tx) => {
       if (selectedMonths.size > 0 && !selectedMonths.has(tx.booking_date.slice(0, 7))) {
         return false;
+      }
+      if (query) {
+        const haystack = [
+          tx.description,
+          tx.recurring_payment_name ?? "",
+          tx.category_name ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) {
+          return false;
+        }
       }
       if (categoryFilter === "uncategorized") {
         return tx.amount < 0 && !tx.recurring_payment_id && !tx.category_id;
@@ -275,7 +290,7 @@ export function TransactionsTable({
       }
       return true;
     });
-  }, [transactions, categoryFilter, selectedMonths]);
+  }, [transactions, categoryFilter, selectedMonths, search]);
 
   function toggleMonth(key: string) {
     setSelectedMonths((prev) => {
@@ -358,6 +373,21 @@ export function TransactionsTable({
 
   return (
     <div className="space-y-4">
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchPlaceholder")}
+          className="h-9 pl-9"
+        />
+      </div>
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2">

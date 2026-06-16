@@ -250,7 +250,9 @@ export function CategoryAnalytics({
         <Tabs
           value={String(period)}
           onValueChange={(value) =>
-            setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))
+            setPeriod(
+              value === "all" ? "all" : (Number(value) as MonthlyPeriod),
+            )
           }
         >
           <TabsList>
@@ -415,8 +417,8 @@ export function CategoryAnalytics({
                       isAnimationActive={false}
                       onClick={(entry) =>
                         handleSelectMonth(
-                          (entry as { payload?: { monthKey?: string } })?.payload
-                            ?.monthKey,
+                          (entry as { payload?: { monthKey?: string } })
+                            ?.payload?.monthKey,
                         )
                       }
                     >
@@ -554,12 +556,18 @@ export function CategoryAnalytics({
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("tableCategory")}</TableHead>
-                  <TableHead className="text-right">{t("tableTotal")}</TableHead>
-                  <TableHead className="text-right">{t("tableShare")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("tableTotal")}
+                  </TableHead>
+                  <TableHead className="text-right">
+                    {t("tableShare")}
+                  </TableHead>
                   <TableHead className="text-right">
                     {t("tableLastMonth")}
                   </TableHead>
-                  <TableHead className="text-right">{t("tableTrend")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("tableTrend")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -670,7 +678,8 @@ function KpiCard({
             "flex size-9 items-center justify-center rounded-lg",
             tone === "neutral" && "bg-muted text-foreground/70",
             tone === "accent" && "bg-accent/15 text-accent",
-            tone === "positive" && "bg-[var(--chart-2)]/10 text-[var(--chart-2)]",
+            tone === "positive" &&
+              "bg-[var(--chart-2)]/10 text-[var(--chart-2)]",
             tone === "negative" && "bg-destructive/10 text-destructive",
           )}
         >

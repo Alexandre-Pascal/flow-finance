@@ -196,6 +196,7 @@
     "expenseTypeNone": "Non classé",
     "expenseTypePaypal": "PayPal",
     "expenseTypeRecurring": "Récurrent",
+    "searchPlaceholder": "Rechercher une transaction…",
     "filterLabel": "Catégorie",
     "filterAll": "Toutes les catégories",
     "filterUncategorized": "Non classé uniquement",

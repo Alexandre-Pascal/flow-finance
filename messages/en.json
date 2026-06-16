@@ -196,6 +196,7 @@
     "expenseTypeNone": "Uncategorized",
     "expenseTypePaypal": "PayPal",
     "expenseTypeRecurring": "Recurring",
+    "searchPlaceholder": "Search a transaction…",
     "filterLabel": "Category",
     "filterAll": "All categories",
     "filterUncategorized": "Uncategorized only",
