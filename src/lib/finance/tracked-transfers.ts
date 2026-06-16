@@ -9,6 +9,25 @@ import type { TransactionWithAccount } from "@/types/database";
 /** Fragment distinctif du libellé bancaire (Crédit Agricole). */
 export const MOTHER_TRANSFER_SENDER = "PASCAL SOPHIE";
 
+/**
+ * Virement interne entre les comptes du titulaire (ex. « VIREMENT EN VOTRE
+ * FAVEUR DE M. PASCAL ALEXANDRE » ou « VIREMENT EMIS WEB M. PASCAL ALEXANDRE »).
+ * Ces opérations ne sont ni une dépense ni un revenu : l'argent ne fait que
+ * passer d'un compte à un autre. On les exclut donc des agrégats.
+ */
+export function isInternalTransfer(tx: TransactionWithAccount): boolean {
+  const description = tx.description.toUpperCase();
+
+  if (!description.includes("VIREMENT")) {
+    return false;
+  }
+
+  return (
+    description.includes("PASCAL ALEXANDRE") ||
+    description.includes("ALEXANDRE PASCAL")
+  );
+}
+
 export interface MonthlyTransferOverview {
   monthKey: string;
   month: string;

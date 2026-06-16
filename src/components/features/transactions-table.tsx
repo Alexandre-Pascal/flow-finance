@@ -6,6 +6,7 @@
 "use client";
 
 import {
+  ArrowLeftRight,
   CalendarDays,
   ListFilter,
   Search,
@@ -55,6 +56,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { dedupeCategories } from "@/lib/finance/expense-categories";
+import { isInternalTransfer } from "@/lib/finance/tracked-transfers";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Category, TransactionWithAccount } from "@/types/database";
 import { cn } from "@/lib/utils";
@@ -200,6 +202,18 @@ function TransactionExpenseType({
   isDemo: boolean;
 }) {
   const t = useTranslations("transactions");
+
+  if (isInternalTransfer(tx)) {
+    return (
+      <Badge
+        variant="outline"
+        className="h-8 max-w-[180px] justify-start gap-1.5 px-3 font-normal text-muted-foreground"
+      >
+        <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">{t("expenseTypeInternalTransfer")}</span>
+      </Badge>
+    );
+  }
 
   if (tx.amount >= 0) {
     return <span className="text-muted-foreground">—</span>;
@@ -391,7 +405,11 @@ export function TransactionsTable({
       }
       if (tx.category_id) {
         counts.set(tx.category_id, (counts.get(tx.category_id) ?? 0) + 1);
-      } else if (tx.amount < 0 && !tx.recurring_payment_id) {
+      } else if (
+        tx.amount < 0 &&
+        !tx.recurring_payment_id &&
+        !isInternalTransfer(tx)
+      ) {
         uncategorized += 1;
       }
     }
@@ -417,7 +435,12 @@ export function TransactionsTable({
         }
       }
       if (categoryFilter === "uncategorized") {
-        return tx.amount < 0 && !tx.recurring_payment_id && !tx.category_id;
+        return (
+          tx.amount < 0 &&
+          !tx.recurring_payment_id &&
+          !tx.category_id &&
+          !isInternalTransfer(tx)
+        );
       }
       if (categoryFilter !== "all") {
         return tx.category_id === categoryFilter;

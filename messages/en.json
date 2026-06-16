@@ -196,6 +196,7 @@
     "expenseTypeNone": "Uncategorized",
     "expenseTypePaypal": "PayPal",
     "expenseTypeRecurring": "Recurring",
+    "expenseTypeInternalTransfer": "Internal transfer",
     "searchPlaceholder": "Search a transaction…",
     "noteAdd": "Add a note",
     "noteEdit": "Edit note",
