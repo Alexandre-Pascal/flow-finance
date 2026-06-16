@@ -1,25 +1,29 @@
 /**
  * @file recurring-detection.ts
- * @description Détection des prélèvements récurrents hors PayPal (mensuel / annuel).
+ * @description Détection des prélèvements récurrents hors PayPal (libellé stable, pas de voies par jour).
  */
 
 import {
-  BILLING_DAY_TOLERANCE,
   DEFAULT_PAYPAL_PATTERN,
-  dayDistance,
   findMatchingRecurringPayment,
   getBookingDay,
-  inferCadenceFromPaymentDates,
-  isLaneSuggestible,
+  getBookingMonth,
   isPayPalDebit,
   MIN_SUGGESTION_OCCURRENCES,
   type RecurringCadence,
   type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
+import {
+  generalPatternsMatch,
+  generalRecurringMatchPattern,
+  GENERAL_RECURRING_AMOUNT_TOLERANCE,
+  recurringGroupKey,
+} from "@/lib/finance/recurring-labels";
 import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 
 const MIN_MONTHLY_OCCURRENCES = MIN_SUGGESTION_OCCURRENCES;
 const MIN_YEARLY_OCCURRENCES = MIN_SUGGESTION_OCCURRENCES;
+const AMOUNT_TOLERANCE = GENERAL_RECURRING_AMOUNT_TOLERANCE;
 
 const DESCRIPTION_NOISE =
   /\b(PRLV|PRELEVEMENT|PRELEV|SEPA|VIREMENT|VIR INST|VIR|TIP|CB|CARTE|MANDAT|DEBIT|FACTURE|FACT|REF|MD\d+|ID\s+\d+|FR\d+|CORE)\b/gi;
@@ -47,6 +51,8 @@ function monthKeyFromDate(date: Date): string {
   return `${year}-${month}`;
 }
 
+export { recurringGroupKey } from "@/lib/finance/recurring-labels";
+
 export function extractMerchantKey(description: string): string {
   const cleaned = description
     .toUpperCase()
@@ -60,23 +66,22 @@ export function extractMerchantKey(description: string): string {
   return words.slice(0, 2).join(" ") || cleaned.slice(0, 16).trim();
 }
 
-function getBookingMonth(bookingDate: string): number {
-  return Number(bookingDate.slice(5, 7));
-}
+function isGeneralRecurringDebit(description: string): boolean {
+  const upper = description.trim().toUpperCase();
 
-function monthDistance(monthA: number, monthB: number): number {
-  const diff = Math.abs(monthA - monthB);
-  return Math.min(diff, 12 - diff);
-}
+  if (upper.includes("PAYPAL") || upper.includes("VIREMENT EN VOTRE FAVEUR")) {
+    return false;
+  }
 
-function descriptionMatchesMerchantKey(description: string, merchantKey: string): boolean {
-  if (!merchantKey) {
-    return true;
+  if (/^VIREMENT EMIS WEB\b/.test(upper)) {
+    return false;
   }
 
   return (
-    extractMerchantKey(description) === merchantKey ||
-    description.toUpperCase().includes(merchantKey)
+    /^PAIEMENT PAR CARTE\b/.test(upper) ||
+    /^PRLV\b/.test(upper) ||
+    /^PRELEVEMENT\b/.test(upper) ||
+    /^PRELEV\b/.test(upper)
   );
 }
 
@@ -89,157 +94,187 @@ function listUnidentifiedGeneralDebits(
       return false;
     }
 
+    if (!isGeneralRecurringDebit(tx.description)) {
+      return false;
+    }
+
     return !findMatchingRecurringPayment(tx, rules);
   });
 }
 
-function splitMonthlyLanes(txs: RecurringLaneTx[]): RecurringLaneTx[][] {
-  const sorted = [...txs].sort((a, b) => a.booking_date.localeCompare(b.booking_date));
-  const lanes: RecurringLaneTx[][] = [];
+function hasConsistentAmount(txs: RecurringLaneTx[]): boolean {
+  const amounts = txs.map((tx) => roundDebitAmount(tx.amount));
+  const min = Math.min(...amounts);
+  const max = Math.max(...amounts);
+  const median = medianOf(amounts);
 
-  for (const tx of sorted) {
+  return max - min <= Math.max(AMOUNT_TOLERANCE, median * 0.05);
+}
+
+/** Conserve le prélèvement le plus récent de chaque mois calendaire. */
+function dedupeOnePerMonth(txs: RecurringLaneTx[]): RecurringLaneTx[] {
+  const byMonth = new Map<string, RecurringLaneTx>();
+
+  for (const tx of txs) {
     const monthKey = tx.booking_date.slice(0, 7);
-    const txDay = getBookingDay(tx.booking_date);
-
-    let bestLaneIndex = -1;
-    let bestDistance = Infinity;
-
-    for (let index = 0; index < lanes.length; index += 1) {
-      const lane = lanes[index];
-      if (lane.some((entry) => entry.booking_date.slice(0, 7) === monthKey)) {
-        continue;
-      }
-
-      const laneDay = medianOf(lane.map((entry) => getBookingDay(entry.booking_date)));
-      const distance = dayDistance(txDay, laneDay);
-      if (distance <= BILLING_DAY_TOLERANCE && distance < bestDistance) {
-        bestDistance = distance;
-        bestLaneIndex = index;
-      }
+    const existing = byMonth.get(monthKey);
+    if (!existing || tx.booking_date > existing.booking_date) {
+      byMonth.set(monthKey, tx);
     }
-
-    if (bestLaneIndex >= 0) {
-      lanes[bestLaneIndex].push(tx);
-      continue;
-    }
-
-    lanes.push([tx]);
   }
 
-  return lanes.filter((lane) => lane.length > 0);
-}
-
-function laneYearAnchor(lane: RecurringLaneTx[]): { month: number; day: number } {
-  return {
-    month: medianOf(lane.map((tx) => getBookingMonth(tx.booking_date))),
-    day: medianOf(lane.map((tx) => getBookingDay(tx.booking_date))),
-  };
-}
-
-function matchesYearlySlot(
-  bookingDate: string,
-  anchor: { month: number; day: number },
-): boolean {
-  return (
-    monthDistance(getBookingMonth(bookingDate), anchor.month) <= 1 &&
-    dayDistance(getBookingDay(bookingDate), anchor.day) <= BILLING_DAY_TOLERANCE
+  return [...byMonth.values()].sort((a, b) =>
+    a.booking_date.localeCompare(b.booking_date),
   );
 }
 
-function splitYearlyLanes(txs: RecurringLaneTx[]): RecurringLaneTx[][] {
-  const sorted = [...txs].sort((a, b) => a.booking_date.localeCompare(b.booking_date));
-  const lanes: RecurringLaneTx[][] = [];
+function dedupeOnePerYear(txs: RecurringLaneTx[]): RecurringLaneTx[] {
+  const byYear = new Map<string, RecurringLaneTx>();
 
-  for (const tx of sorted) {
-    const year = tx.booking_date.slice(0, 4);
-
-    let bestLaneIndex = -1;
-    let bestScore = Infinity;
-
-    for (let index = 0; index < lanes.length; index += 1) {
-      const lane = lanes[index];
-      if (lane.some((entry) => entry.booking_date.slice(0, 4) === year)) {
-        continue;
-      }
-
-      const anchor = laneYearAnchor(lane);
-      const score =
-        monthDistance(getBookingMonth(tx.booking_date), anchor.month) * 32 +
-        dayDistance(getBookingDay(tx.booking_date), anchor.day);
-
-      if (matchesYearlySlot(tx.booking_date, anchor) && score < bestScore) {
-        bestScore = score;
-        bestLaneIndex = index;
-      }
+  for (const tx of txs) {
+    const yearKey = tx.booking_date.slice(0, 4);
+    const existing = byYear.get(yearKey);
+    if (!existing || tx.booking_date > existing.booking_date) {
+      byYear.set(yearKey, tx);
     }
-
-    if (bestLaneIndex >= 0) {
-      lanes[bestLaneIndex].push(tx);
-      continue;
-    }
-
-    lanes.push([tx]);
   }
 
-  return lanes.filter((lane) => lane.length > 0);
+  return [...byYear.values()].sort((a, b) =>
+    a.booking_date.localeCompare(b.booking_date),
+  );
 }
 
-function buildSuggestionFromLane(
-  lane: RecurringLaneTx[],
+function isRecentMonthlyRecurring(
+  txs: RecurringLaneTx[],
+  referenceDate = new Date(),
+): boolean {
+  const lastMonthKey = txs[txs.length - 1].booking_date.slice(0, 7);
+  const previousMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1),
+  );
+  const currentMonthKey = monthKeyFromDate(
+    new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
+  );
+
+  return lastMonthKey === previousMonthKey || lastMonthKey === currentMonthKey;
+}
+
+function isRecentYearlyRecurring(
+  txs: RecurringLaneTx[],
+  referenceDate = new Date(),
+): boolean {
+  const lastDate = new Date(txs[txs.length - 1].booking_date);
+  const rollingYearStart = new Date(referenceDate);
+  rollingYearStart.setFullYear(rollingYearStart.getFullYear() - 1);
+  return lastDate >= rollingYearStart;
+}
+
+function buildSuggestionFromGroup(
+  groupKey: string,
+  txs: RecurringLaneTx[],
   cadence: RecurringCadence,
-  merchantKey: string,
-): RecurringClusterSuggestion | null {
-  const amount = roundDebitAmount(lane[0].amount);
-  const billingDay = medianOf(lane.map((tx) => getBookingDay(tx.booking_date)));
+): RecurringClusterSuggestion {
+  const sorted = [...txs].sort((a, b) => a.booking_date.localeCompare(b.booking_date));
+  const latest = sorted[sorted.length - 1];
+  const amount = roundDebitAmount(latest.amount);
+  const billingDay = medianOf(sorted.map((tx) => getBookingDay(tx.booking_date)));
   const billingMonth =
     cadence === "yearly"
-      ? medianOf(lane.map((tx) => getBookingMonth(tx.booking_date)))
+      ? medianOf(sorted.map((tx) => getBookingMonth(tx.booking_date)))
       : null;
-
-  if (cadence === "yearly") {
-    if (lane.length < MIN_YEARLY_OCCURRENCES) {
-      return null;
-    }
-  } else if (!isLaneSuggestible(lane)) {
-    return null;
-  }
-
-  const sortedDescriptions = [...lane]
-    .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
-    .map((tx) => tx.description.trim());
-  const descriptionPreview = sortedDescriptions[0]?.slice(0, 48) ?? merchantKey;
+  const descriptionPreview = latest.description.trim().slice(0, 48) || groupKey;
 
   return {
     amount,
     billingDay,
     billingMonth,
     cadence,
-    count: lane.length,
-    lastDate: lane.reduce(
-      (latest, tx) => (tx.booking_date > latest ? tx.booking_date : latest),
-      lane[0].booking_date,
-    ),
-    descriptionPattern: merchantKey,
+    count: sorted.length,
+    lastDate: latest.booking_date,
+    descriptionPattern: generalRecurringMatchPattern(groupKey),
     descriptionPreview,
     source: "general",
   };
 }
 
+function isGroupCoveredByExistingRule(
+  groupKey: string,
+  amount: number,
+  rules: RecurringPayment[],
+): boolean {
+  return rules.some((rule) => {
+    if (rule.description_pattern.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN)) {
+      return false;
+    }
+
+    if (!generalPatternsMatch(groupKey, rule.description_pattern)) {
+      return false;
+    }
+
+    const tolerance = Math.max(
+      rule.amount_tolerance,
+      GENERAL_RECURRING_AMOUNT_TOLERANCE,
+    );
+    return Math.abs(rule.amount - amount) <= tolerance;
+  });
+}
+
+function detectMonthlySuggestion(
+  groupKey: string,
+  txs: RecurringLaneTx[],
+  referenceDate = new Date(),
+): RecurringClusterSuggestion | null {
+  const monthlyTxs = dedupeOnePerMonth(txs);
+  if (monthlyTxs.length < MIN_MONTHLY_OCCURRENCES) {
+    return null;
+  }
+
+  if (new Set(monthlyTxs.map((tx) => tx.booking_date.slice(0, 7))).size < MIN_MONTHLY_OCCURRENCES) {
+    return null;
+  }
+
+  if (!isRecentMonthlyRecurring(monthlyTxs, referenceDate)) {
+    return null;
+  }
+
+  return buildSuggestionFromGroup(groupKey, monthlyTxs, "monthly");
+}
+
+function detectYearlySuggestion(
+  groupKey: string,
+  txs: RecurringLaneTx[],
+  referenceDate = new Date(),
+): RecurringClusterSuggestion | null {
+  const yearlyTxs = dedupeOnePerYear(txs);
+  if (yearlyTxs.length < MIN_YEARLY_OCCURRENCES) {
+    return null;
+  }
+
+  if (new Set(yearlyTxs.map((tx) => tx.booking_date.slice(0, 4))).size < MIN_YEARLY_OCCURRENCES) {
+    return null;
+  }
+
+  if (!isRecentYearlyRecurring(yearlyTxs, referenceDate)) {
+    return null;
+  }
+
+  return buildSuggestionFromGroup(groupKey, yearlyTxs, "yearly");
+}
+
 export function listUnknownGeneralRecurringClusters(
   transactions: TransactionWithAccount[],
   rules: RecurringPayment[],
+  referenceDate = new Date(),
 ): RecurringClusterSuggestion[] {
   const unidentified = listUnidentifiedGeneralDebits(transactions, rules);
   const groups = new Map<string, RecurringLaneTx[]>();
 
   for (const tx of unidentified) {
-    const merchantKey = extractMerchantKey(tx.description);
-    if (merchantKey.length < 3) {
+    const groupKey = recurringGroupKey(tx.description);
+    if (groupKey.length < 3) {
       continue;
     }
 
-    const amount = roundDebitAmount(tx.amount);
-    const groupKey = `${amount}|${merchantKey}`;
     const group = groups.get(groupKey) ?? [];
     group.push(tx);
     groups.set(groupKey, group);
@@ -248,26 +283,26 @@ export function listUnknownGeneralRecurringClusters(
   const suggestions: RecurringClusterSuggestion[] = [];
 
   for (const [groupKey, groupTxs] of groups.entries()) {
-    const merchantKey = groupKey.split("|").slice(1).join("|");
-    const consistent = groupTxs.every((tx) =>
-      descriptionMatchesMerchantKey(tx.description, merchantKey),
+    if (!hasConsistentAmount(groupTxs)) {
+      continue;
+    }
+
+    const representativeAmount = roundDebitAmount(
+      groupTxs[groupTxs.length - 1].amount,
     );
-    if (!consistent) {
+    if (isGroupCoveredByExistingRule(groupKey, representativeAmount, rules)) {
       continue;
     }
 
-    const cadence = inferCadenceFromPaymentDates(groupTxs.map((tx) => tx.booking_date));
-    if (!cadence) {
+    const monthly = detectMonthlySuggestion(groupKey, groupTxs, referenceDate);
+    if (monthly) {
+      suggestions.push(monthly);
       continue;
     }
 
-    const lanes = cadence === "yearly" ? splitYearlyLanes(groupTxs) : splitMonthlyLanes(groupTxs);
-
-    for (const lane of lanes) {
-      const suggestion = buildSuggestionFromLane(lane, cadence, merchantKey);
-      if (suggestion) {
-        suggestions.push(suggestion);
-      }
+    const yearly = detectYearlySuggestion(groupKey, groupTxs, referenceDate);
+    if (yearly) {
+      suggestions.push(yearly);
     }
   }
 
@@ -289,6 +324,7 @@ export function isGeneralRecurringClusterStillActive(
   const suggestions = listUnknownGeneralRecurringClusters(
     transactions as TransactionWithAccount[],
     rules,
+    referenceDate,
   );
   return suggestions.some(
     (candidate) =>

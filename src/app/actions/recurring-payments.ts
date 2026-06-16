@@ -7,6 +7,10 @@ import {
   isPayPalPattern,
 } from "@/lib/finance/recurring-detection";
 import {
+  GENERAL_RECURRING_AMOUNT_TOLERANCE,
+  generalRecurringMatchPattern,
+} from "@/lib/finance/recurring-labels";
+import {
   clusterDismissalKey,
   isPayPalClusterStillActive,
   mapRecurringPayment,
@@ -98,8 +102,14 @@ export async function createRecurringPaymentAction(formData: FormData) {
   const billingMonthRaw = String(formData.get("billing_month") ?? "").trim();
   const billingMonth = billingMonthRaw ? Number(billingMonthRaw) : null;
   const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
-  const descriptionPattern =
+  const descriptionPatternRaw =
     String(formData.get("description_pattern") ?? "PAYPAL").trim() || "PAYPAL";
+  const descriptionPattern = isPayPalPattern(descriptionPatternRaw)
+    ? descriptionPatternRaw
+    : generalRecurringMatchPattern(descriptionPatternRaw);
+  const amountTolerance = isPayPalPattern(descriptionPatternRaw)
+    ? 0.05
+    : GENERAL_RECURRING_AMOUNT_TOLERANCE;
 
   if (!name || !Number.isFinite(amount) || amount <= 0) {
     return { error: "invalid" as const satisfies RecurringPaymentActionError };
@@ -155,6 +165,7 @@ export async function createRecurringPaymentAction(formData: FormData) {
     user_id: user.id,
     name,
     amount,
+    amount_tolerance: amountTolerance,
     billing_day: billingDay,
     billing_month: cadence === "yearly" ? billingMonth : null,
     cadence,

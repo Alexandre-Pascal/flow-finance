@@ -11,6 +11,7 @@ import {
 } from "@/lib/finance/expense-categories";
 import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
+import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import {
   MOCK_ACCOUNTS,
   MOCK_CATEGORIES,
@@ -188,6 +189,14 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       });
     } catch {
       categoriesSchemaReady = false;
+    }
+  }
+
+  if (recurringPayments.length > 0) {
+    try {
+      await rematchRecurringPaymentsForUser(user.id, supabase);
+    } catch {
+      // Le rattachement des abonnements est best-effort au chargement.
     }
   }
 

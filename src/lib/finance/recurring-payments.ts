@@ -4,6 +4,11 @@
  */
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
+import {
+  descriptionMatchesGeneralPattern,
+  generalRecurringMatchPattern,
+  GENERAL_RECURRING_AMOUNT_TOLERANCE,
+} from "@/lib/finance/recurring-labels";
 import type {
   RecurringPayment,
   TransactionWithAccount,
@@ -287,6 +292,10 @@ export function isPayPalDebit(tx: TransactionWithAccount): boolean {
   );
 }
 
+function isPayPalRule(rule: RecurringPayment): boolean {
+  return rule.description_pattern.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN);
+}
+
 export function matchesRecurringPayment(
   tx: Pick<TransactionWithAccount, "amount" | "description" | "booking_date">,
   rule: RecurringPayment,
@@ -296,17 +305,35 @@ export function matchesRecurringPayment(
   }
 
   const absAmount = Math.abs(tx.amount);
-  const pattern = rule.description_pattern.trim().toUpperCase();
+  const payPalRule = isPayPalRule(rule);
 
-  if (pattern && !tx.description.toUpperCase().includes(pattern)) {
+  if (payPalRule) {
+    if (!tx.description.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN)) {
+      return false;
+    }
+  } else if (!descriptionMatchesGeneralPattern(tx.description, rule.description_pattern)) {
     return false;
   }
 
-  if (Math.abs(absAmount - rule.amount) > rule.amount_tolerance) {
+  const amountTolerance = payPalRule
+    ? rule.amount_tolerance
+    : Math.max(rule.amount_tolerance, GENERAL_RECURRING_AMOUNT_TOLERANCE);
+
+  if (Math.abs(absAmount - rule.amount) > amountTolerance) {
     return false;
   }
 
   const cadence = rule.cadence ?? "monthly";
+
+  // Prélèvements hors PayPal : on ignore le jour de prélèvement.
+  // Mensuel → libellé + montant suffisent ; annuel → on vérifie aussi le mois.
+  if (!payPalRule) {
+    if (cadence === "yearly" && rule.billing_month !== null) {
+      const txMonth = getBookingMonth(tx.booking_date);
+      return monthDistance(txMonth, rule.billing_month) <= 1;
+    }
+    return true;
+  }
 
   if (cadence === "yearly") {
     if (rule.billing_month !== null) {
@@ -348,19 +375,26 @@ export function findMatchingRecurringPayment(
 
   const txDay = getBookingDay(tx.booking_date);
   const txMonth = getBookingMonth(tx.booking_date);
-  const withBillingDay = amountMatches.filter((rule) => rule.billing_day !== null);
 
-  if (withBillingDay.length > 0) {
+  // Le jour de prélèvement ne sert à départager que les règles PayPal.
+  const payPalWithBillingDay = amountMatches.filter(
+    (rule) => isPayPalRule(rule) && rule.billing_day !== null,
+  );
+
+  if (payPalWithBillingDay.length > 0) {
     let best: RecurringPayment | null = null;
     let bestDistance = Infinity;
 
-    for (const rule of withBillingDay) {
+    for (const rule of payPalWithBillingDay) {
       const dayDistanceValue = dayDistance(txDay, rule.billing_day!);
       const monthDistanceValue =
         rule.cadence === "yearly" && rule.billing_month !== null
           ? monthDistance(txMonth, rule.billing_month)
           : 0;
-      const distance = rule.cadence === "yearly" ? monthDistanceValue * 32 + dayDistanceValue : dayDistanceValue;
+      const distance =
+        rule.cadence === "yearly"
+          ? monthDistanceValue * 32 + dayDistanceValue
+          : dayDistanceValue;
 
       if (
         (rule.cadence === "yearly"
@@ -378,7 +412,7 @@ export function findMatchingRecurringPayment(
     }
   }
 
-  return amountMatches.find((rule) => rule.billing_day === null) ?? null;
+  return amountMatches[0];
 }
 
 export function listUnknownPayPalAmounts(
