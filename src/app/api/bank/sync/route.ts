@@ -5,8 +5,15 @@
 
 import { NextResponse } from "next/server";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
-import { syncUserFinanceData, syncUserTransactions } from "@/lib/enable-banking/sync";
+import { syncUserFinanceData } from "@/lib/enable-banking/sync";
 import { createClient } from "@/lib/supabase/server";
+
+function getRedirectBase(request: Request): { origin: string; locale: string } {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+  const referer = request.headers.get("referer") ?? "";
+  const locale = referer.includes("/en/") ? "en" : "fr";
+  return { origin: appUrl, locale };
+}
 
 export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -14,18 +21,24 @@ export async function POST(request: Request) {
   const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
   if (!isEnableBankingConfigured()) {
-    return NextResponse.json(
-      { error: "Enable Banking is not configured." },
-      { status: 503 },
-    );
+    if (isCron) {
+      return NextResponse.json(
+        { error: "Enable Banking is not configured." },
+        { status: 503 },
+      );
+    }
+    const { origin, locale } = getRedirectBase(request);
+    return NextResponse.redirect(`${origin}/${locale}/settings?error=sync`);
   }
 
   const supabase = await createClient();
   if (!supabase) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    if (isCron) {
+      return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    }
+    const { origin, locale } = getRedirectBase(request);
+    return NextResponse.redirect(`${origin}/${locale}/settings?error=sync`);
   }
-
-  let userId: string | undefined;
 
   if (isCron) {
     const { createAdminClient } = await import("@/lib/supabase/admin");
@@ -51,12 +64,18 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const { origin, locale } = getRedirectBase(request);
+
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.redirect(`${origin}/${locale}/login`);
   }
 
-  userId = user.id;
-  const result = await syncUserFinanceData(userId, "longest");
-
-  return NextResponse.json(result);
+  try {
+    const result = await syncUserFinanceData(user.id, "longest");
+    return NextResponse.redirect(
+      `${origin}/${locale}/settings?synced=${result.synced}`,
+    );
+  } catch {
+    return NextResponse.redirect(`${origin}/${locale}/settings?error=sync`);
+  }
 }

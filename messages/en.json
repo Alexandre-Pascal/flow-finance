@@ -66,6 +66,8 @@
     "bankNotConnected": "Not connected",
     "bankConnected": "Connected",
     "syncNow": "Sync now",
+    "syncSuccess": "{count} transactions synced.",
+    "syncError": "Sync failed. Please try again.",
     "connectBank": "Connect my bank",
     "consentExpires": "Consent expires on {date}",
     "account": "User account",

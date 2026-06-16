@@ -10,10 +10,13 @@ import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default async function SettingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ synced?: string; error?: string }>;
 }) {
   const { locale } = await params;
+  const { synced, error } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("settings");
   const tNav = await getTranslations("nav");
@@ -28,6 +31,17 @@ export default async function SettingsPage({
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+
+      {synced ? (
+        <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
+          {t("syncSuccess", { count: Number(synced) })}
+        </p>
+      ) : null}
+      {error === "sync" ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {t("syncError")}
+        </p>
+      ) : null}
 
       <Card>
         <CardHeader>
