@@ -43,14 +43,10 @@ import {
   type CategoryBreakdown,
   computeCategoryTotals,
   OTHER_COLOR,
-  OTHER_KEY,
   sliceCategoryMonths,
 } from "@/lib/finance/category-analytics";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
-
-const BAR_SERIES_LIMIT = 7;
-const DONUT_SERIES_LIMIT = 6;
 
 interface CategoryAnalyticsProps {
   breakdown: CategoryBreakdown;
@@ -174,18 +170,11 @@ export function CategoryAnalytics({
   );
 
   const { displaySeries, chartData } = useMemo(() => {
-    const top = totals.slice(0, BAR_SERIES_LIMIT);
-    const restKeys = new Set(totals.slice(BAR_SERIES_LIMIT).map((c) => c.key));
-
-    const series: DisplaySeries[] = top.map((c) => ({
+    const series: DisplaySeries[] = totals.map((c) => ({
       key: c.key,
       name: c.name,
       color: c.color,
     }));
-
-    if (restKeys.size > 0) {
-      series.push({ key: OTHER_KEY, name: t("other"), color: OTHER_COLOR });
-    }
 
     const data = months.map((month) => {
       const row: Record<string, string | number> = {
@@ -195,23 +184,15 @@ export function CategoryAnalytics({
         total: month.total,
       };
 
-      let otherSum = 0;
       for (const [key, value] of Object.entries(month.values)) {
-        if (restKeys.has(key)) {
-          otherSum += value;
-        } else {
-          row[key] = value;
-        }
-      }
-      if (restKeys.size > 0) {
-        row[OTHER_KEY] = Math.round(otherSum * 100) / 100;
+        row[key] = value;
       }
 
       return row;
     });
 
     return { displaySeries: series, chartData: data };
-  }, [totals, months, t]);
+  }, [totals, months]);
 
   const totalPeriod = useMemo(
     () => totals.reduce((sum, c) => sum + c.total, 0),
@@ -242,7 +223,7 @@ export function CategoryAnalytics({
       return [];
     }
 
-    const entries = Object.entries(selectedMonth.values)
+    return Object.entries(selectedMonth.values)
       .map(([key, value]) => ({
         key,
         name: breakdown.meta[key]?.name ?? key,
@@ -251,22 +232,7 @@ export function CategoryAnalytics({
       }))
       .filter((entry) => entry.value > 0)
       .sort((a, b) => b.value - a.value);
-
-    const top = entries.slice(0, DONUT_SERIES_LIMIT);
-    const rest = entries.slice(DONUT_SERIES_LIMIT);
-
-    if (rest.length > 0) {
-      const otherSum = rest.reduce((sum, entry) => sum + entry.value, 0);
-      top.push({
-        key: OTHER_KEY,
-        name: t("other"),
-        color: OTHER_COLOR,
-        value: Math.round(otherSum * 100) / 100,
-      });
-    }
-
-    return top;
-  }, [selectedMonth, breakdown.meta, t]);
+  }, [selectedMonth, breakdown.meta]);
 
   if (breakdown.months.length === 0) {
     return (
@@ -546,7 +512,7 @@ export function CategoryAnalytics({
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2">
+                <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2">
                   {donutData.map((entry) => (
                     <div
                       key={entry.key}

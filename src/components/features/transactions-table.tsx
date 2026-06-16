@@ -5,11 +5,22 @@
 
 "use client";
 
+import { CalendarDays, ListFilter } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { assignTransactionCategoryAction } from "@/app/actions/categories";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -36,6 +47,21 @@ interface TransactionsTableProps {
   locale: string;
   compact?: boolean;
   isDemo?: boolean;
+}
+
+function formatMonthKey(key: string, locale: string): string {
+  const [year, month] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat(locale === "fr" ? "fr-FR" : "en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, 1));
+}
+
+function monthKeyOffset(offset: number): string {
+  const date = new Date();
+  date.setDate(1);
+  date.setMonth(date.getMonth() - offset);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function ExpenseTypeBadge({
@@ -203,6 +229,72 @@ export function TransactionsTable({
     () => dedupeCategories(categories),
     [categories],
   );
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
+
+  const monthOptions = useMemo(() => {
+    const keys = new Set<string>();
+    for (const tx of transactions) {
+      keys.add(tx.booking_date.slice(0, 7));
+    }
+    return [...keys]
+      .sort()
+      .reverse()
+      .map((key) => ({ key, label: formatMonthKey(key, locale) }));
+  }, [transactions, locale]);
+
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    let uncategorized = 0;
+    for (const tx of transactions) {
+      if (
+        selectedMonths.size > 0 &&
+        !selectedMonths.has(tx.booking_date.slice(0, 7))
+      ) {
+        continue;
+      }
+      if (tx.category_id) {
+        counts.set(tx.category_id, (counts.get(tx.category_id) ?? 0) + 1);
+      } else if (tx.amount < 0 && !tx.recurring_payment_id) {
+        uncategorized += 1;
+      }
+    }
+    return { counts, uncategorized };
+  }, [transactions, selectedMonths]);
+
+  const filtered = useMemo(() => {
+    return transactions.filter((tx) => {
+      if (selectedMonths.size > 0 && !selectedMonths.has(tx.booking_date.slice(0, 7))) {
+        return false;
+      }
+      if (categoryFilter === "uncategorized") {
+        return tx.amount < 0 && !tx.recurring_payment_id && !tx.category_id;
+      }
+      if (categoryFilter !== "all") {
+        return tx.category_id === categoryFilter;
+      }
+      return true;
+    });
+  }, [transactions, categoryFilter, selectedMonths]);
+
+  function toggleMonth(key: string) {
+    setSelectedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  const monthSummary =
+    selectedMonths.size === 0
+      ? t("monthAll")
+      : selectedMonths.size === 1
+        ? formatMonthKey([...selectedMonths][0], locale)
+        : t("monthCount", { count: selectedMonths.size });
 
   if (transactions.length === 0) {
     return (
@@ -212,18 +304,23 @@ export function TransactionsTable({
     );
   }
 
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>{t("date")}</TableHead>
-          <TableHead>{t("description")}</TableHead>
-          <TableHead className="text-right">{t("amount")}</TableHead>
-          <TableHead>{t("expenseType")}</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {transactions.map((tx) => (
+  const table =
+    filtered.length === 0 ? (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        {t("noResults")}
+      </p>
+    ) : (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t("date")}</TableHead>
+            <TableHead>{t("description")}</TableHead>
+            <TableHead className="text-right">{t("amount")}</TableHead>
+            <TableHead>{t("expenseType")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((tx) => (
           <TableRow key={tx.id} className="transition-colors duration-150">
             <TableCell className="whitespace-nowrap text-muted-foreground">
               {formatDate(tx.booking_date, locale)}
@@ -251,7 +348,144 @@ export function TransactionsTable({
             </TableCell>
           </TableRow>
         ))}
-      </TableBody>
-    </Table>
+        </TableBody>
+      </Table>
+    );
+
+  if (compact) {
+    return table;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
+            <ListFilter
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger
+                size="sm"
+                className="h-9 w-full max-w-[240px] cursor-pointer sm:w-[200px]"
+                aria-label={t("filterLabel")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all" className="cursor-pointer">
+                  {t("filterAll")}
+                </SelectItem>
+                <SelectItem
+                  value="uncategorized"
+                  className={cn(
+                    "cursor-pointer",
+                    categoryCounts.uncategorized === 0 && "text-muted-foreground/60",
+                  )}
+                >
+                  <span className="flex w-full items-center gap-2">
+                    <span>{t("filterUncategorized")}</span>
+                    <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
+                      {categoryCounts.uncategorized}
+                    </span>
+                  </span>
+                </SelectItem>
+                {uniqueCategories.map((category) => {
+                  const count = categoryCounts.counts.get(category.id) ?? 0;
+                  const isEmpty = count === 0;
+                  return (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id}
+                      className={cn(
+                        "cursor-pointer",
+                        isEmpty && "text-muted-foreground/60",
+                      )}
+                    >
+                      <span className="flex w-full items-center gap-2">
+                        <span
+                          className={cn(
+                            "size-2 rounded-full",
+                            isEmpty && "opacity-40",
+                          )}
+                          style={{ backgroundColor: category.color }}
+                          aria-hidden
+                        />
+                        <span>{category.name}</span>
+                        <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
+                          {count}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 cursor-pointer justify-start gap-2 font-normal"
+              >
+                <CalendarDays
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="truncate capitalize">{monthSummary}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => setSelectedMonths(new Set())}
+              >
+                {t("monthAll")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => setSelectedMonths(new Set([monthKeyOffset(0)]))}
+              >
+                {t("monthThis")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => setSelectedMonths(new Set([monthKeyOffset(1)]))}
+              >
+                {t("monthLast")}
+              </DropdownMenuItem>
+              {monthOptions.length > 0 ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>{t("monthPick")}</DropdownMenuLabel>
+                  <div className="max-h-64 overflow-y-auto">
+                    {monthOptions.map((option) => (
+                      <DropdownMenuCheckboxItem
+                        key={option.key}
+                        checked={selectedMonths.has(option.key)}
+                        onCheckedChange={() => toggleMonth(option.key)}
+                        onSelect={(event) => event.preventDefault()}
+                        className="cursor-pointer capitalize"
+                      >
+                        {option.label}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <span className="text-sm text-muted-foreground">
+          {t("filterCount", { count: filtered.length })}
+        </span>
+      </div>
+
+      {table}
+    </div>
   );
 }

@@ -531,6 +531,9 @@ export async function syncDefaultCategories(
   const byName = new Map(
     existingRows.map((row) => [String(row.name).trim().toLowerCase(), row]),
   );
+  // On ne sème les catégories par défaut que pour un utilisateur sans aucune
+  // catégorie. Au-delà, on respecte ses choix (y compris les suppressions).
+  const isFreshUser = existingRows.length === 0;
   let changed = false;
 
   // Nettoie les mots-clés génériques pollués (ex. "PAIEMENT PAR") sur toutes les catégories.
@@ -578,6 +581,10 @@ export async function syncDefaultCategories(
         changed = true;
       }
 
+      continue;
+    }
+
+    if (!isFreshUser) {
       continue;
     }
 

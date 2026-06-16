@@ -18,6 +18,15 @@ import {
 } from "@/app/actions/categories";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -237,6 +246,7 @@ export function CategoriesManager({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmCategory, setConfirmCategory] = useState<Category | null>(null);
 
   const uniqueCategories = useMemo(
     () => dedupeCategories(categories),
@@ -307,6 +317,11 @@ export function CategoriesManager({
     });
   }
 
+  function requestDelete(id: string) {
+    const category = uniqueCategories.find((item) => item.id === id) ?? null;
+    setConfirmCategory(category);
+  }
+
   function handleDelete(id: string) {
     setError(null);
     setSuccess(null);
@@ -314,6 +329,7 @@ export function CategoriesManager({
     formData.set("id", id);
     startTransition(async () => {
       const result = await deleteCategoryAction(formData);
+      setConfirmCategory(null);
       if (result.error) {
         setError(translateError(result.error));
         return;
@@ -429,7 +445,7 @@ export function CategoriesManager({
                 isPending={isPending}
                 isDemo={isDemo}
                 onEdit={handleEdit}
-                onDelete={handleDelete}
+                onDelete={requestDelete}
               />
             ))}
           </ul>
@@ -445,6 +461,52 @@ export function CategoriesManager({
           {t("rematchButton")}
         </Button>
       </CardContent>
+
+      <Dialog
+        open={confirmCategory !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfirmCategory(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("deleteConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("deleteConfirmDescription", {
+                name: confirmCategory?.name ?? "",
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="cursor-pointer"
+                disabled={isPending}
+              >
+                {t("cancel")}
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              className="cursor-pointer"
+              disabled={isPending}
+              onClick={() => {
+                if (confirmCategory) {
+                  handleDelete(confirmCategory.id);
+                }
+              }}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              {t("delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

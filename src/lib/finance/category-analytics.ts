@@ -97,7 +97,9 @@ export function buildCategoryBreakdown(
   labels: BreakdownLabels,
 ): CategoryBreakdown {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
-  const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
+  const monthFormatter = new Intl.DateTimeFormat(intlLocale, {
+    month: "short",
+  });
   const monthFullFormatter = new Intl.DateTimeFormat(intlLocale, {
     month: "long",
     year: "numeric",
