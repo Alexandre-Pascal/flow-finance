@@ -5,7 +5,7 @@
 
 import type { Account, TransactionWithAccount } from "@/types/database";
 
-export type MonthlyPeriod = 6 | 12 | "all";
+export type MonthlyPeriod = 1 | 3 | 6 | 12 | "all";
 
 export interface MonthlyOverview {
   monthKey: string;

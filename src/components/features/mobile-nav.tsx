@@ -22,7 +22,8 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", labelKey: "dashboard" as const },
   { href: "/analytics", labelKey: "analytics" as const },
-  { href: "/accounts", labelKey: "accounts" as const },
+  { href: "/categories", labelKey: "categories" as const },
+  { href: "/savings", labelKey: "savings" as const },
   { href: "/transactions", labelKey: "transactions" as const },
   { href: "/settings", labelKey: "settings" as const },
 ];

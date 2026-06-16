@@ -8,6 +8,7 @@
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import type {
+  Account,
   SavingsAccount,
   SavingsAccountKind,
   SavingsTransferRef,
@@ -337,4 +338,323 @@ export function sliceSavingsMonths(
     return monthly;
   }
   return monthly.slice(-period);
+}
+
+/** Point de série pour les graphiques (journalier, hebdomadaire ou mensuel). */
+export interface SavingsChartPoint {
+  key: string;
+  label: string;
+  labelFull: string;
+  deposits: number;
+  withdrawals: number;
+  net: number;
+  balance: number;
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function enumerateDays(from: Date, to: Date): string[] {
+  const days: string[] = [];
+  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+
+  while (cursor <= end) {
+    days.push(formatDateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return days;
+}
+
+function getWeekStart(date: Date): Date {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function enumerateWeekStarts(from: Date, to: Date): Date[] {
+  const weeks: Date[] = [];
+  let cursor = getWeekStart(from);
+  const end = getWeekStart(to);
+
+  while (cursor <= end) {
+    weeks.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return weeks;
+}
+
+function weekStartKeyFromDateKey(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return formatDateKey(getWeekStart(new Date(year, month - 1, day)));
+}
+
+function buildWeeklyChartSeries(
+  movements: Pick<SavingsMovementItem, "date" | "amount">[],
+  endBalance: number,
+  locale: string,
+): SavingsChartPoint[] {
+  const now = new Date();
+  const rangeStart = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const rangeStartKey = formatDateKey(rangeStart);
+  const todayKey = formatDateKey(today);
+  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
+  const weekFormatter = new Intl.DateTimeFormat(intlLocale, {
+    day: "numeric",
+    month: "short",
+  });
+  const weekFullFormatter = new Intl.DateTimeFormat(intlLocale, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const inRange = movements.filter(
+    (movement) =>
+      movement.date >= rangeStartKey && movement.date <= todayKey,
+  );
+
+  const netInRange = inRange.reduce((sum, movement) => sum + movement.amount, 0);
+  const openingBalance = round(endBalance - netInRange);
+
+  const netByWeek = new Map<string, { deposits: number; withdrawals: number }>();
+  for (const movement of inRange) {
+    const key = weekStartKeyFromDateKey(movement.date);
+    const bucket = netByWeek.get(key) ?? { deposits: 0, withdrawals: 0 };
+    if (movement.amount >= 0) {
+      bucket.deposits += movement.amount;
+    } else {
+      bucket.withdrawals += Math.abs(movement.amount);
+    }
+    netByWeek.set(key, bucket);
+  }
+
+  const weekStarts = enumerateWeekStarts(rangeStart, today);
+  let running = openingBalance;
+  const points: SavingsChartPoint[] = [];
+
+  for (const weekStart of weekStarts) {
+    const key = formatDateKey(weekStart);
+    const bucket = netByWeek.get(key) ?? { deposits: 0, withdrawals: 0 };
+    const net = round(bucket.deposits - bucket.withdrawals);
+    running = round(running + net);
+
+    points.push({
+      key,
+      label: weekFormatter.format(weekStart),
+      labelFull:
+        locale === "fr"
+          ? `Semaine du ${weekFullFormatter.format(weekStart)}`
+          : `Week of ${weekFullFormatter.format(weekStart)}`,
+      deposits: round(bucket.deposits),
+      withdrawals: round(bucket.withdrawals),
+      net,
+      balance: running,
+    });
+  }
+
+  return points;
+}
+
+function buildDailyChartSeries(
+  movements: Pick<SavingsMovementItem, "date" | "amount">[],
+  endBalance: number,
+  locale: string,
+): SavingsChartPoint[] {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const monthStartKey = formatDateKey(monthStart);
+  const todayKey = formatDateKey(today);
+  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
+  const dayFormatter = new Intl.DateTimeFormat(intlLocale, {
+    day: "numeric",
+    month: "short",
+  });
+  const dayFullFormatter = new Intl.DateTimeFormat(intlLocale, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const inMonth = movements.filter(
+    (movement) =>
+      movement.date >= monthStartKey && movement.date <= todayKey,
+  );
+
+  const netThisMonth = inMonth.reduce((sum, movement) => sum + movement.amount, 0);
+  const openingBalance = round(endBalance - netThisMonth);
+
+  const netByDay = new Map<string, { deposits: number; withdrawals: number }>();
+  for (const movement of inMonth) {
+    const bucket = netByDay.get(movement.date) ?? { deposits: 0, withdrawals: 0 };
+    if (movement.amount >= 0) {
+      bucket.deposits += movement.amount;
+    } else {
+      bucket.withdrawals += Math.abs(movement.amount);
+    }
+    netByDay.set(movement.date, bucket);
+  }
+
+  const dayKeys = enumerateDays(monthStart, today);
+  let running = openingBalance;
+  const points: SavingsChartPoint[] = [];
+
+  for (const dayKey of dayKeys) {
+    const bucket = netByDay.get(dayKey) ?? { deposits: 0, withdrawals: 0 };
+    const net = round(bucket.deposits - bucket.withdrawals);
+    running = round(running + net);
+    const [year, month, day] = dayKey.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+
+    points.push({
+      key: dayKey,
+      label: dayFormatter.format(date),
+      labelFull: dayFullFormatter.format(date),
+      deposits: round(bucket.deposits),
+      withdrawals: round(bucket.withdrawals),
+      net,
+      balance: running,
+    });
+  }
+
+  return points;
+}
+
+/** Série graphique adaptée à la période : journalière (1 mois), hebdomadaire (3 mois). */
+export function buildChartSeriesForPeriod(
+  monthly: SavingsMonthPoint[],
+  movements: Pick<SavingsMovementItem, "date" | "amount">[],
+  endBalance: number,
+  locale: string,
+  period: MonthlyPeriod,
+): SavingsChartPoint[] {
+  if (period === 1) {
+    return buildDailyChartSeries(movements, endBalance, locale);
+  }
+
+  if (period === 3) {
+    return buildWeeklyChartSeries(movements, endBalance, locale);
+  }
+
+  return sliceSavingsMonths(monthly, period).map((point) => ({
+    key: point.monthKey,
+    label: point.month,
+    labelFull: point.monthFull,
+    deposits: point.deposits,
+    withdrawals: point.withdrawals,
+    net: point.net,
+    balance: point.balance,
+  }));
+}
+
+export interface CheckingVehicle {
+  account: Account;
+  balance: number;
+  monthly: SavingsMonthPoint[];
+  movements: SavingsMovementItem[];
+}
+
+/**
+ * Reconstruit l'historique des comptes courants à partir de leur solde actuel
+ * (issu d'Enable Banking) en remontant les transactions.
+ */
+export function buildCheckingOverview(
+  accounts: Account[],
+  transactions: TransactionWithAccount[],
+  locale: string,
+): CheckingVehicle[] {
+  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
+  const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
+  const monthFullFormatter = new Intl.DateTimeFormat(intlLocale, {
+    month: "long",
+    year: "numeric",
+  });
+  const now = new Date();
+  const nowMonthKey = monthKeyFromDate(now);
+
+  return accounts
+    .filter((account) => account.type === "checking")
+    .map((account) => {
+      const txs = transactions.filter((tx) => tx.account_id === account.id);
+
+      const netByMonth = new Map<
+        string,
+        { deposits: number; withdrawals: number }
+      >();
+      for (const tx of txs) {
+        const key = tx.booking_date.slice(0, 7);
+        const bucket = netByMonth.get(key) ?? { deposits: 0, withdrawals: 0 };
+        if (tx.amount >= 0) {
+          bucket.deposits += tx.amount;
+        } else {
+          bucket.withdrawals += Math.abs(tx.amount);
+        }
+        netByMonth.set(key, bucket);
+      }
+
+      const txMonthKeys = txs.map((tx) => tx.booking_date.slice(0, 7));
+      const earliestKey = [nowMonthKey, ...txMonthKeys].sort()[0];
+      const startDate = new Date(`${earliestKey}-01T00:00:00`);
+      const monthKeys = enumerateCalendarMonths(startDate, now);
+
+      const months = monthKeys.map((monthKey) => {
+        const [year, month] = monthKey.split("-").map(Number);
+        const date = new Date(year, month - 1, 1);
+        const bucket = netByMonth.get(monthKey) ?? {
+          deposits: 0,
+          withdrawals: 0,
+        };
+        const net = round(bucket.deposits - bucket.withdrawals);
+        return {
+          monthKey,
+          month: monthFormatter.format(date),
+          monthFull: monthFullFormatter.format(date),
+          deposits: round(bucket.deposits),
+          withdrawals: round(bucket.withdrawals),
+          net,
+          balance: 0,
+        };
+      });
+
+      // Le solde actuel est celui du dernier mois ; on remonte le temps.
+      const balances = new Array<number>(months.length).fill(0);
+      if (months.length > 0) {
+        balances[months.length - 1] = round(account.balance);
+        for (let i = months.length - 2; i >= 0; i -= 1) {
+          balances[i] = round(balances[i + 1] - months[i + 1].net);
+        }
+      }
+
+      const monthly: SavingsMonthPoint[] = months.map((point, index) => ({
+        ...point,
+        balance: balances[index],
+      }));
+
+      const movements: SavingsMovementItem[] = [...txs]
+        .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
+        .map((tx) => ({
+          id: tx.id,
+          date: tx.booking_date,
+          monthKey: tx.booking_date.slice(0, 7),
+          label: tx.description,
+          amount: tx.amount,
+        }));
+
+      return {
+        account,
+        balance: round(account.balance),
+        monthly,
+        movements,
+      };
+    });
 }

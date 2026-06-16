@@ -1,7 +1,11 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { SavingsAnalytics } from "@/components/features/savings-analytics";
+import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { getFinanceData } from "@/lib/finance/queries";
-import { buildSavingsOverview } from "@/lib/finance/savings";
+import {
+  buildCheckingOverview,
+  buildSavingsOverview,
+} from "@/lib/finance/savings";
 
 export default async function SavingsPage({
   params,
@@ -12,9 +16,21 @@ export default async function SavingsPage({
   setRequestLocale(locale);
   const t = await getTranslations("savings");
 
-  const { transactions, savingsAccounts, savingsSchemaReady, isDemo } =
-    await getFinanceData(locale);
+  const {
+    accounts,
+    transactions,
+    savingsAccounts,
+    savingsSchemaReady,
+    bankConnection,
+    isDemo,
+  } = await getFinanceData(locale);
+
   const overview = buildSavingsOverview(transactions, savingsAccounts, locale);
+  const checking = buildCheckingOverview(accounts, transactions, locale);
+
+  const bankReady = isEnableBankingConfigured();
+  const isBankLinked =
+    bankConnection?.status === "active" || accounts.length > 0;
 
   return (
     <div className="space-y-6">
@@ -25,9 +41,12 @@ export default async function SavingsPage({
 
       <SavingsAnalytics
         overview={overview}
+        checking={checking}
         locale={locale}
         isDemo={isDemo}
         schemaReady={savingsSchemaReady}
+        showConnectBank={bankReady && !isBankLinked}
+        bankConfigured={bankReady}
       />
     </div>
   );

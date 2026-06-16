@@ -9,6 +9,8 @@
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Building2,
+  Landmark,
   Pencil,
   PiggyBank,
   Plus,
@@ -60,7 +62,9 @@ import { CATEGORY_COLOR_PALETTE, normalizeColor } from "@/lib/finance/expense-ca
 import {
   SAVINGS_KINDS,
   SAVINGS_KIND_COLORS,
-  sliceSavingsMonths,
+  buildChartSeriesForPeriod,
+  type CheckingVehicle,
+  type SavingsChartPoint,
   type SavingsOverview,
   type SavingsVehicle,
 } from "@/lib/finance/savings";
@@ -70,10 +74,15 @@ import type { SavingsAccount, SavingsAccountKind } from "@/types/database";
 
 interface SavingsAnalyticsProps {
   overview: SavingsOverview;
+  checking: CheckingVehicle[];
   locale: string;
   isDemo: boolean;
   schemaReady: boolean;
+  showConnectBank: boolean;
+  bankConfigured: boolean;
 }
+
+const CHECKING_COLOR = "#2563EB";
 
 function formatCompactCurrency(value: number, locale: string): string {
   return new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
@@ -86,9 +95,12 @@ function formatCompactCurrency(value: number, locale: string): string {
 
 export function SavingsAnalytics({
   overview,
+  checking,
   locale,
   isDemo,
   schemaReady,
+  showConnectBank,
+  bankConfigured,
 }: SavingsAnalyticsProps) {
   const t = useTranslations("savings");
   const router = useRouter();
@@ -100,14 +112,39 @@ export function SavingsAnalytics({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const totalBalance = overview.totalBalance;
+  const totalBalance = useMemo(
+    () =>
+      overview.totalBalance +
+      checking.reduce((sum, vehicle) => sum + vehicle.balance, 0),
+    [overview.totalBalance, checking],
+  );
+
+  const checkingTotals = useMemo(
+    () =>
+      checking.reduce(
+        (acc, vehicle) => {
+          for (const month of vehicle.monthly) {
+            acc.deposits += month.deposits;
+            acc.withdrawals += month.withdrawals;
+          }
+          return acc;
+        },
+        { deposits: 0, withdrawals: 0 },
+      ),
+    [checking],
+  );
+
   const totalDeposits = useMemo(
-    () => overview.vehicles.reduce((sum, v) => sum + v.totalDeposits, 0),
-    [overview.vehicles],
+    () =>
+      overview.vehicles.reduce((sum, v) => sum + v.totalDeposits, 0) +
+      checkingTotals.deposits,
+    [overview.vehicles, checkingTotals.deposits],
   );
   const totalWithdrawals = useMemo(
-    () => overview.vehicles.reduce((sum, v) => sum + v.totalWithdrawals, 0),
-    [overview.vehicles],
+    () =>
+      overview.vehicles.reduce((sum, v) => sum + v.totalWithdrawals, 0) +
+      checkingTotals.withdrawals,
+    [overview.vehicles, checkingTotals.withdrawals],
   );
 
   function translateError(actionError: SavingsActionError): string {
@@ -155,6 +192,7 @@ export function SavingsAnalytics({
   }
 
   const hasAccounts = overview.vehicles.length > 0;
+  const hasAnyChart = hasAccounts || checking.length > 0;
 
   return (
     <div className="space-y-6">
@@ -190,34 +228,73 @@ export function SavingsAnalytics({
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <PiggyBank className="size-4" aria-hidden />
-          {t("accountCount", { count: overview.vehicles.length })}
+      {hasAnyChart ? (
+        <div className="flex justify-end">
+          <Tabs
+            value={String(period)}
+            onValueChange={(value) =>
+              setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))
+            }
+          >
+            <TabsList>
+              <TabsTrigger value="1" className="cursor-pointer">
+                {t("periodThis")}
+              </TabsTrigger>
+              <TabsTrigger value="3" className="cursor-pointer">
+                {t("period3")}
+              </TabsTrigger>
+              <TabsTrigger value="6" className="cursor-pointer">
+                {t("period6")}
+              </TabsTrigger>
+              <TabsTrigger value="12" className="cursor-pointer">
+                {t("period12")}
+              </TabsTrigger>
+              <TabsTrigger value="all" className="cursor-pointer">
+                {t("periodAll")}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
-        <div className="flex items-center gap-3">
-          {hasAccounts ? (
-            <Tabs
-              value={String(period)}
-              onValueChange={(value) =>
-                setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))
-              }
-            >
-              <TabsList>
-                <TabsTrigger value="6" className="cursor-pointer">
-                  {t("period6")}
-                </TabsTrigger>
-                <TabsTrigger value="12" className="cursor-pointer">
-                  {t("period12")}
-                </TabsTrigger>
-                <TabsTrigger value="all" className="cursor-pointer">
-                  {t("periodAll")}
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          ) : null}
+      ) : null}
+
+      {/* Compte courant */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <Wallet className="size-4 text-muted-foreground" aria-hidden />
+          {t("checkingTitle")}
+        </div>
+        {checking.length > 0 ? (
+          <div className="grid gap-5 lg:grid-cols-2">
+            {checking.map((vehicle) => (
+              <CheckingCard
+                key={vehicle.account.id}
+                vehicle={vehicle}
+                period={period}
+                locale={locale}
+              />
+            ))}
+          </div>
+        ) : (
+          <ConnectBankCard
+            configured={bankConfigured}
+            canConnect={showConnectBank}
+          />
+        )}
+      </section>
+
+      {/* Comptes d'épargne */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <PiggyBank className="size-4 text-muted-foreground" aria-hidden />
+            {t("savingsTitle")}
+            <span className="text-muted-foreground">
+              · {t("accountCount", { count: overview.vehicles.length })}
+            </span>
+          </div>
           <Button
             type="button"
+            size="sm"
             className="cursor-pointer"
             disabled={isDemo || !schemaReady}
             onClick={() => {
@@ -229,35 +306,35 @@ export function SavingsAnalytics({
             {t("addAccount")}
           </Button>
         </div>
-      </div>
 
-      {!hasAccounts ? (
-        <EmptyState
-          disabled={isDemo || !schemaReady}
-          onAdd={() => {
-            setError(null);
-            setFormState({ mode: "create" });
-          }}
-        />
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {overview.vehicles.map((vehicle) => (
-            <VehicleCard
-              key={vehicle.account.id}
-              vehicle={vehicle}
-              period={period}
-              locale={locale}
-              isDemo={isDemo}
-              isPending={isPending}
-              onEdit={() => {
-                setError(null);
-                setFormState({ mode: "edit", account: vehicle.account });
-              }}
-              onDelete={() => setConfirmDelete(vehicle.account)}
-            />
-          ))}
-        </div>
-      )}
+        {!hasAccounts ? (
+          <EmptyState
+            disabled={isDemo || !schemaReady}
+            onAdd={() => {
+              setError(null);
+              setFormState({ mode: "create" });
+            }}
+          />
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-2">
+            {overview.vehicles.map((vehicle) => (
+              <VehicleCard
+                key={vehicle.account.id}
+                vehicle={vehicle}
+                period={period}
+                locale={locale}
+                isDemo={isDemo}
+                isPending={isPending}
+                onEdit={() => {
+                  setError(null);
+                  setFormState({ mode: "edit", account: vehicle.account });
+                }}
+                onDelete={() => setConfirmDelete(vehicle.account)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
 
       <Dialog
         open={formState !== null}
@@ -387,32 +464,94 @@ function EmptyState({
 
 interface ChartTooltipPayloadItem {
   value?: number;
-  payload?: { monthFull?: string };
+  payload?: SavingsChartPoint;
 }
 
 function BalanceTooltip({
   active,
   payload,
   locale,
-  label,
 }: {
   active?: boolean;
   payload?: readonly ChartTooltipPayloadItem[];
   locale: string;
-  label?: string;
 }) {
   const tt = useTranslations("savings");
   if (!active || !payload || payload.length === 0) {
     return null;
   }
   const item = payload[0];
-  const title = item.payload?.monthFull ?? label ?? "";
+  const point = item.payload;
   return (
     <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
-      <p className="font-medium text-foreground">{title}</p>
+      <p className="font-medium text-foreground">{point?.labelFull ?? ""}</p>
       <p className="mt-0.5 text-muted-foreground">
         {tt("balance")} : {formatCurrency(item.value ?? 0, locale)}
       </p>
+    </div>
+  );
+}
+
+function BalanceChart({
+  data,
+  color,
+  gradientId,
+  locale,
+  compactAxis,
+}: {
+  data: SavingsChartPoint[];
+  color: string;
+  gradientId: string;
+  locale: string;
+  compactAxis: boolean;
+}) {
+  return (
+    <div className="h-40 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+              <stop offset="95%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tickLine={false}
+            axisLine={false}
+            tick={{ fontSize: 11 }}
+            className="text-muted-foreground"
+            interval={compactAxis ? "preserveStartEnd" : undefined}
+            minTickGap={compactAxis ? 28 : undefined}
+          />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            width={48}
+            tick={{ fontSize: 11 }}
+            tickFormatter={(value: number) => formatCompactCurrency(value, locale)}
+            className="text-muted-foreground"
+            domain={["dataMin", "dataMax"]}
+          />
+          <Tooltip
+            content={({ active, payload }) => (
+              <BalanceTooltip
+                active={active}
+                payload={payload as readonly ChartTooltipPayloadItem[]}
+                locale={locale}
+              />
+            )}
+          />
+          <Area
+            type="monotone"
+            dataKey="balance"
+            stroke={color}
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -436,9 +575,27 @@ function VehicleCard({
 }) {
   const t = useTranslations("savings");
   const { account } = vehicle;
-  const data = useMemo(
-    () => sliceSavingsMonths(vehicle.monthly, period),
-    [vehicle.monthly, period],
+  const chartData = useMemo(
+    () =>
+      buildChartSeriesForPeriod(
+        vehicle.monthly,
+        vehicle.movements,
+        vehicle.balance,
+        locale,
+        period,
+      ),
+    [vehicle.monthly, vehicle.movements, vehicle.balance, locale, period],
+  );
+  const periodStats = useMemo(
+    () =>
+      chartData.reduce(
+        (acc, point) => ({
+          deposits: acc.deposits + point.deposits,
+          withdrawals: acc.withdrawals + point.withdrawals,
+        }),
+        { deposits: 0, withdrawals: 0 },
+      ),
+    [chartData],
   );
   const gradientId = `savings-grad-${account.id}`;
 
@@ -532,62 +689,23 @@ function VehicleCard({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="h-40 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={account.color} stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={account.color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-              <XAxis
-                dataKey="month"
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11 }}
-                className="text-muted-foreground"
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                width={48}
-                tick={{ fontSize: 11 }}
-                tickFormatter={(value: number) => formatCompactCurrency(value, locale)}
-                className="text-muted-foreground"
-                domain={["dataMin", "dataMax"]}
-              />
-              <Tooltip
-                content={({ active, payload, label }) => (
-                  <BalanceTooltip
-                    active={active}
-                    payload={payload as readonly ChartTooltipPayloadItem[]}
-                    label={label as string}
-                    locale={locale}
-                  />
-                )}
-              />
-              <Area
-                type="monotone"
-                dataKey="balance"
-                stroke={account.color}
-                strokeWidth={2}
-                fill={`url(#${gradientId})`}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <BalanceChart
+          data={chartData}
+          color={account.color}
+          gradientId={gradientId}
+          locale={locale}
+          compactAxis={period === 1 || period === 3}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Stat
             label={t("totalDeposits")}
-            value={formatCurrency(vehicle.totalDeposits, locale)}
+            value={formatCurrency(periodStats.deposits, locale)}
             positive
           />
           <Stat
             label={t("totalWithdrawals")}
-            value={formatCurrency(vehicle.totalWithdrawals, locale)}
+            value={formatCurrency(periodStats.withdrawals, locale)}
           />
         </div>
 
@@ -654,6 +772,169 @@ function Stat({
         {value}
       </p>
     </div>
+  );
+}
+
+function CheckingCard({
+  vehicle,
+  period,
+  locale,
+}: {
+  vehicle: CheckingVehicle;
+  period: MonthlyPeriod;
+  locale: string;
+}) {
+  const t = useTranslations("savings");
+  const { account } = vehicle;
+  const chartData = useMemo(
+    () =>
+      buildChartSeriesForPeriod(
+        vehicle.monthly,
+        vehicle.movements,
+        vehicle.balance,
+        locale,
+        period,
+      ),
+    [vehicle.monthly, vehicle.movements, vehicle.balance, locale, period],
+  );
+  const periodStats = useMemo(
+    () =>
+      chartData.reduce(
+        (acc, point) => ({
+          income: acc.income + point.deposits,
+          expenses: acc.expenses + point.withdrawals,
+        }),
+        { income: 0, expenses: 0 },
+      ),
+    [chartData],
+  );
+  const gradientId = `checking-grad-${account.id}`;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Landmark className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <CardTitle className="truncate text-base">{account.name}</CardTitle>
+            <p className="text-xs text-muted-foreground">{t("checkingLabel")}</p>
+          </div>
+        </div>
+        <div>
+          <p className="text-2xl font-semibold tabular-nums">
+            {formatCurrency(vehicle.balance, locale)}
+          </p>
+          <p className="text-xs text-muted-foreground">{t("currentBalance")}</p>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <BalanceChart
+          data={chartData}
+          color={CHECKING_COLOR}
+          gradientId={gradientId}
+          locale={locale}
+          compactAxis={period === 1 || period === 3}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Stat
+            label={t("income")}
+            value={formatCurrency(periodStats.income, locale)}
+            positive
+          />
+          <Stat
+            label={t("expenses")}
+            value={formatCurrency(periodStats.expenses, locale)}
+          />
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("recentMovements")}
+          </p>
+          {vehicle.movements.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+              {t("noMovements")}
+            </p>
+          ) : (
+            <ul className="max-h-56 space-y-1 overflow-y-auto pr-1">
+              {vehicle.movements.slice(0, 15).map((movement) => (
+                <li
+                  key={movement.id}
+                  className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-foreground">{movement.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(movement.date, locale)}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 tabular-nums",
+                      movement.amount >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
+                  >
+                    {movement.amount >= 0 ? "+" : ""}
+                    {formatCurrency(movement.amount, locale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectBankCard({
+  configured,
+  canConnect,
+}: {
+  configured: boolean;
+  canConnect: boolean;
+}) {
+  const t = useTranslations("savings");
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+        <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Building2 className="size-6" aria-hidden />
+        </div>
+        <div className="max-w-md space-y-1.5">
+          <p className="text-base font-medium text-foreground">
+            {t("noCheckingTitle")}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {configured ? t("noCheckingDescription") : t("connectBankSoon")}
+          </p>
+        </div>
+        {configured ? (
+          <form action="/api/bank/connect" method="get">
+            <Button
+              type="submit"
+              disabled={!canConnect}
+              className="cursor-pointer bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              {t("connectBank")}
+            </Button>
+          </form>
+        ) : (
+          <Button
+            disabled
+            className="cursor-not-allowed bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            {t("connectBank")}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -7,7 +7,6 @@
 
 import {
   LayoutDashboard,
-  Wallet,
   ArrowLeftRight,
   Settings,
   TrendingUp,
@@ -24,7 +23,6 @@ const navItems = [
   { href: "/analytics", icon: BarChart3, labelKey: "analytics" as const },
   { href: "/categories", icon: PieChart, labelKey: "categories" as const },
   { href: "/savings", icon: PiggyBank, labelKey: "savings" as const },
-  { href: "/accounts", icon: Wallet, labelKey: "accounts" as const },
   {
     href: "/transactions",
     icon: ArrowLeftRight,
