@@ -5,14 +5,31 @@
 
 "use client";
 
-import { CalendarDays, ListFilter, Search } from "lucide-react";
+import {
+  CalendarDays,
+  ListFilter,
+  Search,
+  StickyNote,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { assignTransactionCategoryAction } from "@/app/actions/categories";
+import { updateTransactionNoteAction } from "@/app/actions/transactions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -218,6 +235,123 @@ function TransactionExpenseType({
   return <CategorySelect tx={tx} categories={categories} isDemo={isDemo} />;
 }
 
+function TransactionNote({
+  tx,
+  isDemo,
+}: {
+  tx: TransactionWithAccount;
+  isDemo: boolean;
+}) {
+  const t = useTranslations("transactions");
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(tx.note ?? "");
+  const [isPending, startTransition] = useTransition();
+
+  const hasNote = Boolean(tx.note && tx.note.trim());
+
+  function persist(note: string) {
+    if (isDemo) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("transactionId", tx.id);
+    formData.set("note", note);
+    startTransition(async () => {
+      const result = await updateTransactionNoteAction(formData);
+      if (!result.error) {
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          setValue(tx.note ?? "");
+        }
+        setOpen(next);
+      }}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={hasNote ? t("noteEdit") : t("noteAdd")}
+              className={cn(
+                "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-colors hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100",
+                hasNote
+                  ? "text-[var(--chart-3)]"
+                  : "text-muted-foreground/60 hover:text-foreground",
+              )}
+            >
+              <StickyNote
+                className="size-3.5"
+                fill={hasNote ? "currentColor" : "none"}
+                aria-hidden
+              />
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        {hasNote && !open ? (
+          <TooltipContent className="whitespace-pre-wrap">
+            {tx.note}
+          </TooltipContent>
+        ) : null}
+      </Tooltip>
+
+      <PopoverContent className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          {t("noteLabel")}
+        </p>
+        <Input
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder={t("notePlaceholder")}
+          maxLength={280}
+          disabled={isPending || isDemo}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              persist(value);
+            }
+          }}
+        />
+        <div className="flex items-center justify-between gap-2">
+          {hasNote ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="cursor-pointer text-muted-foreground hover:text-destructive"
+              disabled={isPending || isDemo}
+              onClick={() => persist("")}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              {t("noteDelete")}
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            disabled={isPending || isDemo}
+            onClick={() => persist(value)}
+          >
+            {t("noteSave")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function TransactionsTable({
   transactions,
   categories,
@@ -336,12 +470,17 @@ export function TransactionsTable({
         </TableHeader>
         <TableBody>
           {filtered.map((tx) => (
-          <TableRow key={tx.id} className="transition-colors duration-150">
+          <TableRow key={tx.id} className="group transition-colors duration-150">
             <TableCell className="whitespace-nowrap text-muted-foreground">
               {formatDate(tx.booking_date, locale)}
             </TableCell>
-            <TableCell className="max-w-[200px] truncate font-medium md:max-w-xs">
-              {tx.description}
+            <TableCell className="max-w-[200px] font-medium md:max-w-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="truncate">{tx.description}</span>
+                {!compact ? (
+                  <TransactionNote tx={tx} isDemo={isDemo} />
+                ) : null}
+              </span>
             </TableCell>
             <TableCell
               className={cn(

@@ -56,6 +56,7 @@ export interface Transaction {
   category_manual: boolean;
   recurring_payment_id: string | null;
   recurring_payment_manual: boolean;
+  note: string | null;
   created_at: string;
   updated_at: string;
 }
