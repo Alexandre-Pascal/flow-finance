@@ -173,7 +173,7 @@ export function MonthlyAnalytics({
 }: MonthlyAnalyticsProps) {
   const t = useTranslations("analytics");
   const [view, setView] = useState<AnalyticsView>("overview");
-  const [period, setPeriod] = useState<MonthlyPeriod>(12);
+  const [period, setPeriod] = useState<MonthlyPeriod>(6);
 
   const filtered = useMemo(
     () => sliceMonthlyOverview(data, period, locale),
