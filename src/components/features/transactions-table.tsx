@@ -56,7 +56,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { dedupeCategories } from "@/lib/finance/expense-categories";
-import { isInternalTransfer } from "@/lib/finance/tracked-transfers";
+import {
+  isNeutralTransfer,
+  isParentPelFunding,
+  isPelDeposit,
+} from "@/lib/finance/tracked-transfers";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { Category, TransactionWithAccount } from "@/types/database";
 import { cn } from "@/lib/utils";
@@ -203,14 +207,20 @@ function TransactionExpenseType({
 }) {
   const t = useTranslations("transactions");
 
-  if (isInternalTransfer(tx)) {
+  if (isNeutralTransfer(tx)) {
+    const label = isPelDeposit(tx)
+      ? t("expenseTypePelDeposit")
+      : isParentPelFunding(tx)
+        ? t("expenseTypePelFunding")
+        : t("expenseTypeInternalTransfer");
+
     return (
       <Badge
         variant="outline"
         className="h-8 max-w-[180px] justify-start gap-1.5 px-3 font-normal text-muted-foreground"
       >
         <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">{t("expenseTypeInternalTransfer")}</span>
+        <span className="truncate">{label}</span>
       </Badge>
     );
   }
@@ -408,7 +418,7 @@ export function TransactionsTable({
       } else if (
         tx.amount < 0 &&
         !tx.recurring_payment_id &&
-        !isInternalTransfer(tx)
+        !isNeutralTransfer(tx)
       ) {
         uncategorized += 1;
       }
@@ -439,7 +449,7 @@ export function TransactionsTable({
           tx.amount < 0 &&
           !tx.recurring_payment_id &&
           !tx.category_id &&
-          !isInternalTransfer(tx)
+          !isNeutralTransfer(tx)
         );
       }
       if (categoryFilter !== "all") {

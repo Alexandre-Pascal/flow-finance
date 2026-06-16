@@ -22,9 +22,41 @@ export function isInternalTransfer(tx: TransactionWithAccount): boolean {
     return false;
   }
 
+  // On exige la civilité « M. » juste devant le nom du titulaire pour éviter
+  // les faux positifs (ex. virement de l'ASP où le nom apparaît comme
+  // bénéficiaire sans civilité).
   return (
-    description.includes("PASCAL ALEXANDRE") ||
-    description.includes("ALEXANDRE PASCAL")
+    /\bM\.?\s+PASCAL\s+ALEXANDRE\b/.test(description) ||
+    /\bM\.?\s+ALEXANDRE\s+PASCAL\b/.test(description)
+  );
+}
+
+/** Versement vers le PEL (ex. « VIREMENT EMIS MENS.PEL »). Sortie du compte. */
+export function isPelDeposit(tx: TransactionWithAccount): boolean {
+  const description = tx.description.toUpperCase();
+  return (
+    description.includes("MENS.PEL") || description.includes("MENS PEL")
+  );
+}
+
+/**
+ * Apport des parents dédié à garnir le PEL
+ * (ex. « VIREMENT EN VOTRE FAVEUR PASCAL JEROME »). Entrée sur le compte.
+ */
+export function isParentPelFunding(tx: TransactionWithAccount): boolean {
+  const description = tx.description.toUpperCase();
+  return (
+    description.includes("VIREMENT") && description.includes("PASCAL JEROME")
+  );
+}
+
+/**
+ * Tout mouvement « neutre » à exclure des dépenses / revenus : virements
+ * internes (livret) et mouvements liés à l'épargne PEL (versement + apport).
+ */
+export function isNeutralTransfer(tx: TransactionWithAccount): boolean {
+  return (
+    isInternalTransfer(tx) || isPelDeposit(tx) || isParentPelFunding(tx)
   );
 }
 

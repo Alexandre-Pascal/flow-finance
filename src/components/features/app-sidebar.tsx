@@ -13,6 +13,7 @@ import {
   TrendingUp,
   BarChart3,
   PieChart,
+  PiggyBank,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, labelKey: "dashboard" as const },
   { href: "/analytics", icon: BarChart3, labelKey: "analytics" as const },
   { href: "/categories", icon: PieChart, labelKey: "categories" as const },
+  { href: "/savings", icon: PiggyBank, labelKey: "savings" as const },
   { href: "/accounts", icon: Wallet, labelKey: "accounts" as const },
   {
     href: "/transactions",

@@ -12,7 +12,7 @@ import {
   sumAccountBalances,
 } from "@/lib/finance/aggregates";
 import { getFinanceData } from "@/lib/finance/queries";
-import { isInternalTransfer } from "@/lib/finance/tracked-transfers";
+import { isNeutralTransfer } from "@/lib/finance/tracked-transfers";
 import { formatCurrency } from "@/lib/format";
 
 export default async function DashboardPage({
@@ -29,7 +29,7 @@ export default async function DashboardPage({
 
   const totalBalance = sumAccountBalances(accounts);
   const monthTx = getCurrentMonthTransactions(transactions).filter(
-    (tx) => !isInternalTransfer(tx),
+    (tx) => !isNeutralTransfer(tx),
   );
   const spending = monthTx
     .filter((tx) => tx.amount < 0)

@@ -3,7 +3,7 @@
  * @description Calculs agrégés sur comptes et transactions.
  */
 
-import { isInternalTransfer } from "@/lib/finance/tracked-transfers";
+import { isNeutralTransfer } from "@/lib/finance/tracked-transfers";
 import type { Account, TransactionWithAccount } from "@/types/database";
 
 export type MonthlyPeriod = 6 | 12 | "all";
@@ -60,7 +60,7 @@ export function buildMonthlySpending(
           booked.getFullYear() === date.getFullYear() &&
           booked.getMonth() === date.getMonth() &&
           tx.amount < 0 &&
-          !isInternalTransfer(tx)
+          !isNeutralTransfer(tx)
         );
       })
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
@@ -111,7 +111,7 @@ export function buildMonthlyOverview(
   const buckets = new Map<string, { income: number; expenses: number }>();
 
   for (const tx of transactions) {
-    if (isInternalTransfer(tx)) {
+    if (isNeutralTransfer(tx)) {
       continue;
     }
 
