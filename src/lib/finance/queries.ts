@@ -162,10 +162,8 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
   let needsFullRematch = false;
 
   try {
-    const { categories: loadedCategories, changed } = await syncDefaultCategories(
-      supabase,
-      user.id,
-    );
+    const { categories: loadedCategories, changed } =
+      await syncDefaultCategories(supabase, user.id);
     categories = dedupeCategories(loadedCategories);
     needsFullRematch = changed;
   } catch {
@@ -211,7 +209,9 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
 
   if (accounts.length > 0) {
     const accountIds = accounts.map((account) => account.id);
-    const accountById = new Map(accounts.map((account) => [account.id, account]));
+    const accountById = new Map(
+      accounts.map((account) => [account.id, account]),
+    );
 
     const { data: transactionRows } = await supabase
       .from("transactions")
@@ -234,9 +234,9 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
         row as Record<string, unknown>,
         account,
         recurringPaymentId
-          ? recurringNameById.get(recurringPaymentId) ?? null
+          ? (recurringNameById.get(recurringPaymentId) ?? null)
           : null,
-        categoryId ? categoryById.get(categoryId) ?? null : null,
+        categoryId ? (categoryById.get(categoryId) ?? null) : null,
       );
     });
   }
@@ -248,7 +248,9 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     transactions,
     categories,
     recurringPayments,
-    dismissedSuggestionKeys: (dismissalRows ?? []).map((row) => String(row.cluster_key)),
+    dismissedSuggestionKeys: (dismissalRows ?? []).map((row) =>
+      String(row.cluster_key),
+    ),
     subscriptionsSchemaReady: !recurringError && !dismissalError,
     categoriesSchemaReady,
     monthlySpending: buildMonthlySpending(transactions, "fr"),

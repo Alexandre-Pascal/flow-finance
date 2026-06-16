@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { requireAuth } from "@/lib/auth";
 import {
-  DEFAULT_CATEGORY_COLORS,
+  isValidHexColor,
   mapCategory,
   mergeCategoryLearning,
+  normalizeColor,
+  pickAvailableColor,
   syncDefaultCategories,
 } from "@/lib/finance/expense-categories";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
@@ -17,7 +19,9 @@ export type CategoryActionError =
   | "config"
   | "schema"
   | "save"
-  | "rematch";
+  | "rematch"
+  | "colorTaken"
+  | "nameTaken";
 
 function revalidateFinancePages() {
   revalidatePath("/fr/settings");
@@ -57,8 +61,13 @@ export async function createCategoryAction(
 
   const name = String(formData.get("name") ?? "").trim();
   const keywords = parseKeywords(String(formData.get("keywords") ?? ""));
+  const requestedColor = String(formData.get("color") ?? "").trim();
 
   if (!name) {
+    return { error: "invalid" };
+  }
+
+  if (requestedColor && !isValidHexColor(requestedColor)) {
     return { error: "invalid" };
   }
 
@@ -71,10 +80,26 @@ export async function createCategoryAction(
     supabase,
     user.id,
   );
-  const color =
-    DEFAULT_CATEGORY_COLORS[
-      existingCategories.length % DEFAULT_CATEGORY_COLORS.length
-    ];
+
+  const usedColors = existingCategories.map((category) => category.color);
+
+  if (
+    existingCategories.some(
+      (category) => category.name.trim().toLowerCase() === name.toLowerCase(),
+    )
+  ) {
+    return { error: "nameTaken" };
+  }
+
+  const color = requestedColor
+    ? normalizeColor(requestedColor)
+    : pickAvailableColor(usedColors);
+
+  if (
+    usedColors.some((used) => normalizeColor(used) === normalizeColor(color))
+  ) {
+    return { error: "colorTaken" };
+  }
 
   const { error } = await supabase.from("categories").insert({
     user_id: user.id,
@@ -82,6 +107,86 @@ export async function createCategoryAction(
     color,
     keyword_rules: keywords,
   });
+
+  if (error) {
+    return isSchemaError(error.message, error.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  try {
+    await rematchCategoriesForUser(user.id, supabase);
+  } catch {
+    return { error: "rematch" };
+  }
+
+  revalidateFinancePages();
+  return {};
+}
+
+export async function updateCategoryAction(
+  formData: FormData,
+): Promise<{ error?: CategoryActionError }> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const color = normalizeColor(String(formData.get("color") ?? ""));
+  const keywords = parseKeywords(String(formData.get("keywords") ?? ""));
+
+  if (!id || !name || !isValidHexColor(color)) {
+    return { error: "invalid" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  const { data: categoryRows, error: loadError } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("user_id", user.id);
+
+  if (loadError) {
+    return isSchemaError(loadError.message, loadError.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  const categories = (categoryRows ?? []).map((row) =>
+    mapCategory(row as Record<string, unknown>),
+  );
+
+  if (!categories.some((category) => category.id === id)) {
+    return { error: "invalid" };
+  }
+
+  const nameTaken = categories.some(
+    (category) =>
+      category.id !== id &&
+      category.name.trim().toLowerCase() === name.toLowerCase(),
+  );
+  if (nameTaken) {
+    return { error: "nameTaken" };
+  }
+
+  const colorTaken = categories.some(
+    (category) =>
+      category.id !== id && normalizeColor(category.color) === color,
+  );
+  if (colorTaken) {
+    return { error: "colorTaken" };
+  }
+
+  const { error } = await supabase
+    .from("categories")
+    .update({ name, color, keyword_rules: keywords })
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) {
     return isSchemaError(error.message, error.code)

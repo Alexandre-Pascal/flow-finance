@@ -19,7 +19,10 @@ import {
   GENERAL_RECURRING_AMOUNT_TOLERANCE,
   recurringGroupKey,
 } from "@/lib/finance/recurring-labels";
-import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
+import type {
+  RecurringPayment,
+  TransactionWithAccount,
+} from "@/types/database";
 
 const MIN_MONTHLY_OCCURRENCES = MIN_SUGGESTION_OCCURRENCES;
 const MIN_YEARLY_OCCURRENCES = MIN_SUGGESTION_OCCURRENCES;
@@ -174,10 +177,14 @@ function buildSuggestionFromGroup(
   txs: RecurringLaneTx[],
   cadence: RecurringCadence,
 ): RecurringClusterSuggestion {
-  const sorted = [...txs].sort((a, b) => a.booking_date.localeCompare(b.booking_date));
+  const sorted = [...txs].sort((a, b) =>
+    a.booking_date.localeCompare(b.booking_date),
+  );
   const latest = sorted[sorted.length - 1];
   const amount = roundDebitAmount(latest.amount);
-  const billingDay = medianOf(sorted.map((tx) => getBookingDay(tx.booking_date)));
+  const billingDay = medianOf(
+    sorted.map((tx) => getBookingDay(tx.booking_date)),
+  );
   const billingMonth =
     cadence === "yearly"
       ? medianOf(sorted.map((tx) => getBookingMonth(tx.booking_date)))
@@ -203,7 +210,9 @@ function isGroupCoveredByExistingRule(
   rules: RecurringPayment[],
 ): boolean {
   return rules.some((rule) => {
-    if (rule.description_pattern.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN)) {
+    if (
+      rule.description_pattern.toUpperCase().includes(DEFAULT_PAYPAL_PATTERN)
+    ) {
       return false;
     }
 
@@ -229,7 +238,10 @@ function detectMonthlySuggestion(
     return null;
   }
 
-  if (new Set(monthlyTxs.map((tx) => tx.booking_date.slice(0, 7))).size < MIN_MONTHLY_OCCURRENCES) {
+  if (
+    new Set(monthlyTxs.map((tx) => tx.booking_date.slice(0, 7))).size <
+    MIN_MONTHLY_OCCURRENCES
+  ) {
     return null;
   }
 
@@ -250,7 +262,10 @@ function detectYearlySuggestion(
     return null;
   }
 
-  if (new Set(yearlyTxs.map((tx) => tx.booking_date.slice(0, 4))).size < MIN_YEARLY_OCCURRENCES) {
+  if (
+    new Set(yearlyTxs.map((tx) => tx.booking_date.slice(0, 4))).size <
+    MIN_YEARLY_OCCURRENCES
+  ) {
     return null;
   }
 

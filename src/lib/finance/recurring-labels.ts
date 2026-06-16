@@ -28,7 +28,9 @@ export function recurringGroupKey(description: string): string {
     return normalizeMerchantFragment(cardMatch[1]);
   }
 
-  const prlvMatch = upper.match(/^(?:PRLV|PRELEVEMENT|PRELEV)\s+(?:SEPA\s+)?(.+)$/);
+  const prlvMatch = upper.match(
+    /^(?:PRLV|PRELEVEMENT|PRELEV)\s+(?:SEPA\s+)?(.+)$/,
+  );
   if (prlvMatch) {
     return normalizeMerchantFragment(prlvMatch[1]);
   }
@@ -86,12 +88,13 @@ export function descriptionMatchesGeneralPattern(
   }
 
   const txKey = recurringGroupKey(description);
-  return (
-    txKey.includes(normalizedPattern) || normalizedPattern.includes(txKey)
-  );
+  return txKey.includes(normalizedPattern) || normalizedPattern.includes(txKey);
 }
 
-export function generalPatternsMatch(patternA: string, patternB: string): boolean {
+export function generalPatternsMatch(
+  patternA: string,
+  patternB: string,
+): boolean {
   const a = generalRecurringMatchPattern(patternA);
   const b = generalRecurringMatchPattern(patternB);
   if (!a || !b) {

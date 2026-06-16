@@ -4,8 +4,41 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { extractMerchantKey } from "@/lib/finance/recurring-detection";
+import { recurringGroupKey } from "@/lib/finance/recurring-labels";
 import type { Category } from "@/types/database";
+
+/** Termes bancaires génériques qui ne doivent jamais servir de mot-clé. */
+const GENERIC_KEYWORD_BLOCKLIST = new Set([
+  "PAIEMENT",
+  "PAR",
+  "PAIEMENT PAR",
+  "PAIEMENT PAR CARTE",
+  "CARTE",
+  "PRELEVEMENT",
+  "PRELEV",
+  "PRLV",
+  "SEPA",
+  "VIR",
+  "VIREMENT",
+  "VIR INST",
+  "VIREMENT EMIS",
+  "DEBIT",
+  "ACHAT",
+  "MANDAT",
+  "TIP",
+  "FACTURE",
+  "FACT",
+  "COMMISSION",
+  "REF",
+]);
+
+export function isUsableKeyword(keyword: string): boolean {
+  const normalized = keyword.trim().toUpperCase();
+  if (normalized.length < 3) {
+    return false;
+  }
+  return !GENERIC_KEYWORD_BLOCKLIST.has(normalized);
+}
 
 // La catégorisation se fait uniquement via le libellé bancaire.
 
@@ -18,6 +51,52 @@ export const DEFAULT_CATEGORY_COLORS = [
   "#8B5CF6",
   "#EC4899",
 ];
+
+/** Palette curatée de couleurs distinctes proposées dans le sélecteur. */
+export const CATEGORY_COLOR_PALETTE = [
+  "#EF4444",
+  "#F97316",
+  "#EAB308",
+  "#CA8A04",
+  "#84CC16",
+  "#22C55E",
+  "#0D9488",
+  "#14B8A6",
+  "#06B6D4",
+  "#3B82F6",
+  "#6366F1",
+  "#8B5CF6",
+  "#A855F7",
+  "#D946EF",
+  "#EC4899",
+  "#F43F5E",
+  "#64748B",
+  "#94A3B8",
+  "#78716C",
+];
+
+export function normalizeColor(color: string): string {
+  return color.trim().toUpperCase();
+}
+
+export function isValidHexColor(color: string): boolean {
+  return /^#[0-9A-F]{6}$/.test(normalizeColor(color));
+}
+
+/** Renvoie la première couleur de la palette non utilisée, sinon une couleur de repli. */
+export function pickAvailableColor(usedColors: Iterable<string>): string {
+  const used = new Set([...usedColors].map((color) => normalizeColor(color)));
+
+  for (const color of CATEGORY_COLOR_PALETTE) {
+    if (!used.has(normalizeColor(color))) {
+      return color;
+    }
+  }
+
+  return CATEGORY_COLOR_PALETTE[
+    used.size % CATEGORY_COLOR_PALETTE.length
+  ];
+}
 
 export const DEFAULT_EXPENSE_CATEGORIES: Array<{
   name: string;
@@ -265,12 +344,28 @@ function mergeKeywordRules(existing: string[], defaults: string[]): string[] {
 
   for (const keyword of [...existing, ...defaults]) {
     const normalized = normalizeKeyword(keyword);
-    if (normalized) {
+    if (normalized && isUsableKeyword(normalized)) {
       merged.set(normalized, keyword.trim());
     }
   }
 
   return [...merged.values()];
+}
+
+function sanitizeKeywordRules(rules: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const keyword of rules) {
+    const normalized = normalizeKeyword(keyword);
+    if (!normalized || seen.has(normalized) || !isUsableKeyword(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(keyword.trim());
+  }
+
+  return result;
 }
 
 function keywordRulesSignature(rules: string[]): string {
@@ -342,6 +437,7 @@ export function findMatchingCategory(
     for (const keyword of category.keyword_rules) {
       const normalized = normalizeKeyword(keyword);
       if (
+        isUsableKeyword(normalized) &&
         normalized.length > bestKeywordLength &&
         descriptionMatchesKeyword(tx.description, normalized)
       ) {
@@ -359,8 +455,21 @@ export function findMatchingCategory(
 }
 
 export function buildLearnedKeyword(description: string): string | null {
-  const merchantKey = extractMerchantKey(description);
-  return merchantKey.length >= 3 ? merchantKey : null;
+  const groupKey = recurringGroupKey(description);
+  const words = groupKey
+    .split(" ")
+    .filter((word) => /[A-Z]/.test(word) && word.length >= 2);
+
+  if (words.length === 0) {
+    return null;
+  }
+
+  let candidate = words.slice(0, 2).join(" ");
+  if (candidate.length < 5 && words.length >= 3) {
+    candidate = words.slice(0, 3).join(" ");
+  }
+
+  return isUsableKeyword(candidate) ? candidate : null;
 }
 
 export function mergeCategoryLearning(
@@ -423,6 +532,28 @@ export async function syncDefaultCategories(
     existingRows.map((row) => [String(row.name).trim().toLowerCase(), row]),
   );
   let changed = false;
+
+  // Nettoie les mots-clés génériques pollués (ex. "PAIEMENT PAR") sur toutes les catégories.
+  for (const row of existingRows) {
+    const currentRules = Array.isArray(row.keyword_rules)
+      ? row.keyword_rules.map(String)
+      : [];
+    const sanitized = sanitizeKeywordRules(currentRules);
+
+    if (keywordRulesSignature(currentRules) !== keywordRulesSignature(sanitized)) {
+      const { error: cleanError } = await supabase
+        .from("categories")
+        .update({ keyword_rules: sanitized })
+        .eq("id", row.id);
+
+      if (cleanError) {
+        throw cleanError;
+      }
+
+      row.keyword_rules = sanitized;
+      changed = true;
+    }
+  }
 
   for (const definition of DEFAULT_EXPENSE_CATEGORIES) {
     const key = definition.name.trim().toLowerCase();
