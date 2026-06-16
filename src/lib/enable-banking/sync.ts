@@ -12,6 +12,7 @@ import {
   type EnableBankingTransactionResource,
 } from "@/lib/enable-banking/types";
 import { inferIndicatorsFromBalanceSequence } from "@/lib/enable-banking/transaction-sign";
+import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { createClient } from "@/lib/supabase/server";
 
 function sortStoredTransactions<
@@ -205,5 +206,10 @@ export async function syncUserFinanceData(
       ? await remapStoredTransactions(userId, supabaseClient)
       : { remapped: 0 };
 
-  return { synced, remapped };
+  const { matched } = await rematchRecurringPaymentsForUser(
+    userId,
+    supabaseClient,
+  );
+
+  return { synced, remapped, matched };
 }

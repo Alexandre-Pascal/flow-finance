@@ -4,6 +4,7 @@
  */
 
 import { getAppUser, type AppUser } from "@/lib/auth";
+import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
 import {
   MOCK_ACCOUNTS,
   MOCK_MONTHLY_SPENDING,
@@ -13,12 +14,14 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   Account,
   BankConnection,
+  RecurringPayment,
   TransactionWithAccount,
 } from "@/types/database";
 
 export interface FinanceData {
   accounts: Account[];
   transactions: TransactionWithAccount[];
+  recurringPayments: RecurringPayment[];
   monthlySpending: { month: string; amount: number }[];
   bankConnection: BankConnection | null;
   isDemo: boolean;
@@ -43,6 +46,7 @@ function mapAccount(row: Record<string, unknown>): Account {
 function mapTransaction(
   row: Record<string, unknown>,
   account: Account,
+  recurringPaymentName?: string | null,
 ): TransactionWithAccount {
   return {
     id: String(row.id),
@@ -54,10 +58,14 @@ function mapTransaction(
     description: String(row.description),
     status: row.status as TransactionWithAccount["status"],
     category_id: row.category_id ? String(row.category_id) : null,
+    recurring_payment_id: row.recurring_payment_id
+      ? String(row.recurring_payment_id)
+      : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     account_name: account.name,
     account_type: account.type,
+    recurring_payment_name: recurringPaymentName ?? null,
   };
 }
 
@@ -81,13 +89,18 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     return {
       accounts: [],
       transactions: [],
+      recurringPayments: [],
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
     };
   }
 
-  const [{ data: accountRows }, { data: connectionRow }] = await Promise.all([
+  const [
+    { data: accountRows },
+    { data: connectionRow },
+    { data: recurringRows },
+  ] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase
       .from("bank_connections")
@@ -95,10 +108,26 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("recurring_payments")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name"),
   ]);
 
   const accounts = (accountRows ?? []).map((row) =>
     mapAccount(row as Record<string, unknown>),
+  );
+
+  const recurringPayments = (recurringRows ?? []).map((row) =>
+    mapRecurringPayment(row as Record<string, unknown>),
+  );
+
+  const recurringNameById = new Map(
+    recurringPayments.map((payment: { id: string; name: string }) => [
+      payment.id,
+      payment.name,
+    ]),
   );
 
   let transactions: TransactionWithAccount[] = [];
@@ -118,7 +147,18 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       if (!account) {
         throw new Error("Transaction references unknown account.");
       }
-      return mapTransaction(row as Record<string, unknown>, account);
+
+      const recurringPaymentId = row.recurring_payment_id
+        ? String(row.recurring_payment_id)
+        : null;
+
+      return mapTransaction(
+        row as Record<string, unknown>,
+        account,
+        recurringPaymentId
+          ? recurringNameById.get(recurringPaymentId) ?? null
+          : null,
+      );
     });
   }
 
@@ -127,6 +167,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
   return {
     accounts,
     transactions,
+    recurringPayments,
     monthlySpending: buildMonthlySpending(transactions, "fr"),
     bankConnection: connectionRow
       ? mapBankConnection(connectionRow as Record<string, unknown>)
@@ -146,6 +187,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
     return {
       accounts: [],
       transactions: [],
+      recurringPayments: [],
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -156,6 +198,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
     return {
       accounts: MOCK_ACCOUNTS,
       transactions: MOCK_TRANSACTIONS,
+      recurringPayments: [],
       monthlySpending: MOCK_MONTHLY_SPENDING,
       bankConnection: null,
       isDemo: true,

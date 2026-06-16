@@ -1,10 +1,12 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { LanguageSwitcher } from "@/components/features/language-switcher";
+import { SubscriptionsManager } from "@/components/features/subscriptions-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getAppUser } from "@/lib/auth";
 import { getFinanceData } from "@/lib/finance/queries";
+import { listUnknownPayPalAmounts } from "@/lib/finance/recurring-payments";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
@@ -22,7 +24,12 @@ export default async function SettingsPage({
   const tNav = await getTranslations("nav");
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
-  const { accounts, bankConnection } = await getFinanceData(locale);
+  const { accounts, bankConnection, transactions, recurringPayments, isDemo } =
+    await getFinanceData(locale);
+  const paypalSuggestions = listUnknownPayPalAmounts(
+    transactions,
+    recurringPayments,
+  );
 
   const hasSyncedAccounts = accounts.length > 0;
   const isBankLinked =
@@ -103,6 +110,13 @@ export default async function SettingsPage({
           </div>
         </CardContent>
       </Card>
+
+      <SubscriptionsManager
+        subscriptions={recurringPayments}
+        suggestions={paypalSuggestions}
+        locale={locale}
+        isDemo={isDemo}
+      />
 
       <Card>
         <CardHeader>

@@ -3,6 +3,9 @@ import { MonthlyAnalytics } from "@/components/features/monthly-analytics";
 import { buildMonthlyOverview } from "@/lib/finance/aggregates";
 import { getFinanceData } from "@/lib/finance/queries";
 import {
+  buildMonthlySubscriptionOverview,
+} from "@/lib/finance/recurring-payments";
+import {
   buildMonthlyTransferOverview,
   isMotherTransfer,
 } from "@/lib/finance/tracked-transfers";
@@ -16,12 +19,17 @@ export default async function AnalyticsPage({
   setRequestLocale(locale);
   const t = await getTranslations("analytics");
 
-  const { transactions } = await getFinanceData(locale);
+  const { transactions, recurringPayments } = await getFinanceData(locale);
   const monthlyOverview = buildMonthlyOverview(transactions, locale);
   const motherTransferData = buildMonthlyTransferOverview(
     transactions,
     locale,
     isMotherTransfer,
+  );
+  const subscriptionData = buildMonthlySubscriptionOverview(
+    transactions,
+    recurringPayments,
+    locale,
   );
 
   return (
@@ -34,6 +42,8 @@ export default async function AnalyticsPage({
       <MonthlyAnalytics
         data={monthlyOverview}
         motherTransferData={motherTransferData}
+        subscriptionData={subscriptionData}
+        subscriptions={recurringPayments}
         locale={locale}
       />
     </div>

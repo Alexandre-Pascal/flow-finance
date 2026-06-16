@@ -38,13 +38,18 @@ import {
   type MonthlyPeriod,
 } from "@/lib/finance/aggregates";
 import { type MonthlyTransferOverview } from "@/lib/finance/tracked-transfers";
+import type { MonthlySubscriptionRow } from "@/lib/finance/recurring-payments";
+import type { RecurringPayment } from "@/types/database";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MotherTransfersPanel } from "@/components/features/mother-transfers-panel";
+import { SubscriptionsAnalyticsPanel } from "@/components/features/subscriptions-analytics-panel";
 
 interface MonthlyAnalyticsProps {
   data: MonthlyOverview[];
   motherTransferData: MonthlyTransferOverview[];
+  subscriptionData: MonthlySubscriptionRow[];
+  subscriptions: RecurringPayment[];
   locale: string;
 }
 
@@ -155,11 +160,13 @@ function DeltaBadge({
   );
 }
 
-type AnalyticsView = "overview" | "mother";
+type AnalyticsView = "overview" | "mother" | "subscriptions";
 
 export function MonthlyAnalytics({
   data,
   motherTransferData,
+  subscriptionData,
+  subscriptions,
   locale,
 }: MonthlyAnalyticsProps) {
   const t = useTranslations("analytics");
@@ -210,6 +217,9 @@ export function MonthlyAnalytics({
             </TabsTrigger>
             <TabsTrigger value="mother" className="cursor-pointer px-4 py-2">
               {t("viewMotherTransfers")}
+            </TabsTrigger>
+            <TabsTrigger value="subscriptions" className="cursor-pointer px-4 py-2">
+              {t("viewSubscriptions")}
             </TabsTrigger>
           </TabsList>
 
@@ -481,6 +491,15 @@ export function MonthlyAnalytics({
         <TabsContent value="mother" className="mt-0">
           <MotherTransfersPanel
             data={motherTransferData}
+            locale={locale}
+            period={period}
+          />
+        </TabsContent>
+
+        <TabsContent value="subscriptions" className="mt-0">
+          <SubscriptionsAnalyticsPanel
+            data={subscriptionData}
+            subscriptions={subscriptions}
             locale={locale}
             period={period}
           />

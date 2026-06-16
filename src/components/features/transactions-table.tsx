@@ -58,7 +58,14 @@ export function TransactionsTable({
               {formatDate(tx.booking_date, locale)}
             </TableCell>
             <TableCell className="max-w-[200px] truncate font-medium md:max-w-xs">
-              {tx.description}
+              <div className="flex flex-col gap-1">
+                <span>{tx.description}</span>
+                {tx.recurring_payment_name ? (
+                  <Badge variant="outline" className="w-fit font-normal">
+                    {tx.recurring_payment_name}
+                  </Badge>
+                ) : null}
+              </div>
             </TableCell>
             {!compact && (
               <TableCell className="text-muted-foreground">
