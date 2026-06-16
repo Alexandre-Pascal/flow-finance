@@ -22,6 +22,7 @@ export interface FinanceData {
   accounts: Account[];
   transactions: TransactionWithAccount[];
   recurringPayments: RecurringPayment[];
+  dismissedSuggestionKeys: string[];
   subscriptionsSchemaReady: boolean;
   monthlySpending: { month: string; amount: number }[];
   bankConnection: BankConnection | null;
@@ -92,6 +93,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       accounts: [],
       transactions: [],
       recurringPayments: [],
+      dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
@@ -103,6 +105,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     { data: accountRows },
     { data: connectionRow },
     { data: recurringRows, error: recurringError },
+    { data: dismissalRows, error: dismissalError },
   ] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase
@@ -116,6 +119,10 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       .select("*")
       .eq("user_id", user.id)
       .order("name"),
+    supabase
+      .from("recurring_suggestion_dismissals")
+      .select("cluster_key")
+      .eq("user_id", user.id),
   ]);
 
   const accounts = (accountRows ?? []).map((row) =>
@@ -171,7 +178,8 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     accounts,
     transactions,
     recurringPayments,
-    subscriptionsSchemaReady: !recurringError,
+    dismissedSuggestionKeys: (dismissalRows ?? []).map((row) => String(row.cluster_key)),
+    subscriptionsSchemaReady: !recurringError && !dismissalError,
     monthlySpending: buildMonthlySpending(transactions, "fr"),
     bankConnection: connectionRow
       ? mapBankConnection(connectionRow as Record<string, unknown>)
@@ -192,6 +200,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       accounts: [],
       transactions: [],
       recurringPayments: [],
+      dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
@@ -205,6 +214,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       transactions: MOCK_TRANSACTIONS,
       recurringPayments: [],
       monthlySpending: MOCK_MONTHLY_SPENDING,
+      dismissedSuggestionKeys: [],
       bankConnection: null,
       isDemo: true,
       subscriptionsSchemaReady: true,

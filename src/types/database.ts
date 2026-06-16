@@ -61,6 +61,19 @@ export interface Transaction {
 
 export type RecurringCadence = "monthly" | "yearly";
 
+export interface RecurringSuggestionDismissal {
+  id: string;
+  user_id: string;
+  cluster_key: string;
+  source: "paypal" | "general";
+  amount: number;
+  billing_day: number;
+  billing_month: number | null;
+  cadence: RecurringCadence;
+  description_pattern: string;
+  created_at: string;
+}
+
 export interface RecurringPayment {
   id: string;
   user_id: string;

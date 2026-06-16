@@ -24,12 +24,15 @@ export default async function SettingsPage({
   const tNav = await getTranslations("nav");
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
-  const { accounts, bankConnection, transactions, recurringPayments, isDemo, subscriptionsSchemaReady } =
+  const { accounts, bankConnection, transactions, recurringPayments, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady } =
     await getFinanceData(locale);
   const recurringSuggestions = listRecurringClusterSuggestions(
     transactions,
     recurringPayments,
+    dismissedSuggestionKeys,
   );
+  const paypalSuggestions = recurringSuggestions.filter((suggestion) => suggestion.source === "paypal");
+  const generalSuggestions = recurringSuggestions.filter((suggestion) => suggestion.source === "general");
 
   const hasSyncedAccounts = accounts.length > 0;
   const isBankLinked =
@@ -113,7 +116,8 @@ export default async function SettingsPage({
 
       <SubscriptionsManager
         subscriptions={recurringPayments}
-        suggestions={recurringSuggestions}
+        paypalSuggestions={paypalSuggestions}
+        generalSuggestions={generalSuggestions}
         locale={locale}
         isDemo={isDemo}
         schemaReady={subscriptionsSchemaReady}

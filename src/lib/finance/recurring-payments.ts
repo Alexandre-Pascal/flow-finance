@@ -10,7 +10,11 @@ import type {
 } from "@/types/database";
 
 export const DEFAULT_PAYPAL_PATTERN = "PAYPAL";
+/** Tolérance pour regrouper les suggestions (plusieurs abonnements au même montant). */
 export const BILLING_DAY_TOLERANCE = 3;
+/** Tolérance pour rattacher une transaction à une règle enregistrée (plus stricte). */
+export const RULE_MATCH_DAY_TOLERANCE = 1;
+export const MIN_SUGGESTION_OCCURRENCES = 2;
 
 export type RecurringCadence = "monthly" | "yearly";
 
@@ -191,29 +195,26 @@ function findPayPalLaneByBillingDay(
   return bestLane;
 }
 
-function isPayPalLaneStillActive(
+/**
+ * Un cluster est proposable s'il compte au moins deux prélèvements,
+ * ou un seul datant du mois calendaire précédent (nouvel abonnement probable).
+ */
+export function isLaneSuggestible(
   lane: Pick<TransactionWithAccount, "booking_date">[],
   referenceDate = new Date(),
 ): boolean {
-  if (lane.length === 0) {
+  if (lane.length >= MIN_SUGGESTION_OCCURRENCES) {
+    return true;
+  }
+
+  if (lane.length !== 1) {
     return false;
   }
 
   const previousMonthKey = monthKeyFromDate(
     new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1),
   );
-  const currentMonthKey = monthKeyFromDate(
-    new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
-  );
-
-  const hasInPreviousMonth = lane.some(
-    (tx) => tx.booking_date.slice(0, 7) === previousMonthKey,
-  );
-  if (hasInPreviousMonth) {
-    return true;
-  }
-
-  return lane.every((tx) => tx.booking_date.slice(0, 7) === currentMonthKey);
+  return lane[0].booking_date.slice(0, 7) === previousMonthKey;
 }
 
 export function transactionMatchesPayPalCluster(
@@ -238,9 +239,7 @@ export function transactionMatchesPayPalCluster(
 }
 
 /**
- * Un cluster est « actif » s'il a été prélevé le mois calendaire précédent
- * (fenêtre autour du jour habituel), ou s'il s'agit d'un nouvel abonnement
- * uniquement visible sur le mois en cours.
+ * Vérifie qu'un cluster PayPal correspond encore à une suggestion affichée.
  */
 export function isPayPalClusterStillActive(
   transactions: PayPalLaneTx[],
@@ -270,7 +269,7 @@ export function isPayPalClusterStillActive(
     return false;
   }
 
-  return isPayPalLaneStillActive(lane, referenceDate);
+  return isLaneSuggestible(lane, referenceDate);
 }
 
 export function isPayPalDebit(tx: TransactionWithAccount): boolean {
@@ -314,7 +313,7 @@ export function matchesRecurringPayment(
     }
 
     const txDay = getBookingDay(tx.booking_date);
-    return dayDistance(txDay, rule.billing_day) <= BILLING_DAY_TOLERANCE;
+    return dayDistance(txDay, rule.billing_day) <= RULE_MATCH_DAY_TOLERANCE;
   }
 
   if (rule.billing_day === null) {
@@ -322,7 +321,7 @@ export function matchesRecurringPayment(
   }
 
   const txDay = getBookingDay(tx.booking_date);
-  return dayDistance(txDay, rule.billing_day) <= BILLING_DAY_TOLERANCE;
+  return dayDistance(txDay, rule.billing_day) <= RULE_MATCH_DAY_TOLERANCE;
 }
 
 export function findMatchingRecurringPayment(
@@ -357,8 +356,8 @@ export function findMatchingRecurringPayment(
 
       if (
         (rule.cadence === "yearly"
-          ? monthDistanceValue <= 1 && dayDistanceValue <= BILLING_DAY_TOLERANCE
-          : dayDistanceValue <= BILLING_DAY_TOLERANCE) &&
+          ? monthDistanceValue <= 1 && dayDistanceValue <= RULE_MATCH_DAY_TOLERANCE
+          : dayDistanceValue <= RULE_MATCH_DAY_TOLERANCE) &&
         distance < bestDistance
       ) {
         bestDistance = distance;
@@ -394,7 +393,7 @@ export function listUnknownPayPalAmounts(
     for (const lane of splitPayPalAmountIntoLanes(amountTxs)) {
       const billingDay = laneBillingDay(lane);
 
-      if (!isPayPalLaneStillActive(lane)) {
+      if (!isLaneSuggestible(lane)) {
         continue;
       }
 
@@ -419,15 +418,19 @@ export function listUnknownPayPalAmounts(
 }
 
 export function clusterSuggestionKey(suggestion: RecurringClusterSuggestion): string {
+  return `${clusterDismissalKey(suggestion)}-${suggestion.lastDate}`;
+}
+
+/** Clé stable pour ignorer une suggestion (sans date du dernier prélèvement). */
+export function clusterDismissalKey(suggestion: RecurringClusterSuggestion): string {
   return [
     suggestion.source,
     suggestion.cadence,
     suggestion.amount.toFixed(2),
-    suggestion.billingDay,
-    suggestion.billingMonth ?? "x",
-    suggestion.descriptionPattern,
-    suggestion.lastDate,
-  ].join("-");
+    String(suggestion.billingDay),
+    suggestion.billingMonth === null ? "x" : String(suggestion.billingMonth),
+    suggestion.descriptionPattern.trim().toUpperCase(),
+  ].join("|");
 }
 
 export function buildMonthlySubscriptionOverview(

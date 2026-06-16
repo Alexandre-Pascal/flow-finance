@@ -9,14 +9,16 @@ import {
   dayDistance,
   findMatchingRecurringPayment,
   getBookingDay,
+  isLaneSuggestible,
   isPayPalDebit,
+  MIN_SUGGESTION_OCCURRENCES,
   type RecurringCadence,
   type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
 import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 
-const MIN_MONTHLY_OCCURRENCES = 3;
-const MIN_YEARLY_OCCURRENCES = 2;
+const MIN_MONTHLY_OCCURRENCES = MIN_SUGGESTION_OCCURRENCES;
+const MIN_YEARLY_OCCURRENCES = MIN_SUGGESTION_OCCURRENCES;
 
 const DESCRIPTION_NOISE =
   /\b(PRLV|PRELEVEMENT|PRELEV|SEPA|VIREMENT|VIR INST|VIR|TIP|CB|CARTE|MANDAT|DEBIT|FACTURE|FACT|REF|MD\d+|ID\s+\d+|FR\d+|CORE)\b/gi;
@@ -229,51 +231,6 @@ function splitYearlyLanes(txs: RecurringLaneTx[]): RecurringLaneTx[][] {
   return lanes.filter((lane) => lane.length > 0);
 }
 
-function isMonthlyLaneStillActive(
-  lane: Pick<TransactionWithAccount, "booking_date">[],
-  referenceDate = new Date(),
-): boolean {
-  if (lane.length === 0) {
-    return false;
-  }
-
-  const previousMonthKey = monthKeyFromDate(
-    new Date(referenceDate.getFullYear(), referenceDate.getMonth() - 1, 1),
-  );
-  const currentMonthKey = monthKeyFromDate(
-    new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1),
-  );
-
-  if (lane.some((tx) => tx.booking_date.slice(0, 7) === previousMonthKey)) {
-    return true;
-  }
-
-  return lane.every((tx) => tx.booking_date.slice(0, 7) === currentMonthKey);
-}
-
-function isYearlyLaneStillActive(
-  lane: RecurringLaneTx[],
-  anchor: { month: number; day: number },
-  referenceDate = new Date(),
-): boolean {
-  if (lane.length === 0) {
-    return false;
-  }
-
-  const previousYear = referenceDate.getFullYear() - 1;
-  const currentYear = referenceDate.getFullYear();
-
-  const hasPreviousYear = lane.some((tx) => {
-    const date = new Date(tx.booking_date);
-    return date.getFullYear() === previousYear && matchesYearlySlot(tx.booking_date, anchor);
-  });
-  if (hasPreviousYear) {
-    return true;
-  }
-
-  return lane.every((tx) => new Date(tx.booking_date).getFullYear() === currentYear);
-}
-
 function buildSuggestionFromLane(
   lane: RecurringLaneTx[],
   cadence: RecurringCadence,
@@ -285,18 +242,12 @@ function buildSuggestionFromLane(
     cadence === "yearly"
       ? medianOf(lane.map((tx) => getBookingMonth(tx.booking_date)))
       : null;
-  const anchor = { month: billingMonth ?? getBookingMonth(lane[0].booking_date), day: billingDay };
 
-  const minCount = cadence === "yearly" ? MIN_YEARLY_OCCURRENCES : MIN_MONTHLY_OCCURRENCES;
-  if (lane.length < minCount) {
-    return null;
-  }
-
-  const stillActive =
-    cadence === "yearly"
-      ? isYearlyLaneStillActive(lane, anchor)
-      : isMonthlyLaneStillActive(lane);
-  if (!stillActive) {
+  if (cadence === "yearly") {
+    if (lane.length < MIN_YEARLY_OCCURRENCES) {
+      return null;
+    }
+  } else if (!isLaneSuggestible(lane)) {
     return null;
   }
 

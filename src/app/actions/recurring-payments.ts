@@ -7,8 +7,10 @@ import {
   isPayPalPattern,
 } from "@/lib/finance/recurring-detection";
 import {
+  clusterDismissalKey,
   isPayPalClusterStillActive,
   mapRecurringPayment,
+  type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { createClient } from "@/lib/supabase/server";
@@ -41,6 +43,7 @@ function isSchemaError(message: string, code?: string): boolean {
     normalized.includes("billing_day") ||
     normalized.includes("billing_month") ||
     normalized.includes("cadence") ||
+    normalized.includes("recurring_suggestion_dismissals") ||
     normalized.includes("recurring_payment_manual") ||
     normalized.includes("does not exist")
   );
@@ -235,6 +238,95 @@ export async function deleteRecurringPaymentAction(formData: FormData) {
 
   revalidateFinancePages();
 
+  return { success: true as const };
+}
+
+function parseSuggestionFromFormData(formData: FormData): RecurringClusterSuggestion | null {
+  const amount = Number(formData.get("amount"));
+  const billingDay = Number(formData.get("billing_day"));
+  const billingMonthRaw = String(formData.get("billing_month") ?? "").trim();
+  const billingMonth = billingMonthRaw ? Number(billingMonthRaw) : null;
+  const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+  const descriptionPattern = String(formData.get("description_pattern") ?? "").trim();
+  const source = String(formData.get("source") ?? "general") === "paypal" ? "paypal" : "general";
+  const descriptionPreview = String(formData.get("description_preview") ?? descriptionPattern).trim();
+  const lastDate = String(formData.get("last_date") ?? "").trim();
+  const count = Number(formData.get("count"));
+
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !Number.isInteger(billingDay) ||
+    billingDay < 1 ||
+    billingDay > 31 ||
+    !descriptionPattern
+  ) {
+    return null;
+  }
+
+  if (
+    cadence === "yearly" &&
+    (billingMonth === null ||
+      !Number.isInteger(billingMonth) ||
+      billingMonth < 1 ||
+      billingMonth > 12)
+  ) {
+    return null;
+  }
+
+  return {
+    amount,
+    billingDay,
+    billingMonth: cadence === "yearly" ? billingMonth : null,
+    cadence,
+    count: Number.isFinite(count) && count > 0 ? count : 1,
+    lastDate: lastDate || "1970-01-01",
+    descriptionPattern,
+    descriptionPreview: descriptionPreview || descriptionPattern,
+    source,
+  };
+}
+
+export async function dismissRecurringSuggestionAction(formData: FormData) {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
+  }
+
+  const suggestion = parseSuggestionFromFormData(formData);
+  if (!suggestion) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  const clusterKey = clusterDismissalKey(suggestion);
+  const { error } = await supabase.from("recurring_suggestion_dismissals").upsert(
+    {
+      user_id: user.id,
+      cluster_key: clusterKey,
+      source: suggestion.source,
+      amount: suggestion.amount,
+      billing_day: suggestion.billingDay,
+      billing_month: suggestion.billingMonth,
+      cadence: suggestion.cadence,
+      description_pattern: suggestion.descriptionPattern,
+    },
+    { onConflict: "user_id,cluster_key" },
+  );
+
+  if (error) {
+    console.error("[dismissRecurringSuggestion] upsert failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  revalidateFinancePages();
   return { success: true as const };
 }
 
