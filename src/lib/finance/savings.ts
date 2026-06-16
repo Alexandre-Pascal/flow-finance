@@ -1,71 +1,136 @@
 /**
  * @file savings.ts
- * @description Suivi des comptes d'épargne (livret interne, PEL) à partir des
- * mouvements bancaires. Le solde affiché est ancré sur le solde actuel connu ;
- * l'historique est reconstruit en remontant les mouvements.
+ * @description Suivi des comptes d'épargne définis par l'utilisateur. Chaque
+ * compte porte un solde de base (à une date donnée) et des libellés de virement
+ * vers/depuis le compte courant. Les soldes et historiques sont reconstruits à
+ * partir des transactions correspondantes.
  */
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
-import {
-  isInternalTransfer,
-  isParentPelFunding,
-  isPelDeposit,
-} from "@/lib/finance/tracked-transfers";
-import type { TransactionWithAccount } from "@/types/database";
+import type {
+  SavingsAccount,
+  SavingsAccountKind,
+  SavingsTransferRef,
+  TransactionWithAccount,
+} from "@/types/database";
 
-export type SavingsVehicleKey = "livret" | "pel";
+export const SAVINGS_KINDS: SavingsAccountKind[] = [
+  "livret_a",
+  "ldd",
+  "lep",
+  "livret_jeune",
+  "pel",
+  "cel",
+  "other",
+];
 
-/**
- * Soldes actuels connus (à mettre à jour si besoin). Servent d'ancrage : le
- * dernier point de l'historique correspond toujours à ce solde.
- */
-export const SAVINGS_BASE_BALANCES: Record<SavingsVehicleKey, number> = {
-  livret: 10,
-  pel: 7504.5,
+/** Couleur par défaut suggérée selon le type de support. */
+export const SAVINGS_KIND_COLORS: Record<SavingsAccountKind, string> = {
+  livret_a: "#CA8A04",
+  ldd: "#15803D",
+  lep: "#0E7490",
+  livret_jeune: "#1E3A8A",
+  pel: "#B45309",
+  cel: "#7C3AED",
+  other: "#475569",
 };
 
-export const SAVINGS_VEHICLE_COLORS: Record<SavingsVehicleKey, string> = {
-  livret: "#1E3A8A",
-  pel: "#CA8A04",
-};
-
-/**
- * Caractéristiques réelles du PEL (issues de la banque). À mettre à jour si
- * le contrat évolue. Sert à afficher des chiffres exacts (intérêts, versement
- * mensuel, plafond…) que les transactions seules ne permettent pas de déduire.
- */
-export interface PelMeta {
-  /** Solde total, intérêts compris. */
-  balanceWithInterest: number;
-  /** Capital versé, hors intérêts. */
-  principal: number;
-  /** Intérêts acquis. */
-  interest: number;
-  /** Taux d'intérêt annuel (ex. 0.01 pour 1 %). */
-  rate: number;
-  /** Versement programmé mensuel. */
-  monthlyDeposit: number;
-  /** Plafond légal de versements. */
-  ceiling: number;
-  /** Montant restant à verser pour respecter le contrat. */
-  remainingToDeposit: number;
-  /** Date limite pour le restant à verser (ISO). */
-  remainingDeadline: string;
-  /** Date d'ouverture du plan (ISO). */
-  openingDate: string;
+export function mapSavingsAccount(row: Record<string, unknown>): SavingsAccount {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    name: String(row.name),
+    kind: (row.kind as SavingsAccountKind) ?? "other",
+    color: String(row.color ?? "#1E3A8A"),
+    base_balance: Number(row.base_balance ?? 0),
+    base_date: String(row.base_date ?? new Date().toISOString().slice(0, 10)),
+    interest_rate: row.interest_rate == null ? null : Number(row.interest_rate),
+    ceiling: row.ceiling == null ? null : Number(row.ceiling),
+    opening_date: row.opening_date ? String(row.opening_date) : null,
+    deposit_keywords: Array.isArray(row.deposit_keywords)
+      ? (row.deposit_keywords as unknown[]).map(String)
+      : [],
+    withdrawal_keywords: Array.isArray(row.withdrawal_keywords)
+      ? (row.withdrawal_keywords as unknown[]).map(String)
+      : [],
+    created_at: String(row.created_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  };
 }
 
-export const PEL_META: PelMeta = {
-  balanceWithInterest: 7504.5,
-  principal: 7340,
-  interest: 234.91,
-  rate: 0.01,
-  monthlyDeposit: 45,
-  ceiling: 61200,
-  remainingToDeposit: 360,
-  remainingDeadline: "2027-02-22",
-  openingDate: "2022-02-22",
-};
+/**
+ * Détermine si une transaction est un virement vers/depuis un compte d'épargne
+ * de l'utilisateur, en comparant son libellé aux mots-clés configurés.
+ */
+export function matchSavingsTransfer(
+  tx: Pick<TransactionWithAccount, "description">,
+  savingsAccounts: SavingsAccount[],
+): { account: SavingsAccount; direction: "deposit" | "withdrawal" } | null {
+  const description = tx.description.toUpperCase();
+
+  for (const account of savingsAccounts) {
+    for (const keyword of account.deposit_keywords) {
+      const needle = keyword.trim().toUpperCase();
+      if (needle.length >= 2 && description.includes(needle)) {
+        return { account, direction: "deposit" };
+      }
+    }
+    for (const keyword of account.withdrawal_keywords) {
+      const needle = keyword.trim().toUpperCase();
+      if (needle.length >= 2 && description.includes(needle)) {
+        return { account, direction: "withdrawal" };
+      }
+    }
+  }
+
+  return null;
+}
+
+/** Annote chaque transaction avec son éventuel mouvement d'épargne. */
+export function annotateSavingsTransfers(
+  transactions: TransactionWithAccount[],
+  savingsAccounts: SavingsAccount[],
+): TransactionWithAccount[] {
+  if (savingsAccounts.length === 0) {
+    return transactions;
+  }
+
+  const accountById = new Map(savingsAccounts.map((a) => [a.id, a]));
+
+  return transactions.map((tx) => {
+    let savings_transfer: SavingsTransferRef | null = null;
+
+    if (tx.savings_account_manual && tx.savings_account_id) {
+      // Affectation manuelle : prime sur les mots-clés. La direction est
+      // déduite du signe (sortie du compte courant = versement sur le livret).
+      const account = accountById.get(tx.savings_account_id);
+      if (account) {
+        savings_transfer = {
+          account_id: account.id,
+          account_name: account.name,
+          direction: tx.amount < 0 ? "deposit" : "withdrawal",
+        };
+      }
+    } else {
+      const match = matchSavingsTransfer(tx, savingsAccounts);
+      if (match) {
+        savings_transfer = {
+          account_id: match.account.id,
+          account_name: match.account.name,
+          direction: match.direction,
+        };
+      }
+    }
+
+    return { ...tx, savings_transfer };
+  });
+}
+
+export function isSavingsTransfer(
+  tx: Pick<TransactionWithAccount, "savings_transfer">,
+): boolean {
+  return tx.savings_transfer != null;
+}
 
 export interface SavingsMonthPoint {
   monthKey: string;
@@ -86,12 +151,11 @@ export interface SavingsMovementItem {
 }
 
 export interface SavingsVehicle {
-  key: SavingsVehicleKey;
+  account: SavingsAccount;
   balance: number;
   totalDeposits: number;
   totalWithdrawals: number;
   movementCount: number;
-  funding: number;
   monthly: SavingsMonthPoint[];
   movements: SavingsMovementItem[];
 }
@@ -124,26 +188,8 @@ function enumerateCalendarMonths(from: Date, to: Date): string[] {
   return keys;
 }
 
-/** Mouvement d'épargne signé : positif = versement, négatif = retrait. */
-function classifyMovement(
-  tx: TransactionWithAccount,
-): { vehicle: SavingsVehicleKey; amount: number } | null {
-  if (isInternalTransfer(tx)) {
-    return {
-      vehicle: "livret",
-      amount: tx.amount < 0 ? Math.abs(tx.amount) : -Math.abs(tx.amount),
-    };
-  }
-
-  if (isPelDeposit(tx)) {
-    return { vehicle: "pel", amount: Math.abs(tx.amount) };
-  }
-
-  return null;
-}
-
 function buildVehicle(
-  key: SavingsVehicleKey,
+  account: SavingsAccount,
   transactions: TransactionWithAccount[],
   monthFormatter: Intl.DateTimeFormat,
   monthFullFormatter: Intl.DateTimeFormat,
@@ -152,34 +198,35 @@ function buildVehicle(
   const movements: SavingsMovementItem[] = [];
   let totalDeposits = 0;
   let totalWithdrawals = 0;
-  let funding = 0;
 
+  // On prend en compte TOUS les virements identifiés pour ce compte, quelle que
+  // soit leur date : le solde saisi par l'utilisateur est le solde *actuel*, on
+  // reconstruit donc l'historique en remontant le temps à partir de ce solde.
   for (const tx of transactions) {
-    if (key === "pel" && isParentPelFunding(tx)) {
-      funding += Math.abs(tx.amount);
-    }
-
-    const movement = classifyMovement(tx);
-    if (!movement || movement.vehicle !== key) {
+    const ref = tx.savings_transfer;
+    if (!ref || ref.account_id !== account.id) {
       continue;
     }
+
+    const signed =
+      ref.direction === "deposit"
+        ? Math.abs(tx.amount)
+        : -Math.abs(tx.amount);
 
     movements.push({
       id: tx.id,
       date: tx.booking_date,
       monthKey: tx.booking_date.slice(0, 7),
       label: tx.description,
-      amount: movement.amount,
+      amount: signed,
     });
 
-    if (movement.amount >= 0) {
-      totalDeposits += movement.amount;
+    if (signed >= 0) {
+      totalDeposits += signed;
     } else {
-      totalWithdrawals += Math.abs(movement.amount);
+      totalWithdrawals += Math.abs(signed);
     }
   }
-
-  const balance = SAVINGS_BASE_BALANCES[key];
 
   const netByMonth = new Map<string, { deposits: number; withdrawals: number }>();
   for (const movement of movements) {
@@ -195,22 +242,28 @@ function buildVehicle(
     netByMonth.set(movement.monthKey, bucket);
   }
 
-  const monthKeysWithData = [...netByMonth.keys()].sort();
-  const earliest = monthKeysWithData.length
-    ? new Date(`${monthKeysWithData[0]}-01`)
-    : new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthKeys = enumerateCalendarMonths(earliest, now);
+  // Bornes de la courbe : du plus ancien mouvement (ou mois du solde de base)
+  // jusqu'à aujourd'hui.
+  const baseDate = new Date(`${account.base_date}T00:00:00`);
+  const baseMonthKey = account.base_date.slice(0, 7);
+  const movementMonthKeys = movements.map((m) => m.monthKey);
+  const earliestKey = [baseMonthKey, ...movementMonthKeys].sort()[0];
+  const startDate = new Date(`${earliestKey}-01T00:00:00`);
+  const fromDate = startDate < baseDate ? startDate : baseDate;
+  const monthKeys = enumerateCalendarMonths(fromDate, now);
 
-  const totalNet = totalDeposits - totalWithdrawals;
-  let running = round(balance - totalNet);
+  // On ancre le solde de base sur son mois, puis on propage : vers l'avant en
+  // ajoutant les mouvements, vers l'arrière en les retranchant.
+  const baseIndex = Math.max(
+    0,
+    monthKeys.findIndex((key) => key >= baseMonthKey),
+  );
 
-  const monthly: SavingsMonthPoint[] = monthKeys.map((monthKey) => {
+  const months = monthKeys.map((monthKey) => {
     const [year, month] = monthKey.split("-").map(Number);
     const date = new Date(year, month - 1, 1);
     const bucket = netByMonth.get(monthKey) ?? { deposits: 0, withdrawals: 0 };
     const net = round(bucket.deposits - bucket.withdrawals);
-    running = round(running + net);
-
     return {
       monthKey,
       month: monthFormatter.format(date),
@@ -218,19 +271,34 @@ function buildVehicle(
       deposits: round(bucket.deposits),
       withdrawals: round(bucket.withdrawals),
       net,
-      balance: running,
+      balance: 0,
     };
   });
+
+  const balances = new Array<number>(months.length).fill(0);
+  balances[baseIndex] = round(account.base_balance);
+  for (let i = baseIndex + 1; i < months.length; i += 1) {
+    balances[i] = round(balances[i - 1] + months[i].net);
+  }
+  for (let i = baseIndex - 1; i >= 0; i -= 1) {
+    balances[i] = round(balances[i + 1] - months[i + 1].net);
+  }
+
+  const monthly: SavingsMonthPoint[] = months.map((point, index) => ({
+    ...point,
+    balance: balances[index],
+  }));
+
+  const balance = monthly.length > 0 ? monthly[monthly.length - 1].balance : round(account.base_balance);
 
   movements.sort((a, b) => b.date.localeCompare(a.date));
 
   return {
-    key,
-    balance: round(balance),
+    account,
+    balance,
     totalDeposits: round(totalDeposits),
     totalWithdrawals: round(totalWithdrawals),
     movementCount: movements.length,
-    funding: round(funding),
     monthly,
     movements,
   };
@@ -238,6 +306,7 @@ function buildVehicle(
 
 export function buildSavingsOverview(
   transactions: TransactionWithAccount[],
+  savingsAccounts: SavingsAccount[],
   locale: string,
 ): SavingsOverview {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
@@ -248,10 +317,8 @@ export function buildSavingsOverview(
   });
   const now = new Date();
 
-  const vehicles = (
-    Object.keys(SAVINGS_BASE_BALANCES) as SavingsVehicleKey[]
-  ).map((key) =>
-    buildVehicle(key, transactions, monthFormatter, monthFullFormatter, now),
+  const vehicles = savingsAccounts.map((account) =>
+    buildVehicle(account, transactions, monthFormatter, monthFullFormatter, now),
   );
 
   return {

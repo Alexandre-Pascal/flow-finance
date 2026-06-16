@@ -17,6 +17,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { assignTransactionCategoryAction } from "@/app/actions/categories";
+import { assignTransactionSavingsAccountAction } from "@/app/actions/savings";
 import { updateTransactionNoteAction } from "@/app/actions/transactions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -56,19 +57,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { dedupeCategories } from "@/lib/finance/expense-categories";
-import {
-  isNeutralTransfer,
-  isParentPelFunding,
-  isPelDeposit,
-} from "@/lib/finance/tracked-transfers";
 import { formatCurrency, formatDate } from "@/lib/format";
-import type { Category, TransactionWithAccount } from "@/types/database";
+import type {
+  Category,
+  SavingsAccount,
+  TransactionWithAccount,
+} from "@/types/database";
 import { cn } from "@/lib/utils";
 
 interface TransactionsTableProps {
   transactions: TransactionWithAccount[];
   categories: Category[];
   locale: string;
+  savingsAccounts?: SavingsAccount[];
   compact?: boolean;
   isDemo?: boolean;
 }
@@ -194,34 +195,131 @@ function CategorySelect({
   );
 }
 
+function SavingsTransferBadge({ label }: { label: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className="h-8 max-w-[180px] justify-start gap-1.5 px-3 font-normal text-muted-foreground"
+    >
+      <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
+      <span className="truncate">{label}</span>
+    </Badge>
+  );
+}
+
+function SavingsAssign({
+  tx,
+  savingsAccounts,
+  isDemo,
+}: {
+  tx: TransactionWithAccount;
+  savingsAccounts: SavingsAccount[];
+  isDemo: boolean;
+}) {
+  const t = useTranslations("transactions");
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const ref = tx.savings_transfer;
+  const currentId = ref?.account_id ?? null;
+  const isManual = Boolean(tx.savings_account_manual);
+
+  const label = ref
+    ? ref.direction === "deposit"
+      ? t("savingsDepositTo", { name: ref.account_name })
+      : t("savingsWithdrawalFrom", { name: ref.account_name })
+    : t("savingsAssignPlaceholder");
+
+  function assign(value: string) {
+    if (isDemo) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("transactionId", tx.id);
+    formData.set("savingsAccountId", value);
+    startTransition(async () => {
+      const result = await assignTransactionSavingsAccountAction(formData);
+      if (!result.error) {
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={isPending || isDemo}
+          className={cn(
+            "inline-flex h-8 max-w-[180px] cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-normal text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
+          )}
+          aria-label={t("savingsAssignLabel")}
+        >
+          <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{label}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>{t("savingsAssignLabel")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {savingsAccounts.map((account) => (
+          <DropdownMenuCheckboxItem
+            key={account.id}
+            checked={isManual && currentId === account.id}
+            onCheckedChange={() => assign(account.id)}
+            className="cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: account.color }}
+                aria-hidden
+              />
+              {account.name}
+            </span>
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={!isManual}
+          onCheckedChange={() => assign("auto")}
+          className="cursor-pointer"
+        >
+          {t("savingsAssignAuto")}
+        </DropdownMenuCheckboxItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function TransactionExpenseType({
   tx,
   categories,
+  savingsAccounts,
   compact,
   isDemo,
 }: {
   tx: TransactionWithAccount;
   categories: Category[];
+  savingsAccounts: SavingsAccount[];
   compact: boolean;
   isDemo: boolean;
 }) {
   const t = useTranslations("transactions");
 
-  if (isNeutralTransfer(tx)) {
-    const label = isPelDeposit(tx)
-      ? t("expenseTypePelDeposit")
-      : isParentPelFunding(tx)
-        ? t("expenseTypePelFunding")
-        : t("expenseTypeInternalTransfer");
+  if (tx.savings_transfer) {
+    const ref = tx.savings_transfer;
+    const label =
+      ref.direction === "deposit"
+        ? t("savingsDepositTo", { name: ref.account_name })
+        : t("savingsWithdrawalFrom", { name: ref.account_name });
+
+    if (compact || savingsAccounts.length === 0) {
+      return <SavingsTransferBadge label={label} />;
+    }
 
     return (
-      <Badge
-        variant="outline"
-        className="h-8 max-w-[180px] justify-start gap-1.5 px-3 font-normal text-muted-foreground"
-      >
-        <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
-        <span className="truncate">{label}</span>
-      </Badge>
+      <SavingsAssign tx={tx} savingsAccounts={savingsAccounts} isDemo={isDemo} />
     );
   }
 
@@ -380,6 +478,7 @@ export function TransactionsTable({
   transactions,
   categories,
   locale,
+  savingsAccounts = [],
   compact = false,
   isDemo = false,
 }: TransactionsTableProps) {
@@ -406,6 +505,8 @@ export function TransactionsTable({
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>();
     let uncategorized = 0;
+    let deposits = 0;
+    let withdrawals = 0;
     for (const tx of transactions) {
       if (
         selectedMonths.size > 0 &&
@@ -413,17 +514,24 @@ export function TransactionsTable({
       ) {
         continue;
       }
+      if (tx.savings_transfer) {
+        if (tx.savings_transfer.direction === "deposit") {
+          deposits += 1;
+        } else {
+          withdrawals += 1;
+        }
+      }
       if (tx.category_id) {
         counts.set(tx.category_id, (counts.get(tx.category_id) ?? 0) + 1);
       } else if (
         tx.amount < 0 &&
         !tx.recurring_payment_id &&
-        !isNeutralTransfer(tx)
+        !tx.savings_transfer
       ) {
         uncategorized += 1;
       }
     }
-    return { counts, uncategorized };
+    return { counts, uncategorized, deposits, withdrawals };
   }, [transactions, selectedMonths]);
 
   const filtered = useMemo(() => {
@@ -449,8 +557,14 @@ export function TransactionsTable({
           tx.amount < 0 &&
           !tx.recurring_payment_id &&
           !tx.category_id &&
-          !isNeutralTransfer(tx)
+          !tx.savings_transfer
         );
+      }
+      if (categoryFilter === "deposits") {
+        return tx.savings_transfer?.direction === "deposit";
+      }
+      if (categoryFilter === "withdrawals") {
+        return tx.savings_transfer?.direction === "withdrawal";
       }
       if (categoryFilter !== "all") {
         return tx.category_id === categoryFilter;
@@ -529,6 +643,7 @@ export function TransactionsTable({
               <TransactionExpenseType
                 tx={tx}
                 categories={uniqueCategories}
+                savingsAccounts={savingsAccounts}
                 compact={compact}
                 isDemo={isDemo}
               />
@@ -590,6 +705,34 @@ export function TransactionsTable({
                     <span>{t("filterUncategorized")}</span>
                     <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
                       {categoryCounts.uncategorized}
+                    </span>
+                  </span>
+                </SelectItem>
+                <SelectItem
+                  value="deposits"
+                  className={cn(
+                    "cursor-pointer",
+                    categoryCounts.deposits === 0 && "text-muted-foreground/60",
+                  )}
+                >
+                  <span className="flex w-full items-center gap-2">
+                    <span>{t("filterDeposits")}</span>
+                    <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
+                      {categoryCounts.deposits}
+                    </span>
+                  </span>
+                </SelectItem>
+                <SelectItem
+                  value="withdrawals"
+                  className={cn(
+                    "cursor-pointer",
+                    categoryCounts.withdrawals === 0 && "text-muted-foreground/60",
+                  )}
+                >
+                  <span className="flex w-full items-center gap-2">
+                    <span>{t("filterWithdrawals")}</span>
+                    <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
+                      {categoryCounts.withdrawals}
                     </span>
                   </span>
                 </SelectItem>

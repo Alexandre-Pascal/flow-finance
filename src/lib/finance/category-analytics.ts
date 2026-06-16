@@ -4,7 +4,6 @@
  */
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
-import { isNeutralTransfer } from "@/lib/finance/tracked-transfers";
 import type { TransactionWithAccount } from "@/types/database";
 
 /** Clé spéciale regroupant toutes les transactions liées à un abonnement. */
@@ -111,7 +110,7 @@ export function buildCategoryBreakdown(
   const buckets = new Map<string, Map<string, number>>();
 
   for (const tx of transactions) {
-    if (tx.amount >= 0 || isNeutralTransfer(tx)) {
+    if (tx.amount >= 0 || tx.savings_transfer) {
       continue;
     }
 

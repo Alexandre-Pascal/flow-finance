@@ -1,22 +1,23 @@
 /**
  * @file savings-analytics.tsx
- * @description Page Épargne : soldes, évolution et mouvements par support.
+ * @description Page Épargne : comptes définis par l'utilisateur, soldes
+ * reconstruits depuis les virements, évolution et gestion (CRUD).
  */
 
 "use client";
 
 import {
-  ArrowDownRight,
+  ArrowDownLeft,
   ArrowUpRight,
-  CalendarClock,
-  CalendarDays,
+  Pencil,
   PiggyBank,
-  Repeat,
+  Plus,
+  Trash2,
   TrendingUp,
   Wallet,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   Area,
   AreaChart,
@@ -26,22 +27,52 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
-  PEL_META,
-  SAVINGS_VEHICLE_COLORS,
-  type PelMeta,
+  createSavingsAccountAction,
+  deleteSavingsAccountAction,
+  updateSavingsAccountAction,
+  type SavingsActionError,
+} from "@/app/actions/savings";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRouter } from "@/i18n/navigation";
+import { type MonthlyPeriod } from "@/lib/finance/aggregates";
+import { CATEGORY_COLOR_PALETTE, normalizeColor } from "@/lib/finance/expense-categories";
+import {
+  SAVINGS_KINDS,
+  SAVINGS_KIND_COLORS,
+  sliceSavingsMonths,
   type SavingsOverview,
-  type SavingsVehicleKey,
+  type SavingsVehicle,
 } from "@/lib/finance/savings";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { SavingsAccount, SavingsAccountKind } from "@/types/database";
 
 interface SavingsAnalyticsProps {
   overview: SavingsOverview;
   locale: string;
+  isDemo: boolean;
+  schemaReady: boolean;
 }
 
 function formatCompactCurrency(value: number, locale: string): string {
@@ -53,535 +84,781 @@ function formatCompactCurrency(value: number, locale: string): string {
   }).format(value);
 }
 
-export function SavingsAnalytics({ overview, locale }: SavingsAnalyticsProps) {
+export function SavingsAnalytics({
+  overview,
+  locale,
+  isDemo,
+  schemaReady,
+}: SavingsAnalyticsProps) {
   const t = useTranslations("savings");
+  const router = useRouter();
   const [period, setPeriod] = useState<MonthlyPeriod>(12);
+  const [formState, setFormState] = useState<
+    { mode: "create" } | { mode: "edit"; account: SavingsAccount } | null
+  >(null);
+  const [confirmDelete, setConfirmDelete] = useState<SavingsAccount | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  const vehicleName = (key: SavingsVehicleKey) =>
-    key === "livret" ? t("vehicleLivret") : t("vehiclePel");
-
-  const totalNetThisMonth = overview.vehicles.reduce(
-    (sum, vehicle) => sum + (vehicle.monthly.at(-1)?.net ?? 0),
-    0,
+  const totalBalance = overview.totalBalance;
+  const totalDeposits = useMemo(
+    () => overview.vehicles.reduce((sum, v) => sum + v.totalDeposits, 0),
+    [overview.vehicles],
   );
+  const totalWithdrawals = useMemo(
+    () => overview.vehicles.reduce((sum, v) => sum + v.totalWithdrawals, 0),
+    [overview.vehicles],
+  );
+
+  function translateError(actionError: SavingsActionError): string {
+    switch (actionError) {
+      case "demo":
+        return t("demoError");
+      case "schema":
+        return t("schemaError");
+      case "invalid":
+        return t("invalidError");
+      default:
+        return t("saveError");
+    }
+  }
+
+  function handleSubmit(formData: FormData, mode: "create" | "edit") {
+    setError(null);
+    startTransition(async () => {
+      const result =
+        mode === "create"
+          ? await createSavingsAccountAction(formData)
+          : await updateSavingsAccountAction(formData);
+      if (result.error) {
+        setError(translateError(result.error));
+        return;
+      }
+      setFormState(null);
+      router.refresh();
+    });
+  }
+
+  function handleDelete(account: SavingsAccount) {
+    setError(null);
+    const formData = new FormData();
+    formData.set("id", account.id);
+    startTransition(async () => {
+      const result = await deleteSavingsAccountAction(formData);
+      setConfirmDelete(null);
+      if (result.error) {
+        setError(translateError(result.error));
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  const hasAccounts = overview.vehicles.length > 0;
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="lg:col-span-1 sm:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {t("totalBalance")}
-            </CardTitle>
-            <div className="flex size-9 items-center justify-center rounded-lg bg-accent/15 text-accent">
-              <Wallet className="size-4" aria-hidden />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tracking-tight">
-              {formatCurrency(overview.totalBalance, locale)}
-            </p>
-            <p
-              className={cn(
-                "mt-1 text-xs",
-                totalNetThisMonth > 0
-                  ? "text-[var(--chart-2)]"
-                  : totalNetThisMonth < 0
-                    ? "text-destructive"
-                    : "text-muted-foreground",
-              )}
-            >
-              {t("netThisMonth", {
-                amount: `${totalNetThisMonth >= 0 ? "+" : ""}${formatCurrency(totalNetThisMonth, locale)}`,
-              })}
-            </p>
-          </CardContent>
-        </Card>
-
-        {overview.vehicles.map((vehicle) => {
-          const net = vehicle.monthly.at(-1)?.net ?? 0;
-          return (
-            <Card key={vehicle.key}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {vehicleName(vehicle.key)}
-                </CardTitle>
-                <div
-                  className="flex size-9 items-center justify-center rounded-lg"
-                  style={{
-                    backgroundColor: `${SAVINGS_VEHICLE_COLORS[vehicle.key]}1a`,
-                    color: SAVINGS_VEHICLE_COLORS[vehicle.key],
-                  }}
-                >
-                  <PiggyBank className="size-4" aria-hidden />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold tracking-tight">
-                  {formatCurrency(vehicle.balance, locale)}
-                </p>
-                <p
-                  className={cn(
-                    "mt-1 text-xs",
-                    net > 0
-                      ? "text-[var(--chart-2)]"
-                      : net < 0
-                        ? "text-destructive"
-                        : "text-muted-foreground",
-                  )}
-                >
-                  {t("netThisMonth", {
-                    amount: `${net >= 0 ? "+" : ""}${formatCurrency(net, locale)}`,
-                  })}
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">{t("chartTitle")}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("chartSubtitle")}
-          </p>
-        </div>
-        <Tabs
-          value={String(period)}
-          onValueChange={(value) =>
-            setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))
-          }
-        >
-          <TabsList>
-            <TabsTrigger value="6" className="cursor-pointer px-3">
-              {t("period6")}
-            </TabsTrigger>
-            <TabsTrigger value="12" className="cursor-pointer px-3">
-              {t("period12")}
-            </TabsTrigger>
-            <TabsTrigger value="all" className="cursor-pointer px-3">
-              {t("periodAll")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {overview.vehicles.map((vehicle) => (
-          <VehicleChart
-            key={vehicle.key}
-            vehicle={vehicle}
-            period={period}
-            locale={locale}
-            name={vehicleName(vehicle.key)}
-            color={SAVINGS_VEHICLE_COLORS[vehicle.key]}
-            emptyLabel={t("empty")}
-            balanceLabel={t("balanceLabel")}
-            netLabel={t("netLabel")}
-          />
-        ))}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {overview.vehicles.map((vehicle) =>
-          vehicle.key === "pel" ? (
-            <PelDetailCard
-              key={vehicle.key}
-              meta={PEL_META}
-              locale={locale}
-              name={vehicleName(vehicle.key)}
-              color={SAVINGS_VEHICLE_COLORS[vehicle.key]}
-            />
-          ) : (
-            <LivretDetailCard
-              key={vehicle.key}
-              vehicle={vehicle}
-              locale={locale}
-              name={vehicleName(vehicle.key)}
-              color={SAVINGS_VEHICLE_COLORS[vehicle.key]}
-            />
-          ),
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MovementsList({
-  vehicle,
-  locale,
-}: {
-  vehicle: SavingsOverview["vehicles"][number];
-  locale: string;
-}) {
-  const t = useTranslations("savings");
-
-  return (
-    <div>
-      <p className="mb-2 text-sm font-medium text-foreground">
-        {t("movementsTitle")}
-      </p>
-      {vehicle.movements.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">
-          {t("noMovements")}
+      {!schemaReady ? (
+        <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+          {t("schemaError")}
         </p>
+      ) : null}
+
+      {error ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+
+      {/* KPI summary */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <KpiCard
+          icon={<Wallet className="size-5" aria-hidden />}
+          label={t("totalBalance")}
+          value={formatCurrency(totalBalance, locale)}
+          accent
+        />
+        <KpiCard
+          icon={<ArrowUpRight className="size-5" aria-hidden />}
+          label={t("totalDeposits")}
+          value={formatCurrency(totalDeposits, locale)}
+        />
+        <KpiCard
+          icon={<ArrowDownLeft className="size-5" aria-hidden />}
+          label={t("totalWithdrawals")}
+          value={formatCurrency(totalWithdrawals, locale)}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <PiggyBank className="size-4" aria-hidden />
+          {t("accountCount", { count: overview.vehicles.length })}
+        </div>
+        <div className="flex items-center gap-3">
+          {hasAccounts ? (
+            <Tabs
+              value={String(period)}
+              onValueChange={(value) =>
+                setPeriod(value === "all" ? "all" : (Number(value) as MonthlyPeriod))
+              }
+            >
+              <TabsList>
+                <TabsTrigger value="6" className="cursor-pointer">
+                  {t("period6")}
+                </TabsTrigger>
+                <TabsTrigger value="12" className="cursor-pointer">
+                  {t("period12")}
+                </TabsTrigger>
+                <TabsTrigger value="all" className="cursor-pointer">
+                  {t("periodAll")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : null}
+          <Button
+            type="button"
+            className="cursor-pointer"
+            disabled={isDemo || !schemaReady}
+            onClick={() => {
+              setError(null);
+              setFormState({ mode: "create" });
+            }}
+          >
+            <Plus className="size-4" aria-hidden />
+            {t("addAccount")}
+          </Button>
+        </div>
+      </div>
+
+      {!hasAccounts ? (
+        <EmptyState
+          disabled={isDemo || !schemaReady}
+          onAdd={() => {
+            setError(null);
+            setFormState({ mode: "create" });
+          }}
+        />
       ) : (
-        <ul className="max-h-80 divide-y divide-border overflow-y-auto pr-1">
-          {vehicle.movements.map((movement) => (
-            <li
-              key={movement.id}
-              className="flex items-center justify-between gap-3 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm text-foreground">
-                  {movement.label}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(movement.date, locale)}
-                </p>
-              </div>
-              <span
-                className={cn(
-                  "shrink-0 text-sm font-medium tabular-nums",
-                  movement.amount >= 0
-                    ? "text-[var(--chart-2)]"
-                    : "text-destructive",
-                )}
-              >
-                {movement.amount >= 0 ? "+" : "−"}
-                {formatCurrency(Math.abs(movement.amount), locale)}
-              </span>
-            </li>
+        <div className="grid gap-5 lg:grid-cols-2">
+          {overview.vehicles.map((vehicle) => (
+            <VehicleCard
+              key={vehicle.account.id}
+              vehicle={vehicle}
+              period={period}
+              locale={locale}
+              isDemo={isDemo}
+              isPending={isPending}
+              onEdit={() => {
+                setError(null);
+                setFormState({ mode: "edit", account: vehicle.account });
+              }}
+              onDelete={() => setConfirmDelete(vehicle.account)}
+            />
           ))}
-        </ul>
+        </div>
       )}
+
+      <Dialog
+        open={formState !== null}
+        onOpenChange={(open) => {
+          if (!open) setFormState(null);
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          {formState ? (
+            <SavingsAccountForm
+              mode={formState.mode}
+              account={formState.mode === "edit" ? formState.account : undefined}
+              isPending={isPending}
+              onSubmit={handleSubmit}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("deleteConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("deleteConfirmDescription", { name: confirmDelete?.name ?? "" })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="cursor-pointer"
+                disabled={isPending}
+              >
+                {t("cancel")}
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              className="cursor-pointer"
+              disabled={isPending}
+              onClick={() => confirmDelete && handleDelete(confirmDelete)}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              {t("delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function LivretDetailCard({
-  vehicle,
-  locale,
-  name,
-  color,
+function KpiCard({
+  icon,
+  label,
+  value,
+  accent,
 }: {
-  vehicle: SavingsOverview["vehicles"][number];
-  locale: string;
-  name: string;
-  color: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accent?: boolean;
 }) {
-  const t = useTranslations("savings");
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <span
-            className="size-2.5 rounded-full"
-            style={{ background: color }}
-            aria-hidden
-          />
-          {name}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Stat
-            icon={<ArrowUpRight className="size-4" aria-hidden />}
-            tone="positive"
-            label={t("deposits")}
-            value={formatCurrency(vehicle.totalDeposits, locale)}
-          />
-          <Stat
-            icon={<ArrowDownRight className="size-4" aria-hidden />}
-            tone="negative"
-            label={t("withdrawals")}
-            value={formatCurrency(vehicle.totalWithdrawals, locale)}
-          />
+    <Card className={cn(accent && "border-primary/30 bg-primary/5")}>
+      <CardContent className="flex items-center gap-4 py-5">
+        <div
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-full",
+            accent
+              ? "bg-primary/15 text-primary"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {icon}
         </div>
-        <MovementsList vehicle={vehicle} locale={locale} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function PelDetailCard({
-  meta,
-  locale,
-  name,
-  color,
-}: {
-  meta: PelMeta;
-  locale: string;
-  name: string;
-  color: string;
-}) {
-  const t = useTranslations("savings");
-  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
-  const ceilingProgress = Math.min(
-    100,
-    (meta.balanceWithInterest / meta.ceiling) * 100,
-  );
-  const rateLabel = new Intl.NumberFormat(intlLocale, {
-    style: "percent",
-    minimumFractionDigits: 2,
-  }).format(meta.rate);
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <span
-            className="size-2.5 rounded-full"
-            style={{ background: color }}
-            aria-hidden
-          />
-          {name}
-        </CardTitle>
-        <p className="mt-1 text-2xl font-semibold tracking-tight">
-          {formatCurrency(meta.balanceWithInterest, locale)}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {t("principalHint", {
-            amount: formatCurrency(meta.principal, locale),
-          })}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-            <span>{t("ceiling")}</span>
-            <span>{formatCurrency(meta.ceiling, locale)}</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${ceilingProgress}%`,
-                backgroundColor: color,
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Stat
-            icon={<Repeat className="size-4" aria-hidden />}
-            tone="neutral"
-            label={t("monthlyDeposit")}
-            value={formatCurrency(meta.monthlyDeposit, locale)}
-          />
-          <Stat
-            icon={<TrendingUp className="size-4" aria-hidden />}
-            tone="positive"
-            label={t("interestAcquired")}
-            value={formatCurrency(meta.interest, locale)}
-            hint={t("rateHint", { rate: rateLabel })}
-          />
-          <Stat
-            icon={<CalendarClock className="size-4" aria-hidden />}
-            tone="neutral"
-            label={t("remainingToDeposit")}
-            value={formatCurrency(meta.remainingToDeposit, locale)}
-            hint={t("remainingBefore", {
-              date: formatDate(meta.remainingDeadline, locale),
-            })}
-          />
-          <Stat
-            icon={<CalendarDays className="size-4" aria-hidden />}
-            tone="neutral"
-            label={t("opening")}
-            value={formatDate(meta.openingDate, locale)}
-          />
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="truncate text-xl font-semibold tabular-nums">{value}</p>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function VehicleChart({
+function EmptyState({
+  onAdd,
+  disabled,
+}: {
+  onAdd: () => void;
+  disabled: boolean;
+}) {
+  const t = useTranslations("savings");
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center gap-4 py-14 text-center">
+        <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <PiggyBank className="size-7" aria-hidden />
+        </div>
+        <div className="max-w-md space-y-1.5">
+          <p className="text-base font-medium text-foreground">
+            {t("emptyTitle")}
+          </p>
+          <p className="text-sm text-muted-foreground">{t("emptyDescription")}</p>
+        </div>
+        <Button
+          type="button"
+          className="cursor-pointer"
+          disabled={disabled}
+          onClick={onAdd}
+        >
+          <Plus className="size-4" aria-hidden />
+          {t("addFirstAccount")}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface ChartTooltipPayloadItem {
+  value?: number;
+  payload?: { monthFull?: string };
+}
+
+function BalanceTooltip({
+  active,
+  payload,
+  locale,
+  label,
+}: {
+  active?: boolean;
+  payload?: readonly ChartTooltipPayloadItem[];
+  locale: string;
+  label?: string;
+}) {
+  const tt = useTranslations("savings");
+  if (!active || !payload || payload.length === 0) {
+    return null;
+  }
+  const item = payload[0];
+  const title = item.payload?.monthFull ?? label ?? "";
+  return (
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
+      <p className="font-medium text-foreground">{title}</p>
+      <p className="mt-0.5 text-muted-foreground">
+        {tt("balance")} : {formatCurrency(item.value ?? 0, locale)}
+      </p>
+    </div>
+  );
+}
+
+function VehicleCard({
   vehicle,
   period,
   locale,
-  name,
-  color,
-  emptyLabel,
-  balanceLabel,
-  netLabel,
+  isDemo,
+  isPending,
+  onEdit,
+  onDelete,
 }: {
-  vehicle: SavingsOverview["vehicles"][number];
+  vehicle: SavingsVehicle;
   period: MonthlyPeriod;
   locale: string;
-  name: string;
-  color: string;
-  emptyLabel: string;
-  balanceLabel: string;
-  netLabel: string;
+  isDemo: boolean;
+  isPending: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
+  const t = useTranslations("savings");
+  const { account } = vehicle;
   const data = useMemo(
-    () =>
-      period === "all" ? vehicle.monthly : vehicle.monthly.slice(-period),
+    () => sliceSavingsMonths(vehicle.monthly, period),
     [vehicle.monthly, period],
   );
+  const gradientId = `savings-grad-${account.id}`;
 
-  const gradientId = `savings-${vehicle.key}`;
+  const ceilingPct =
+    account.ceiling && account.ceiling > 0
+      ? Math.min(100, Math.round((vehicle.balance / account.ceiling) * 100))
+      : null;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between pb-2">
-        <div>
-          <CardTitle className="flex items-center gap-2 text-base">
+    <Card className="group overflow-hidden">
+      <CardHeader className="gap-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             <span
-              className="size-2.5 rounded-full"
-              style={{ background: color }}
+              className="size-3 shrink-0 rounded-full"
+              style={{ backgroundColor: account.color }}
               aria-hidden
             />
-            {name}
-          </CardTitle>
-          <p className="mt-1 text-xl font-semibold tracking-tight">
-            {formatCurrency(vehicle.balance, locale)}
-          </p>
+            <div className="min-w-0">
+              <CardTitle className="truncate text-base">{account.name}</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {t(`kind_${account.kind}` as never)}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="cursor-pointer text-muted-foreground hover:text-foreground"
+              disabled={isPending || isDemo}
+              onClick={onEdit}
+              aria-label={t("edit")}
+            >
+              <Pencil className="size-4" aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="cursor-pointer text-muted-foreground hover:text-destructive"
+              disabled={isPending || isDemo}
+              onClick={onDelete}
+              aria-label={t("delete")}
+            >
+              <Trash2 className="size-4" aria-hidden />
+            </Button>
+          </div>
         </div>
+
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-2xl font-semibold tabular-nums">
+              {formatCurrency(vehicle.balance, locale)}
+            </p>
+            <p className="text-xs text-muted-foreground">{t("currentBalance")}</p>
+          </div>
+          {account.interest_rate != null ? (
+            <div className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              <TrendingUp className="size-3.5" aria-hidden />
+              {new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              }).format(account.interest_rate)}{" "}
+              %
+            </div>
+          ) : null}
+        </div>
+
+        {ceilingPct != null ? (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{t("ceilingLabel")}</span>
+              <span className="tabular-nums">
+                {formatCompactCurrency(vehicle.balance, locale)} /{" "}
+                {formatCompactCurrency(account.ceiling ?? 0, locale)}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${ceilingPct}%`,
+                  backgroundColor: account.color,
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
       </CardHeader>
-      <CardContent>
-        {data.length > 0 ? (
-          <div className="h-64 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={data}
-                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={color} stopOpacity={0.35} />
-                    <stop offset="95%" stopColor={color} stopOpacity={0.04} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  className="stroke-border"
-                />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={64}
-                  domain={["auto", "auto"]}
-                  tickFormatter={(value: number) =>
-                    formatCompactCurrency(value, locale)
-                  }
-                />
-                <Tooltip
-                  cursor={{ stroke: "var(--border)" }}
-                  content={({ active, payload }) => {
-                    if (
-                      !active ||
-                      !Array.isArray(payload) ||
-                      payload.length === 0
-                    ) {
-                      return null;
-                    }
-                    const point = payload[0]
-                      ?.payload as SavingsOverview["vehicles"][number]["monthly"][number];
-                    return (
-                      <div className="min-w-44 rounded-lg border border-border bg-card px-3 py-2.5 text-sm shadow-lg">
-                        <p className="mb-2 font-medium text-foreground">
-                          {point.monthFull}
-                        </p>
-                        <div className="flex items-center justify-between gap-6 text-muted-foreground">
-                          <span>{balanceLabel}</span>
-                          <span className="font-medium text-foreground">
-                            {formatCurrency(point.balance, locale)}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between gap-6 text-muted-foreground">
-                          <span>{netLabel}</span>
-                          <span
-                            className={cn(
-                              "font-medium",
-                              point.net > 0
-                                ? "text-[var(--chart-2)]"
-                                : point.net < 0
-                                  ? "text-destructive"
-                                  : "text-foreground",
-                            )}
-                          >
-                            {point.net >= 0 ? "+" : "−"}
-                            {formatCurrency(Math.abs(point.net), locale)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="balance"
-                  stroke={color}
-                  strokeWidth={2}
-                  fill={`url(#${gradientId})`}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="flex min-h-48 items-center justify-center text-center text-sm text-muted-foreground">
-            {emptyLabel}
-          </div>
-        )}
+
+      <CardContent className="space-y-4">
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={account.color} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={account.color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
+              <XAxis
+                dataKey="month"
+                tickLine={false}
+                axisLine={false}
+                tick={{ fontSize: 11 }}
+                className="text-muted-foreground"
+              />
+              <YAxis
+                tickLine={false}
+                axisLine={false}
+                width={48}
+                tick={{ fontSize: 11 }}
+                tickFormatter={(value: number) => formatCompactCurrency(value, locale)}
+                className="text-muted-foreground"
+                domain={["dataMin", "dataMax"]}
+              />
+              <Tooltip
+                content={({ active, payload, label }) => (
+                  <BalanceTooltip
+                    active={active}
+                    payload={payload as readonly ChartTooltipPayloadItem[]}
+                    label={label as string}
+                    locale={locale}
+                  />
+                )}
+              />
+              <Area
+                type="monotone"
+                dataKey="balance"
+                stroke={account.color}
+                strokeWidth={2}
+                fill={`url(#${gradientId})`}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Stat
+            label={t("totalDeposits")}
+            value={formatCurrency(vehicle.totalDeposits, locale)}
+            positive
+          />
+          <Stat
+            label={t("totalWithdrawals")}
+            value={formatCurrency(vehicle.totalWithdrawals, locale)}
+          />
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("recentMovements")}
+          </p>
+          {vehicle.movements.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+              {t("noMovements")}
+            </p>
+          ) : (
+            <ul className="max-h-56 space-y-1 overflow-y-auto pr-1">
+              {vehicle.movements.map((movement) => (
+                <li
+                  key={movement.id}
+                  className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-foreground">{movement.label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(movement.date, locale)}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 tabular-nums",
+                      movement.amount >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-foreground",
+                    )}
+                  >
+                    {movement.amount >= 0 ? "+" : ""}
+                    {formatCurrency(movement.amount, locale)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
 }
 
 function Stat({
-  icon,
   label,
   value,
-  tone,
-  hint,
-  className,
+  positive,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
-  tone: "positive" | "negative" | "neutral";
-  hint?: string;
-  className?: string;
+  positive?: boolean;
 }) {
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-border bg-muted/30 p-3",
-        className,
-      )}
-    >
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span
-          className={cn(
-            "flex size-6 items-center justify-center rounded-md",
-            tone === "positive" && "bg-[var(--chart-2)]/10 text-[var(--chart-2)]",
-            tone === "negative" && "bg-destructive/10 text-destructive",
-            tone === "neutral" && "bg-muted text-foreground/70",
-          )}
-        >
-          {icon}
-        </span>
-        {label}
-      </div>
-      <p className="mt-1.5 text-lg font-semibold tracking-tight">{value}</p>
-      {hint ? (
-        <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
-      ) : null}
+    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "text-sm font-semibold tabular-nums",
+          positive && "text-emerald-600 dark:text-emerald-400",
+        )}
+      >
+        {value}
+      </p>
     </div>
+  );
+}
+
+function SavingsAccountForm({
+  mode,
+  account,
+  isPending,
+  onSubmit,
+}: {
+  mode: "create" | "edit";
+  account?: SavingsAccount;
+  isPending: boolean;
+  onSubmit: (formData: FormData, mode: "create" | "edit") => void;
+}) {
+  const t = useTranslations("savings");
+  const today = new Date().toISOString().slice(0, 10);
+  const [kind, setKind] = useState<SavingsAccountKind>(account?.kind ?? "livret_a");
+  const [color, setColor] = useState(
+    account?.color ?? SAVINGS_KIND_COLORS[account?.kind ?? "livret_a"],
+  );
+
+  function handleKindChange(value: string) {
+    const next = value as SavingsAccountKind;
+    setKind(next);
+    if (!account) {
+      setColor(SAVINGS_KIND_COLORS[next]);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        formData.set("kind", kind);
+        formData.set("color", color);
+        if (account) {
+          formData.set("id", account.id);
+        }
+        onSubmit(formData, mode);
+      }}
+    >
+      <DialogHeader>
+        <DialogTitle>
+          {mode === "create" ? t("formCreateTitle") : t("formEditTitle")}
+        </DialogTitle>
+        <DialogDescription>{t("formDescription")}</DialogDescription>
+      </DialogHeader>
+
+      <div className="space-y-4 py-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="savings-name">{t("nameLabel")}</Label>
+            <Input
+              id="savings-name"
+              name="name"
+              defaultValue={account?.name ?? ""}
+              placeholder={t("namePlaceholder")}
+              disabled={isPending}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="savings-kind">{t("kindLabel")}</Label>
+            <Select value={kind} onValueChange={handleKindChange}>
+              <SelectTrigger id="savings-kind" className="cursor-pointer">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SAVINGS_KINDS.map((value) => (
+                  <SelectItem key={value} value={value} className="cursor-pointer">
+                    {t(`kind_${value}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>{t("colorLabel")}</Label>
+          <div className="flex flex-wrap gap-2" role="radiogroup">
+            {CATEGORY_COLOR_PALETTE.map((paletteColor) => {
+              const isSelected =
+                normalizeColor(color) === normalizeColor(paletteColor);
+              return (
+                <button
+                  key={paletteColor}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={paletteColor}
+                  onClick={() => setColor(paletteColor)}
+                  disabled={isPending}
+                  className={cn(
+                    "size-7 cursor-pointer rounded-full ring-2 ring-offset-2 ring-offset-background transition hover:scale-110",
+                    isSelected ? "ring-foreground" : "ring-transparent",
+                  )}
+                  style={{ backgroundColor: paletteColor }}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="savings-base-balance">{t("baseBalanceLabel")}</Label>
+            <Input
+              id="savings-base-balance"
+              name="baseBalance"
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              defaultValue={account?.base_balance ?? ""}
+              placeholder="0,00"
+              disabled={isPending}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="savings-base-date">{t("baseDateLabel")}</Label>
+            <Input
+              id="savings-base-date"
+              name="baseDate"
+              type="date"
+              defaultValue={account?.base_date ?? today}
+              disabled={isPending}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="savings-rate">{t("rateLabel")}</Label>
+            <Input
+              id="savings-rate"
+              name="interestRate"
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              defaultValue={account?.interest_rate ?? ""}
+              placeholder="2,40"
+              disabled={isPending}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="savings-ceiling">{t("ceilingFieldLabel")}</Label>
+            <Input
+              id="savings-ceiling"
+              name="ceiling"
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              defaultValue={account?.ceiling ?? ""}
+              placeholder="22950"
+              disabled={isPending}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="savings-deposit-keywords">{t("depositKeywordsLabel")}</Label>
+          <Input
+            id="savings-deposit-keywords"
+            name="depositKeywords"
+            defaultValue={account?.deposit_keywords.join(", ") ?? ""}
+            placeholder={t("depositKeywordsPlaceholder")}
+            disabled={isPending}
+          />
+          <p className="text-xs text-muted-foreground">{t("depositKeywordsHint")}</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="savings-withdrawal-keywords">
+            {t("withdrawalKeywordsLabel")}
+          </Label>
+          <Input
+            id="savings-withdrawal-keywords"
+            name="withdrawalKeywords"
+            defaultValue={account?.withdrawal_keywords.join(", ") ?? ""}
+            placeholder={t("withdrawalKeywordsPlaceholder")}
+            disabled={isPending}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("withdrawalKeywordsHint")}
+          </p>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <DialogClose asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            className="cursor-pointer"
+            disabled={isPending}
+          >
+            {t("cancel")}
+          </Button>
+        </DialogClose>
+        <Button type="submit" className="cursor-pointer" disabled={isPending}>
+          {mode === "create" ? t("createButton") : t("save")}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

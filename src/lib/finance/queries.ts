@@ -13,6 +13,10 @@ import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import {
+  annotateSavingsTransfers,
+  mapSavingsAccount,
+} from "@/lib/finance/savings";
+import {
   MOCK_ACCOUNTS,
   MOCK_CATEGORIES,
   MOCK_MONTHLY_SPENDING,
@@ -24,6 +28,7 @@ import type {
   BankConnection,
   Category,
   RecurringPayment,
+  SavingsAccount,
   TransactionWithAccount,
 } from "@/types/database";
 
@@ -32,9 +37,11 @@ export interface FinanceData {
   transactions: TransactionWithAccount[];
   categories: Category[];
   recurringPayments: RecurringPayment[];
+  savingsAccounts: SavingsAccount[];
   dismissedSuggestionKeys: string[];
   subscriptionsSchemaReady: boolean;
   categoriesSchemaReady: boolean;
+  savingsSchemaReady: boolean;
   monthlySpending: { month: string; amount: number }[];
   bankConnection: BankConnection | null;
   isDemo: boolean;
@@ -78,6 +85,10 @@ function mapTransaction(
       : null,
     recurring_payment_manual: Boolean(row.recurring_payment_manual),
     note: row.note ? String(row.note) : null,
+    savings_account_id: row.savings_account_id
+      ? String(row.savings_account_id)
+      : null,
+    savings_account_manual: Boolean(row.savings_account_manual),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     account_name: account.name,
@@ -110,9 +121,11 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       transactions: [],
       categories: [],
       recurringPayments: [],
+      savingsAccounts: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       categoriesSchemaReady: false,
+      savingsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -124,6 +137,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     { data: connectionRow },
     { data: recurringRows, error: recurringError },
     { data: dismissalRows, error: dismissalError },
+    { data: savingsRows, error: savingsError },
   ] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase
@@ -141,10 +155,20 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       .from("recurring_suggestion_dismissals")
       .select("cluster_key")
       .eq("user_id", user.id),
+    supabase
+      .from("savings_accounts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at"),
   ]);
 
   const accounts = (accountRows ?? []).map((row) =>
     mapAccount(row as Record<string, unknown>),
+  );
+
+  const savingsSchemaReady = !savingsError;
+  const savingsAccounts = (savingsRows ?? []).map((row) =>
+    mapSavingsAccount(row as Record<string, unknown>),
   );
 
   const recurringPayments = (recurringRows ?? []).map((row) =>
@@ -242,6 +266,8 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     });
   }
 
+  transactions = annotateSavingsTransfers(transactions, savingsAccounts);
+
   const { buildMonthlySpending } = await import("@/lib/finance/aggregates");
 
   return {
@@ -249,11 +275,13 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     transactions,
     categories,
     recurringPayments,
+    savingsAccounts,
     dismissedSuggestionKeys: (dismissalRows ?? []).map((row) =>
       String(row.cluster_key),
     ),
     subscriptionsSchemaReady: !recurringError && !dismissalError,
     categoriesSchemaReady,
+    savingsSchemaReady,
     monthlySpending: buildMonthlySpending(transactions, "fr"),
     bankConnection: connectionRow
       ? mapBankConnection(connectionRow as Record<string, unknown>)
@@ -275,9 +303,11 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       transactions: [],
       categories: [],
       recurringPayments: [],
+      savingsAccounts: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       categoriesSchemaReady: false,
+      savingsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
       isDemo: false,
@@ -290,12 +320,14 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       transactions: MOCK_TRANSACTIONS,
       categories: MOCK_CATEGORIES,
       recurringPayments: [],
+      savingsAccounts: [],
       monthlySpending: MOCK_MONTHLY_SPENDING,
       dismissedSuggestionKeys: [],
       bankConnection: null,
       isDemo: true,
       subscriptionsSchemaReady: true,
       categoriesSchemaReady: true,
+      savingsSchemaReady: true,
     };
   }
 

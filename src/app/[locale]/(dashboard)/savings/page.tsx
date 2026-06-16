@@ -12,8 +12,9 @@ export default async function SavingsPage({
   setRequestLocale(locale);
   const t = await getTranslations("savings");
 
-  const { transactions } = await getFinanceData(locale);
-  const overview = buildSavingsOverview(transactions, locale);
+  const { transactions, savingsAccounts, savingsSchemaReady, isDemo } =
+    await getFinanceData(locale);
+  const overview = buildSavingsOverview(transactions, savingsAccounts, locale);
 
   return (
     <div className="space-y-6">
@@ -22,7 +23,12 @@ export default async function SavingsPage({
         <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
       </div>
 
-      <SavingsAnalytics overview={overview} locale={locale} />
+      <SavingsAnalytics
+        overview={overview}
+        locale={locale}
+        isDemo={isDemo}
+        schemaReady={savingsSchemaReady}
+      />
     </div>
   );
 }

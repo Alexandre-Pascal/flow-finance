@@ -57,6 +57,35 @@ export interface Transaction {
   recurring_payment_id: string | null;
   recurring_payment_manual: boolean;
   note: string | null;
+  /** Affectation manuelle à un compte d'épargne (prime sur les mots-clés). */
+  savings_account_id?: string | null;
+  savings_account_manual?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SavingsAccountKind =
+  | "livret_a"
+  | "ldd"
+  | "lep"
+  | "livret_jeune"
+  | "pel"
+  | "cel"
+  | "other";
+
+export interface SavingsAccount {
+  id: string;
+  user_id: string;
+  name: string;
+  kind: SavingsAccountKind;
+  color: string;
+  base_balance: number;
+  base_date: string;
+  interest_rate: number | null;
+  ceiling: number | null;
+  opening_date: string | null;
+  deposit_keywords: string[];
+  withdrawal_keywords: string[];
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +128,13 @@ export interface Category {
   created_at: string;
 }
 
+/** Mouvement d'épargne associé à une transaction (virement vers/depuis un livret). */
+export interface SavingsTransferRef {
+  account_id: string;
+  account_name: string;
+  direction: "deposit" | "withdrawal";
+}
+
 /** Transaction enrichie pour l'affichage UI (jointure compte). */
 export interface TransactionWithAccount extends Transaction {
   account_name: string;
@@ -106,4 +142,5 @@ export interface TransactionWithAccount extends Transaction {
   recurring_payment_name?: string | null;
   category_name?: string | null;
   category_color?: string | null;
+  savings_transfer?: SavingsTransferRef | null;
 }

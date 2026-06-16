@@ -12,7 +12,8 @@ export default async function TransactionsPage({
   setRequestLocale(locale);
   const t = await getTranslations("transactions");
 
-  const { transactions, categories, isDemo } = await getFinanceData(locale);
+  const { transactions, categories, savingsAccounts, isDemo } =
+    await getFinanceData(locale);
 
   const sorted = [...transactions].sort((a, b) =>
     b.booking_date.localeCompare(a.booking_date),
@@ -31,6 +32,7 @@ export default async function TransactionsPage({
             transactions={sorted}
             categories={categories}
             locale={locale}
+            savingsAccounts={savingsAccounts}
             isDemo={isDemo}
           />
         </CardContent>
