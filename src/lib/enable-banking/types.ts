@@ -56,22 +56,10 @@ export interface EnableBankingTransactionsResponse {
   continuation_key?: string | null;
 }
 
-/**
- * Convertit un montant EB (toujours positif) en montant signé pour l'app.
- * Convention interne : négatif = dépense, positif = revenu.
- * @see https://enablebanking.com/docs/api/reference — credit_debit_indicator
- */
-export function mapSignedTransactionAmount(
-  amount: string | number | undefined,
-  indicator?: "CRDT" | "DBIT",
-): number {
-  const absolute = Math.abs(Number(amount ?? 0));
-  if (indicator === "DBIT") return -absolute;
-  if (indicator === "CRDT") return absolute;
-  return absolute;
-}
-
-/** Priorité des types de solde ISO 20022 retournés par les banques. */
+import {
+  mapSignedTransactionAmount,
+  resolveCreditDebitIndicator,
+} from "@/lib/enable-banking/transaction-sign";
 const BALANCE_TYPE_PRIORITY = ["CLAV", "ITAV", "CLBD", "OPBD", "ITBD"];
 
 /**
@@ -97,12 +85,16 @@ export function pickAccountBalance(
 export function mapEnableBankingTransaction(
   tx: EnableBankingTransactionResource,
 ) {
-  const amount = mapSignedTransactionAmount(
-    tx.transaction_amount?.amount,
-    tx.credit_debit_indicator,
-  );
   const description =
     tx.remittance_information?.join(" ") ?? "Transaction bancaire";
+  const indicator = resolveCreditDebitIndicator(
+    tx.credit_debit_indicator,
+    description,
+  );
+  const amount = mapSignedTransactionAmount(
+    tx.transaction_amount?.amount,
+    indicator,
+  );
 
   return {
     entry_reference: tx.entry_reference ?? `${tx.booking_date}-${amount}-${description}`,
