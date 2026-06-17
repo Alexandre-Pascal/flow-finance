@@ -44,7 +44,9 @@ flowchart TB
 2. Banque → `GET /api/bank/callback?code=...`
 3. Création `bank_connections` + `accounts` dans Supabase
 4. `syncUserTransactions(strategy: longest)` pour l'historique initial
-5. Cron quotidien `POST /api/bank/sync` (header `Authorization: Bearer CRON_SECRET`)
+5. Cron quotidien `GET /api/bank/sync` (header `Authorization: Bearer CRON_SECRET`, strategy `default`)
+6. Sync manuelle utilisateur : `POST /api/bank/sync` depuis Paramètres (`strategy: longest`)
+7. Déclencher le cron à la main : `npx vercel@latest crons run /api/bank/sync` (pas de bouton Run dans le dashboard)
 
 ## Sécurité
 

@@ -25,13 +25,41 @@ CRON_SECRET=secret-aleatoire-pour-cron
 |-------|---------|-------------|
 | `/api/bank/connect` | GET | Démarre OAuth → redirect banque |
 | `/api/bank/callback` | GET | Callback OAuth, crée comptes + sync initiale |
-| `/api/bank/sync` | POST | Sync manuelle (session user) ou cron |
+| `/api/bank/sync` | GET, POST | Sync cron (GET) ou manuelle utilisateur (POST, session) |
 
 ### Cron Vercel
 
-Configuré dans [`vercel.json`](../vercel.json) — 6h UTC quotidien.
+Configuré dans [`vercel.json`](../vercel.json) — **6h UTC** quotidien (`0 6 * * *`).
 
-Vercel envoie `Authorization: Bearer <CRON_SECRET>`.
+- Vercel invoque la route en **GET** (pas POST).
+- Vercel envoie `Authorization: Bearer <CRON_SECRET>` si la variable est définie.
+- Le cron utilise `SUPABASE_SERVICE_ROLE_KEY` (client admin) pour sync tous les utilisateurs actifs.
+- La sync manuelle depuis **Paramètres** (« Synchroniser ») reste un POST avec la session utilisateur (`strategy: longest`).
+
+#### Déclencher manuellement
+
+Il n’y a **pas** de bouton « Run » fiable dans le dashboard Vercel (Observability → Cron Jobs sert surtout au monitoring). Utiliser :
+
+**CLI** (recommandé — nécessite CLI ≥ 54, pas la version globale ancienne) :
+
+```bash
+npx vercel@latest crons run /api/bank/sync
+```
+
+**curl** (équivalent à l’appel cron) :
+
+```bash
+curl -i "https://votre-app.vercel.app/api/bank/sync" \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
+Réponse attendue : `200` avec `{"synced":N,"users":M}`.
+
+**Dans l’app** : Paramètres → « Synchroniser » (sync du compte connecté uniquement, pas le cron multi-utilisateurs).
+
+#### Vérifier les logs
+
+Vercel → Observability → `/api/bank/sync` → Logs, ou filtre `requestPath:/api/bank/sync`.
 
 ## Flux technique
 
