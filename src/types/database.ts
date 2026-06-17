@@ -90,6 +90,20 @@ export interface SavingsAccount {
   updated_at: string;
 }
 
+export type SavingsAdjustmentKind = "cash" | "check" | "interest";
+
+export interface SavingsAdjustment {
+  id: string;
+  user_id: string;
+  savings_account_id: string;
+  kind: SavingsAdjustmentKind;
+  amount: number;
+  adjustment_date: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type RecurringCadence = "monthly" | "yearly";
 
 export interface RecurringSuggestionDismissal {

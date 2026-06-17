@@ -6,9 +6,9 @@ import {
   isValidHexColor,
   normalizeColor,
 } from "@/lib/finance/expense-categories";
-import { SAVINGS_KINDS } from "@/lib/finance/savings";
+import { SAVINGS_ADJUSTMENT_KINDS, SAVINGS_KINDS } from "@/lib/finance/savings";
 import { createClient } from "@/lib/supabase/server";
-import type { SavingsAccountKind } from "@/types/database";
+import type { SavingsAccountKind, SavingsAdjustmentKind } from "@/types/database";
 
 export type SavingsActionError =
   | "demo"
@@ -33,6 +33,7 @@ function isSchemaError(message: string, code?: string): boolean {
     code === "PGRST204" ||
     code === "PGRST205" ||
     normalized.includes("savings_accounts") ||
+    normalized.includes("savings_adjustments") ||
     normalized.includes("does not exist")
   );
 }
@@ -264,6 +265,104 @@ export async function deleteSavingsAccountAction(
 
   const { error } = await supabase
     .from("savings_accounts")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    return isSchemaError(error.message, error.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  revalidateSavingsPages();
+  return {};
+}
+
+function parseAdjustmentKind(raw: string): SavingsAdjustmentKind | null {
+  return (SAVINGS_ADJUSTMENT_KINDS as string[]).includes(raw)
+    ? (raw as SavingsAdjustmentKind)
+    : null;
+}
+
+export async function createSavingsAdjustmentAction(
+  formData: FormData,
+): Promise<{ error?: SavingsActionError }> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const savingsAccountId = String(formData.get("savingsAccountId") ?? "").trim();
+  const kind = parseAdjustmentKind(String(formData.get("kind") ?? ""));
+  const amount = parseAmount(String(formData.get("amount") ?? ""));
+  const adjustmentDate = String(formData.get("adjustmentDate") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+
+  if (!savingsAccountId || !kind || amount === null || amount <= 0) {
+    return { error: "invalid" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  const { data: account, error: accountError } = await supabase
+    .from("savings_accounts")
+    .select("id")
+    .eq("id", savingsAccountId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (accountError) {
+    return isSchemaError(accountError.message, accountError.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+  if (!account) {
+    return { error: "invalid" };
+  }
+
+  const { error } = await supabase.from("savings_adjustments").insert({
+    user_id: user.id,
+    savings_account_id: savingsAccountId,
+    kind,
+    amount,
+    adjustment_date: adjustmentDate || new Date().toISOString().slice(0, 10),
+    note: note || null,
+  });
+
+  if (error) {
+    return isSchemaError(error.message, error.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  revalidateSavingsPages();
+  return {};
+}
+
+export async function deleteSavingsAdjustmentAction(
+  formData: FormData,
+): Promise<{ error?: SavingsActionError }> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) {
+    return { error: "invalid" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  const { error } = await supabase
+    .from("savings_adjustments")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);

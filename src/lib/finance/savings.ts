@@ -11,6 +11,8 @@ import type {
   Account,
   SavingsAccount,
   SavingsAccountKind,
+  SavingsAdjustment,
+  SavingsAdjustmentKind,
   SavingsTransferRef,
   TransactionWithAccount,
 } from "@/types/database";
@@ -143,12 +145,39 @@ export interface SavingsMonthPoint {
   balance: number;
 }
 
+export function mapSavingsAdjustment(
+  row: Record<string, unknown>,
+): SavingsAdjustment {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    savings_account_id: String(row.savings_account_id),
+    kind: row.kind as SavingsAdjustmentKind,
+    amount: Number(row.amount),
+    adjustment_date: String(row.adjustment_date),
+    note: row.note ? String(row.note) : null,
+    created_at: String(row.created_at ?? ""),
+    updated_at: String(row.updated_at ?? ""),
+  };
+}
+
+export const SAVINGS_ADJUSTMENT_KINDS: SavingsAdjustmentKind[] = [
+  "cash",
+  "check",
+  "interest",
+];
+
+export type SavingsMovementSource =
+  | "transfer"
+  | SavingsAdjustmentKind;
+
 export interface SavingsMovementItem {
   id: string;
   date: string;
   monthKey: string;
   label: string;
   amount: number;
+  source: SavingsMovementSource;
 }
 
 export interface SavingsVehicle {
@@ -192,6 +221,7 @@ function enumerateCalendarMonths(from: Date, to: Date): string[] {
 function buildVehicle(
   account: SavingsAccount,
   transactions: TransactionWithAccount[],
+  adjustments: SavingsAdjustment[],
   monthFormatter: Intl.DateTimeFormat,
   monthFullFormatter: Intl.DateTimeFormat,
   now: Date,
@@ -220,6 +250,7 @@ function buildVehicle(
       monthKey: tx.booking_date.slice(0, 7),
       label: tx.description,
       amount: signed,
+      source: "transfer",
     });
 
     if (signed >= 0) {
@@ -227,6 +258,18 @@ function buildVehicle(
     } else {
       totalWithdrawals += Math.abs(signed);
     }
+  }
+
+  for (const adjustment of adjustments) {
+    movements.push({
+      id: adjustment.id,
+      date: adjustment.adjustment_date,
+      monthKey: adjustment.adjustment_date.slice(0, 7),
+      label: adjustment.note?.trim() || "",
+      amount: adjustment.amount,
+      source: adjustment.kind,
+    });
+    totalDeposits += adjustment.amount;
   }
 
   const netByMonth = new Map<string, { deposits: number; withdrawals: number }>();
@@ -308,6 +351,7 @@ function buildVehicle(
 export function buildSavingsOverview(
   transactions: TransactionWithAccount[],
   savingsAccounts: SavingsAccount[],
+  adjustments: SavingsAdjustment[],
   locale: string,
 ): SavingsOverview {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
@@ -318,8 +362,22 @@ export function buildSavingsOverview(
   });
   const now = new Date();
 
+  const adjustmentsByAccount = new Map<string, SavingsAdjustment[]>();
+  for (const adjustment of adjustments) {
+    const list = adjustmentsByAccount.get(adjustment.savings_account_id) ?? [];
+    list.push(adjustment);
+    adjustmentsByAccount.set(adjustment.savings_account_id, list);
+  }
+
   const vehicles = savingsAccounts.map((account) =>
-    buildVehicle(account, transactions, monthFormatter, monthFullFormatter, now),
+    buildVehicle(
+      account,
+      transactions,
+      adjustmentsByAccount.get(account.id) ?? [],
+      monthFormatter,
+      monthFullFormatter,
+      now,
+    ),
   );
 
   return {
@@ -381,7 +439,7 @@ function getWeekStart(date: Date): Date {
 
 function enumerateWeekStarts(from: Date, to: Date): Date[] {
   const weeks: Date[] = [];
-  let cursor = getWeekStart(from);
+  const cursor = getWeekStart(from);
   const end = getWeekStart(to);
 
   while (cursor <= end) {
@@ -648,6 +706,7 @@ export function buildCheckingOverview(
           monthKey: tx.booking_date.slice(0, 7),
           label: tx.description,
           amount: tx.amount,
+          source: "transfer",
         }));
 
       return {

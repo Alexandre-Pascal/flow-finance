@@ -15,6 +15,7 @@ import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring
 import {
   annotateSavingsTransfers,
   mapSavingsAccount,
+  mapSavingsAdjustment,
 } from "@/lib/finance/savings";
 import {
   MOCK_ACCOUNTS,
@@ -29,6 +30,7 @@ import type {
   Category,
   RecurringPayment,
   SavingsAccount,
+  SavingsAdjustment,
   TransactionWithAccount,
 } from "@/types/database";
 
@@ -38,6 +40,7 @@ export interface FinanceData {
   categories: Category[];
   recurringPayments: RecurringPayment[];
   savingsAccounts: SavingsAccount[];
+  savingsAdjustments: SavingsAdjustment[];
   dismissedSuggestionKeys: string[];
   subscriptionsSchemaReady: boolean;
   categoriesSchemaReady: boolean;
@@ -122,6 +125,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       categories: [],
       recurringPayments: [],
       savingsAccounts: [],
+      savingsAdjustments: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       categoriesSchemaReady: false,
@@ -138,6 +142,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     { data: recurringRows, error: recurringError },
     { data: dismissalRows, error: dismissalError },
     { data: savingsRows, error: savingsError },
+    { data: adjustmentRows, error: adjustmentError },
   ] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase
@@ -160,15 +165,23 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
       .select("*")
       .eq("user_id", user.id)
       .order("created_at"),
+    supabase
+      .from("savings_adjustments")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("adjustment_date", { ascending: false }),
   ]);
 
   const accounts = (accountRows ?? []).map((row) =>
     mapAccount(row as Record<string, unknown>),
   );
 
-  const savingsSchemaReady = !savingsError;
+  const savingsSchemaReady = !savingsError && !adjustmentError;
   const savingsAccounts = (savingsRows ?? []).map((row) =>
     mapSavingsAccount(row as Record<string, unknown>),
+  );
+  const savingsAdjustments = (adjustmentRows ?? []).map((row) =>
+    mapSavingsAdjustment(row as Record<string, unknown>),
   );
 
   const recurringPayments = (recurringRows ?? []).map((row) =>
@@ -276,6 +289,7 @@ async function fetchFromSupabase(user: AppUser): Promise<FinanceData> {
     categories,
     recurringPayments,
     savingsAccounts,
+    savingsAdjustments,
     dismissedSuggestionKeys: (dismissalRows ?? []).map((row) =>
       String(row.cluster_key),
     ),
@@ -304,6 +318,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       categories: [],
       recurringPayments: [],
       savingsAccounts: [],
+      savingsAdjustments: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       categoriesSchemaReady: false,
@@ -321,6 +336,7 @@ export async function getFinanceData(locale = "fr"): Promise<FinanceData> {
       categories: MOCK_CATEGORIES,
       recurringPayments: [],
       savingsAccounts: [],
+      savingsAdjustments: [],
       monthlySpending: MOCK_MONTHLY_SPENDING,
       dismissedSuggestionKeys: [],
       bankConnection: null,

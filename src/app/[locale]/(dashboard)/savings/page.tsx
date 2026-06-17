@@ -20,12 +20,18 @@ export default async function SavingsPage({
     accounts,
     transactions,
     savingsAccounts,
+    savingsAdjustments,
     savingsSchemaReady,
     bankConnection,
     isDemo,
   } = await getFinanceData(locale);
 
-  const overview = buildSavingsOverview(transactions, savingsAccounts, locale);
+  const overview = buildSavingsOverview(
+    transactions,
+    savingsAccounts,
+    savingsAdjustments,
+    locale,
+  );
   const checking = buildCheckingOverview(accounts, transactions, locale);
 
   const bankReady = isEnableBankingConfigured();

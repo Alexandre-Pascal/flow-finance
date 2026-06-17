@@ -31,7 +31,9 @@ import {
 } from "recharts";
 import {
   createSavingsAccountAction,
+  createSavingsAdjustmentAction,
   deleteSavingsAccountAction,
+  deleteSavingsAdjustmentAction,
   updateSavingsAccountAction,
   type SavingsActionError,
 } from "@/app/actions/savings";
@@ -60,17 +62,19 @@ import { useRouter } from "@/i18n/navigation";
 import { type MonthlyPeriod } from "@/lib/finance/aggregates";
 import { CATEGORY_COLOR_PALETTE, normalizeColor } from "@/lib/finance/expense-categories";
 import {
+  SAVINGS_ADJUSTMENT_KINDS,
   SAVINGS_KINDS,
   SAVINGS_KIND_COLORS,
   buildChartSeriesForPeriod,
   type CheckingVehicle,
   type SavingsChartPoint,
+  type SavingsMovementSource,
   type SavingsOverview,
   type SavingsVehicle,
 } from "@/lib/finance/savings";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { SavingsAccount, SavingsAccountKind } from "@/types/database";
+import type { SavingsAccount, SavingsAccountKind, SavingsAdjustmentKind } from "@/types/database";
 
 interface SavingsAnalyticsProps {
   overview: SavingsOverview;
@@ -556,6 +560,128 @@ function BalanceChart({
   );
 }
 
+function movementDefaultLabel(
+  source: SavingsMovementSource,
+  t: ReturnType<typeof useTranslations<"savings">>,
+): string {
+  switch (source) {
+    case "cash":
+      return t("movementCash");
+    case "check":
+      return t("movementCheck");
+    case "interest":
+      return t("movementInterest");
+    default:
+      return t("movementTransfer");
+  }
+}
+
+function SavingsAdjustmentDialog({
+  account,
+  open,
+  onOpenChange,
+  isPending,
+  onSubmit,
+}: {
+  account: SavingsAccount;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  isPending: boolean;
+  onSubmit: (formData: FormData) => void;
+}) {
+  const t = useTranslations("savings");
+  const today = new Date().toISOString().slice(0, 10);
+  const [kind, setKind] = useState<SavingsAdjustmentKind>("cash");
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
+            formData.set("savingsAccountId", account.id);
+            formData.set("kind", kind);
+            onSubmit(formData);
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t("adjustmentFormTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("adjustmentFormDescription", { name: account.name })}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor={`adj-kind-${account.id}`}>{t("adjustmentKindLabel")}</Label>
+              <Select value={kind} onValueChange={(v) => setKind(v as SavingsAdjustmentKind)}>
+                <SelectTrigger id={`adj-kind-${account.id}`} className="cursor-pointer">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SAVINGS_ADJUSTMENT_KINDS.map((value) => (
+                    <SelectItem key={value} value={value} className="cursor-pointer">
+                      {t(`adjustmentKind_${value}` as never)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`adj-amount-${account.id}`}>{t("adjustmentAmountLabel")}</Label>
+                <Input
+                  id={`adj-amount-${account.id}`}
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  disabled={isPending}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor={`adj-date-${account.id}`}>{t("adjustmentDateLabel")}</Label>
+                <Input
+                  id={`adj-date-${account.id}`}
+                  name="adjustmentDate"
+                  type="date"
+                  defaultValue={today}
+                  disabled={isPending}
+                  required
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`adj-note-${account.id}`}>{t("adjustmentNoteLabel")}</Label>
+              <Input
+                id={`adj-note-${account.id}`}
+                name="note"
+                placeholder={t("adjustmentNotePlaceholder")}
+                disabled={isPending}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost" className="cursor-pointer" disabled={isPending}>
+                {t("cancel")}
+              </Button>
+            </DialogClose>
+            <Button type="submit" className="cursor-pointer" disabled={isPending}>
+              {t("adjustmentSubmit")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function VehicleCard({
   vehicle,
   period,
@@ -574,6 +700,10 @@ function VehicleCard({
   onDelete: () => void;
 }) {
   const t = useTranslations("savings");
+  const router = useRouter();
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [movementPending, startMovementTransition] = useTransition();
+  const pending = isPending || movementPending;
   const { account } = vehicle;
   const chartData = useMemo(
     () =>
@@ -603,6 +733,25 @@ function VehicleCard({
     account.ceiling && account.ceiling > 0
       ? Math.min(100, Math.round((vehicle.balance / account.ceiling) * 100))
       : null;
+
+  function handleCreateAdjustment(formData: FormData) {
+    startMovementTransition(async () => {
+      const result = await createSavingsAdjustmentAction(formData);
+      if (!result.error) {
+        setAdjustmentOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  function handleDeleteAdjustment(id: string) {
+    const formData = new FormData();
+    formData.set("id", id);
+    startMovementTransition(async () => {
+      await deleteSavingsAdjustmentAction(formData);
+      router.refresh();
+    });
+  }
 
   return (
     <Card className="group overflow-hidden">
@@ -710,9 +859,22 @@ function VehicleCard({
         </div>
 
         <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("recentMovements")}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {t("recentMovements")}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 cursor-pointer gap-1 px-2 text-xs"
+              disabled={isDemo || pending}
+              onClick={() => setAdjustmentOpen(true)}
+            >
+              <Plus className="size-3.5" aria-hidden />
+              {t("addAdjustment")}
+            </Button>
+          </div>
           {vehicle.movements.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
               {t("noMovements")}
@@ -722,31 +884,74 @@ function VehicleCard({
               {vehicle.movements.map((movement) => (
                 <li
                   key={movement.id}
-                  className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
+                  className="group/movement flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-foreground">{movement.label}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(movement.date, locale)}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "shrink-0 tabular-nums",
-                      movement.amount >= 0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-foreground",
+                    {movement.label.trim() ? (
+                      <>
+                        <p className="truncate text-foreground">{movement.label}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(movement.date, locale)}
+                          {movement.source !== "transfer" ? (
+                            <span className="ml-1.5">
+                              · {movementDefaultLabel(movement.source, t)}
+                            </span>
+                          ) : null}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="truncate text-foreground">
+                          {movementDefaultLabel(movement.source, t)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(movement.date, locale)}
+                        </p>
+                      </>
                     )}
-                  >
-                    {movement.amount >= 0 ? "+" : ""}
-                    {formatCurrency(movement.amount, locale)}
-                  </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        movement.source === "interest"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : movement.amount >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-foreground",
+                      )}
+                    >
+                      {movement.amount >= 0 ? "+" : ""}
+                      {formatCurrency(movement.amount, locale)}
+                    </span>
+                    {movement.source !== "transfer" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="size-7 cursor-pointer text-muted-foreground opacity-0 hover:text-destructive group-hover/movement:opacity-100"
+                        disabled={isDemo || pending}
+                        aria-label={t("deleteAdjustment")}
+                        onClick={() => handleDeleteAdjustment(movement.id)}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
       </CardContent>
+
+      <SavingsAdjustmentDialog
+        account={account}
+        open={adjustmentOpen}
+        onOpenChange={setAdjustmentOpen}
+        isPending={pending}
+        onSubmit={handleCreateAdjustment}
+      />
     </Card>
   );
 }
