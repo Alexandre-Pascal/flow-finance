@@ -15,10 +15,26 @@ function getRedirectBase(request: Request): { origin: string; locale: string } {
   return { origin: appUrl, locale };
 }
 
+function isVercelCronRequest(request: Request): boolean {
+  return (request.headers.get("user-agent") ?? "").includes("vercel-cron");
+}
+
+/** Vercel Cron invoque les routes en GET, pas en POST. */
+export async function GET(request: Request) {
+  return POST(request);
+}
+
 export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get("authorization");
-  const isCron = cronSecret && authHeader === `Bearer ${cronSecret}`;
+  const isCron = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+
+  if (isVercelCronRequest(request) && !isCron) {
+    return NextResponse.json(
+      { error: "Cron unauthorized — configure CRON_SECRET in Vercel." },
+      { status: 401 },
+    );
+  }
 
   if (!isEnableBankingConfigured()) {
     if (isCron) {
