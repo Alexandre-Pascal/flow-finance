@@ -61,6 +61,9 @@ function mapAccount(row: Record<string, unknown>): Account {
     type: row.type as Account["type"],
     balance: Number(row.balance),
     currency: String(row.currency),
+    last_transactions_synced_at: row.last_transactions_synced_at
+      ? String(row.last_transactions_synced_at)
+      : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };

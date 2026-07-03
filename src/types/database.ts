@@ -39,6 +39,7 @@ export interface Account {
   type: AccountType;
   balance: number;
   currency: string;
+  last_transactions_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }

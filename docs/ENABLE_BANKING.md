@@ -68,6 +68,10 @@ Vercel → Observability → `/api/bank/sync` → Logs, ou filtre `requestPath:/
 3. `POST /sessions` avec `code` → `session_id` + comptes
 4. `GET /accounts/{uid}/transactions` avec `strategy=longest` puis `default`
 
+### Sync incrémentale
+
+Le cron (`strategy=default`) utilise `accounts.last_transactions_synced_at` (pas `updated_at`, qui est réinitialisé à chaque refresh de solde) avec un chevauchement de 3 jours pour rattraper les transactions postées en retard. Première sync : pas de `date_from` (historique complet).
+
 ## Limites connues
 
 | Limite | Détail |

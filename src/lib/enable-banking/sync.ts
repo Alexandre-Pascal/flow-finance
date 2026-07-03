@@ -11,6 +11,7 @@ import {
   pickAccountBalance,
   type EnableBankingTransactionResource,
 } from "@/lib/enable-banking/types";
+import { computeTransactionDateFrom } from "@/lib/enable-banking/sync-date";
 import { inferIndicatorsFromBalanceSequence } from "@/lib/enable-banking/transaction-sign";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
@@ -142,7 +143,7 @@ export async function syncUserTransactions(
 
   const { data: accounts, error: accountsError } = await supabase
     .from("accounts")
-    .select("id, external_uid, updated_at")
+    .select("id, external_uid, last_transactions_synced_at")
     .eq("user_id", userId)
     .not("external_uid", "is", null);
 
@@ -154,10 +155,10 @@ export async function syncUserTransactions(
   for (const account of accounts) {
     if (!account.external_uid) continue;
 
-    const dateFrom =
-      strategy === "default"
-        ? new Date(account.updated_at).toISOString().slice(0, 10)
-        : undefined;
+    const dateFrom = computeTransactionDateFrom(
+      account.last_transactions_synced_at,
+      strategy,
+    );
 
     const apiTransactions: EnableBankingTransactionResource[] = [];
     let continuationKey: string | undefined;
@@ -187,6 +188,13 @@ export async function syncUserTransactions(
       if (error) throw error;
       synced += rows.length;
     }
+
+    const { error: syncTimestampError } = await supabase
+      .from("accounts")
+      .update({ last_transactions_synced_at: new Date().toISOString() })
+      .eq("id", account.id);
+
+    if (syncTimestampError) throw syncTimestampError;
   }
 
   return { synced };
