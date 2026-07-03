@@ -218,7 +218,7 @@ function enumerateCalendarMonths(from: Date, to: Date): string[] {
   return keys;
 }
 
-function buildVehicle(
+export function buildVehicle(
   account: SavingsAccount,
   transactions: TransactionWithAccount[],
   adjustments: SavingsAdjustment[],
@@ -230,9 +230,8 @@ function buildVehicle(
   let totalDeposits = 0;
   let totalWithdrawals = 0;
 
-  // On prend en compte TOUS les virements identifiés pour ce compte, quelle que
-  // soit leur date : le solde saisi par l'utilisateur est le solde *actuel*, on
-  // reconstruit donc l'historique en remontant le temps à partir de ce solde.
+  // Le solde saisi est un ancrage à base_date ; on reconstruit l'historique
+  // avant et après via les virements et ajustements détectés.
   for (const tx of transactions) {
     const ref = tx.savings_transfer;
     if (!ref || ref.account_id !== account.id) {

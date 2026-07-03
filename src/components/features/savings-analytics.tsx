@@ -801,7 +801,15 @@ function VehicleCard({
             <p className="text-2xl font-semibold tabular-nums">
               {formatCurrency(vehicle.balance, locale)}
             </p>
-            <p className="text-xs text-muted-foreground">{t("currentBalance")}</p>
+            <p className="text-xs text-muted-foreground">{t("computedBalance")}</p>
+            {Math.abs(vehicle.balance - account.base_balance) > 0.009 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("anchorBalanceHint", {
+                  amount: formatCurrency(account.base_balance, locale),
+                  date: formatDate(account.base_date, locale),
+                })}
+              </p>
+            ) : null}
           </div>
           {account.interest_rate != null ? (
             <div className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -1245,30 +1253,37 @@ function SavingsAccountForm({
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="savings-base-balance">{t("baseBalanceLabel")}</Label>
-            <Input
-              id="savings-base-balance"
-              name="baseBalance"
-              type="number"
-              step="0.01"
-              inputMode="decimal"
-              defaultValue={account?.base_balance ?? ""}
-              placeholder="0,00"
-              disabled={isPending}
-              required
-            />
+        <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
+          <div>
+            <p className="text-sm font-medium">{t("anchorPointTitle")}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{t("anchorPointHint")}</p>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="savings-base-date">{t("baseDateLabel")}</Label>
-            <Input
-              id="savings-base-date"
-              name="baseDate"
-              type="date"
-              defaultValue={account?.base_date ?? today}
-              disabled={isPending}
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="savings-base-balance">{t("baseBalanceLabel")}</Label>
+              <Input
+                id="savings-base-balance"
+                name="baseBalance"
+                type="number"
+                step="0.01"
+                inputMode="decimal"
+                defaultValue={account?.base_balance ?? ""}
+                placeholder="0,00"
+                disabled={isPending}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="savings-base-date">{t("baseDateLabel")}</Label>
+              <Input
+                id="savings-base-date"
+                name="baseDate"
+                type="date"
+                defaultValue={account?.base_date ?? today}
+                disabled={isPending}
+                required
+              />
+            </div>
           </div>
         </div>
 
