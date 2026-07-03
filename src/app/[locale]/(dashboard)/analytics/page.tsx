@@ -31,6 +31,7 @@ export default async function AnalyticsPage({
     transactions,
     locale,
     isPayrollTransfer,
+    { budgetMonthShift: true },
   );
   const subscriptionData = buildMonthlySubscriptionOverview(
     transactions,

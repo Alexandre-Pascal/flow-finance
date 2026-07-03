@@ -4,6 +4,7 @@
  */
 
 import type { Account, TransactionWithAccount } from "@/types/database";
+import { getIncomeMonthKey } from "@/lib/finance/payroll-budget";
 
 export type MonthlyPeriod = 1 | 3 | 6 | 12 | "all";
 
@@ -114,7 +115,7 @@ export function buildMonthlyOverview(
       continue;
     }
 
-    const key = tx.booking_date.slice(0, 7);
+    const key = getIncomeMonthKey(tx);
     const bucket = buckets.get(key) ?? { income: 0, expenses: 0 };
 
     if (tx.amount > 0) {

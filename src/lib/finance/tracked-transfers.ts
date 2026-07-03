@@ -4,6 +4,7 @@
  */
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
+import { shiftMonthKey } from "@/lib/finance/payroll-budget";
 import type { TransactionWithAccount } from "@/types/database";
 
 /** Fragment distinctif du libellé bancaire (Crédit Agricole). */
@@ -78,6 +79,7 @@ export function buildMonthlyTransferOverview(
   transactions: TransactionWithAccount[],
   locale: string,
   predicate: (tx: TransactionWithAccount) => boolean,
+  options?: { budgetMonthShift?: boolean },
 ): MonthlyTransferOverview[] {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
   const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
@@ -94,7 +96,11 @@ export function buildMonthlyTransferOverview(
   const buckets = new Map<string, { amount: number; transferCount: number }>();
 
   for (const tx of matched) {
-    const key = tx.booking_date.slice(0, 7);
+    const bookingMonth = tx.booking_date.slice(0, 7);
+    const key =
+      options?.budgetMonthShift && tx.amount > 0
+        ? shiftMonthKey(bookingMonth, 1)
+        : bookingMonth;
     const bucket = buckets.get(key) ?? { amount: 0, transferCount: 0 };
     bucket.amount += tx.amount;
     bucket.transferCount += 1;

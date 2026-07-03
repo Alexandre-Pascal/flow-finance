@@ -29,6 +29,7 @@ export function PayrollTransfersPanel(props: PayrollTransfersPanelProps) {
       translationPrefix="payrollTransfer"
       icon={Briefcase}
       accentClassName="border-[var(--chart-2)]/30 bg-gradient-to-br from-[var(--chart-2)]/5 via-card to-card"
+      budgetMonthShift
     />
   );
 }

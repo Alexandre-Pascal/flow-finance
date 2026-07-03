@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
+import { getIncomeMonthKey } from "@/lib/finance/payroll-budget";
 import {
   sliceMonthlyTransferOverview,
   sumMonthlyTransferOverview,
@@ -47,6 +48,8 @@ interface TrackedTransfersPanelProps {
   translationPrefix: TransferTranslationPrefix;
   icon: LucideIcon;
   accentClassName?: string;
+  /** Salaire compté au mois budgétaire suivant (reçu en juillet → affiché en août). */
+  budgetMonthShift?: boolean;
 }
 
 function TransferTooltip({
@@ -89,6 +92,7 @@ export function TrackedTransfersPanel({
   translationPrefix,
   icon: Icon,
   accentClassName = "border-accent/30 bg-gradient-to-br from-accent/5 via-card to-card",
+  budgetMonthShift = false,
 }: TrackedTransfersPanelProps) {
   const t = useTranslations("analytics");
   const title = t(`${translationPrefix}Title`);
@@ -119,11 +123,15 @@ export function TrackedTransfersPanel({
   const selectedTransfers = useMemo(
     () =>
       transactions
-        .filter(
-          (tx) => predicate(tx) && tx.booking_date.startsWith(selectedMonthKey),
-        )
+        .filter((tx) => {
+          if (!predicate(tx)) return false;
+          if (budgetMonthShift) {
+            return getIncomeMonthKey(tx) === selectedMonthKey;
+          }
+          return tx.booking_date.startsWith(selectedMonthKey);
+        })
         .sort((a, b) => b.booking_date.localeCompare(a.booking_date)),
-    [transactions, selectedMonthKey, predicate],
+    [transactions, selectedMonthKey, predicate, budgetMonthShift],
   );
 
   const averagePerActiveMonth =

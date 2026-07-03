@@ -11,6 +11,7 @@ import {
   getCurrentMonthTransactions,
   sumAccountBalances,
 } from "@/lib/finance/aggregates";
+import { sumBudgetMonthIncome } from "@/lib/finance/payroll-budget";
 import { getFinanceData } from "@/lib/finance/queries";
 import { formatCurrency } from "@/lib/format";
 
@@ -33,9 +34,7 @@ export default async function DashboardPage({
   const spending = monthTx
     .filter((tx) => tx.amount < 0)
     .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-  const income = monthTx
-    .filter((tx) => tx.amount > 0)
-    .reduce((sum, tx) => sum + tx.amount, 0);
+  const income = sumBudgetMonthIncome(transactions);
 
   const recent = [...transactions]
     .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
