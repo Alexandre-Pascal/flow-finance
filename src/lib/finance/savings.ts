@@ -199,6 +199,47 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function lastDayOfMonthKey(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return formatDateKey(new Date(year, month, 0));
+}
+
+/**
+ * Solde à une date donnée à partir d'un ancrage (base_date, base_balance).
+ * Mouvements après l'ancrage s'ajoutent ; avant l'ancrage on remonte dans le temps.
+ */
+function computeBalanceAtDate(
+  baseBalance: number,
+  baseDate: string,
+  movements: Pick<SavingsMovementItem, "date" | "amount">[],
+  atDate: string,
+): number {
+  if (atDate > baseDate) {
+    return round(
+      baseBalance +
+        movements
+          .filter((m) => m.date > baseDate && m.date <= atDate)
+          .reduce((sum, m) => sum + m.amount, 0),
+    );
+  }
+  if (atDate < baseDate) {
+    return round(
+      baseBalance -
+        movements
+          .filter((m) => m.date > atDate && m.date <= baseDate)
+          .reduce((sum, m) => sum + m.amount, 0),
+    );
+  }
+  return round(baseBalance);
+}
+
 function monthKeyFromDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -295,11 +336,12 @@ export function buildVehicle(
   const fromDate = startDate < baseDate ? startDate : baseDate;
   const monthKeys = enumerateCalendarMonths(fromDate, now);
 
-  // On ancre le solde de base sur son mois, puis on propage : vers l'avant en
-  // ajoutant les mouvements, vers l'arrière en les retranchant.
-  const baseIndex = Math.max(
-    0,
-    monthKeys.findIndex((key) => key >= baseMonthKey),
+  const todayKey = formatDateKey(now);
+  const balance = computeBalanceAtDate(
+    account.base_balance,
+    account.base_date,
+    movements,
+    todayKey,
   );
 
   const months = monthKeys.map((monthKey) => {
@@ -307,6 +349,7 @@ export function buildVehicle(
     const date = new Date(year, month - 1, 1);
     const bucket = netByMonth.get(monthKey) ?? { deposits: 0, withdrawals: 0 };
     const net = round(bucket.deposits - bucket.withdrawals);
+    const monthEndKey = lastDayOfMonthKey(monthKey);
     return {
       monthKey,
       month: monthFormatter.format(date),
@@ -314,25 +357,16 @@ export function buildVehicle(
       deposits: round(bucket.deposits),
       withdrawals: round(bucket.withdrawals),
       net,
-      balance: 0,
+      balance: computeBalanceAtDate(
+        account.base_balance,
+        account.base_date,
+        movements,
+        monthEndKey > todayKey ? todayKey : monthEndKey,
+      ),
     };
   });
 
-  const balances = new Array<number>(months.length).fill(0);
-  balances[baseIndex] = round(account.base_balance);
-  for (let i = baseIndex + 1; i < months.length; i += 1) {
-    balances[i] = round(balances[i - 1] + months[i].net);
-  }
-  for (let i = baseIndex - 1; i >= 0; i -= 1) {
-    balances[i] = round(balances[i + 1] - months[i + 1].net);
-  }
-
-  const monthly: SavingsMonthPoint[] = months.map((point, index) => ({
-    ...point,
-    balance: balances[index],
-  }));
-
-  const balance = monthly.length > 0 ? monthly[monthly.length - 1].balance : round(account.base_balance);
+  const monthly: SavingsMonthPoint[] = months;
 
   movements.sort((a, b) => b.date.localeCompare(a.date));
 
@@ -406,13 +440,6 @@ export interface SavingsChartPoint {
   withdrawals: number;
   net: number;
   balance: number;
-}
-
-function formatDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function enumerateDays(from: Date, to: Date): string[] {

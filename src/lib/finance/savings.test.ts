@@ -65,4 +65,35 @@ describe("buildVehicle", () => {
 
     expect(vehicle.balance).toBe(1200);
   });
+
+  it("ignores deposits before anchor date in the same month", () => {
+    const vehicle = buildVehicle(
+      account,
+      [transfer(50, "2025-06-10"), transfer(100, "2025-06-20")],
+      [],
+      monthFormatter,
+      monthFullFormatter,
+      new Date("2025-08-01T12:00:00Z"),
+    );
+
+    expect(vehicle.balance).toBe(1100);
+  });
+
+  it("matches user example: anchor 1627.77 on 2026-06-15 plus 100 after", () => {
+    const juneAccount: SavingsAccount = {
+      ...account,
+      base_balance: 1627.77,
+      base_date: "2026-06-15",
+    };
+    const vehicle = buildVehicle(
+      juneAccount,
+      [transfer(100, "2026-06-20")],
+      [],
+      monthFormatter,
+      monthFullFormatter,
+      new Date("2026-06-25T12:00:00Z"),
+    );
+
+    expect(vehicle.balance).toBe(1727.77);
+  });
 });
