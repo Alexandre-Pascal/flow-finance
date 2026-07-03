@@ -215,11 +215,15 @@ export async function syncUserFinanceData(
       ? await remapStoredTransactions(userId, supabaseClient)
       : { remapped: 0 };
 
-  const { matched } = await rematchRecurringPaymentsForUser(
-    userId,
-    supabaseClient,
-  );
-  await rematchCategoriesForUser(userId, supabaseClient);
+  let matched = 0;
+  if (synced > 0) {
+    const rematchResult = await rematchRecurringPaymentsForUser(
+      userId,
+      supabaseClient,
+    );
+    matched = rematchResult.matched;
+    await rematchCategoriesForUser(userId, supabaseClient);
+  }
 
   return { synced, remapped, matched };
 }

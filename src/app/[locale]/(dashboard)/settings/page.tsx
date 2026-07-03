@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { LanguageSwitcher } from "@/components/features/language-switcher";
+import { BankSyncButtons } from "@/components/features/bank-sync-buttons";
 import { CategoriesManager } from "@/components/features/categories-manager";
 import { SubscriptionsManager } from "@/components/features/subscriptions-manager";
 import { Button } from "@/components/ui/button";
@@ -100,17 +101,7 @@ export default async function SettingsPage({
                 </Button>
               </form>
             ) : null}
-            {bankReady && isBankLinked ? (
-              <form action="/api/bank/sync" method="post">
-                <Button
-                  type="submit"
-                  variant="outline"
-                  className="cursor-pointer"
-                >
-                  {t("syncNow")}
-                </Button>
-              </form>
-            ) : null}
+            {bankReady && isBankLinked ? <BankSyncButtons /> : null}
           </div>
         </CardContent>
       </Card>

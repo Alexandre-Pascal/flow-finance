@@ -87,7 +87,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await syncUserFinanceData(user.id, "longest");
+    const url = new URL(request.url);
+    const strategy = url.searchParams.get("full") === "1" ? "longest" : "default";
+    const result = await syncUserFinanceData(user.id, strategy);
     const params = new URLSearchParams({ synced: String(result.synced) });
     if (result.remapped > 0) {
       params.set("remapped", String(result.remapped));

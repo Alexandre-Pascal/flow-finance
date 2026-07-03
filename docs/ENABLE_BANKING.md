@@ -34,7 +34,7 @@ Configuré dans [`vercel.json`](../vercel.json) — **6h UTC** quotidien (`0 6 *
 - Vercel invoque la route en **GET** (pas POST).
 - Vercel envoie `Authorization: Bearer <CRON_SECRET>` si la variable est définie.
 - Le cron utilise `SUPABASE_SERVICE_ROLE_KEY` (client admin) pour sync tous les utilisateurs actifs.
-- La sync manuelle depuis **Paramètres** (« Synchroniser ») reste un POST avec la session utilisateur (`strategy: longest`).
+- La sync manuelle depuis **Paramètres** (« Synchroniser ») reste un POST avec la session utilisateur (`strategy: default`, incrémentale). « Resynchroniser tout l'historique » utilise `?full=1` (`strategy: longest` + remap).
 
 #### Déclencher manuellement
 
