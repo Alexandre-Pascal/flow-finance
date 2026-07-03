@@ -8,6 +8,7 @@ import {
   buildCryptoHoldingViews,
   buildCryptoPortfolioSummary,
   mapCryptoHolding,
+  mapCryptoPortfolioSettings,
   mapCryptoTransaction,
   type CryptoHoldingView,
   type CryptoPortfolioSummary,
@@ -20,27 +21,30 @@ export interface CryptoPortfolioData {
   holdings: CryptoHoldingView[];
   transactions: CryptoTransaction[];
   summary: CryptoPortfolioSummary;
+  totalInvestedEur: number;
   schemaReady: boolean;
   isDemo: boolean;
 }
 
+const EMPTY_SUMMARY: CryptoPortfolioSummary = {
+  currentValueEur: 0,
+  totalInvestedEur: 2163,
+  latentGainEur: 0,
+  flatTaxEur: 0,
+  netIfSoldTodayEur: 0,
+  holdingCount: 0,
+  pricedCount: 0,
+};
+
 export async function getCryptoPortfolioData(): Promise<CryptoPortfolioData> {
   const user = await getAppUser();
-  const emptySummary = {
-    currentValueEur: 0,
-    costBasisEur: 0,
-    latentGainEur: 0,
-    flatTaxEur: 0,
-    netIfSoldTodayEur: 0,
-    holdingCount: 0,
-    pricedCount: 0,
-  };
 
   if (!user || user.isDemo) {
     return {
       holdings: [],
       transactions: [],
-      summary: emptySummary,
+      summary: EMPTY_SUMMARY,
+      totalInvestedEur: 2163,
       schemaReady: false,
       isDemo: true,
     };
@@ -51,7 +55,8 @@ export async function getCryptoPortfolioData(): Promise<CryptoPortfolioData> {
     return {
       holdings: [],
       transactions: [],
-      summary: emptySummary,
+      summary: EMPTY_SUMMARY,
+      totalInvestedEur: 2163,
       schemaReady: false,
       isDemo: false,
     };
@@ -69,16 +74,27 @@ export async function getCryptoPortfolioData(): Promise<CryptoPortfolioData> {
     .eq("user_id", user.id)
     .order("transaction_date", { ascending: false });
 
-  const schemaReady = !holdingsError && !transactionsError;
+  const { data: settingsRow, error: settingsError } = await supabase
+    .from("crypto_portfolio_settings")
+    .select("total_invested_eur")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const schemaReady = !holdingsError && !transactionsError && !settingsError;
   if (!schemaReady) {
     return {
       holdings: [],
       transactions: [],
-      summary: emptySummary,
+      summary: EMPTY_SUMMARY,
+      totalInvestedEur: 2163,
       schemaReady: false,
       isDemo: false,
     };
   }
+
+  const { totalInvestedEur } = mapCryptoPortfolioSettings(
+    settingsRow as Record<string, unknown> | null,
+  );
 
   const holdings = (holdingRows ?? []).map((row) =>
     mapCryptoHolding(row as Record<string, unknown>),
@@ -95,12 +111,13 @@ export async function getCryptoPortfolioData(): Promise<CryptoPortfolioData> {
   }
 
   const views = buildCryptoHoldingViews(holdings, pricesEur);
-  const summary = buildCryptoPortfolioSummary(views);
+  const summary = buildCryptoPortfolioSummary(views, totalInvestedEur);
 
   return {
     holdings: views,
     transactions,
     summary,
+    totalInvestedEur,
     schemaReady: true,
     isDemo: false,
   };

@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { computeFlatTax } from "./flat-tax";
+import { computePortfolioFlatTax } from "./flat-tax";
 
-describe("computeFlatTax", () => {
-  it("computes PFU on latent gain", () => {
-    const result = computeFlatTax(1, 20000, 25000);
-    expect(result.currentValueEur).toBe(25000);
-    expect(result.latentGainEur).toBe(5000);
-    expect(result.flatTaxEur).toBe(1500);
-    expect(result.netIfSoldTodayEur).toBe(23500);
+describe("computePortfolioFlatTax", () => {
+  it("computes PFU on portfolio gain (total actuel - investi)", () => {
+    const result = computePortfolioFlatTax(3500, 2163);
+    expect(result.latentGainEur).toBe(1337);
+    expect(result.flatTaxEur).toBe(401.1);
+    expect(result.netIfSoldTodayEur).toBe(3098.9);
   });
 
-  it("returns zero tax on loss", () => {
-    const result = computeFlatTax(1, 25000, 20000);
+  it("returns zero tax when portfolio is at a loss", () => {
+    const result = computePortfolioFlatTax(2000, 2163);
     expect(result.latentGainEur).toBe(0);
     expect(result.flatTaxEur).toBe(0);
-    expect(result.netIfSoldTodayEur).toBe(20000);
+    expect(result.netIfSoldTodayEur).toBe(2000);
   });
 });

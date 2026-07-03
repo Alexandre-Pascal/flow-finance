@@ -13,6 +13,7 @@ import {
   createCryptoTransactionAction,
   deleteCryptoHoldingAction,
   importCryptoFileAction,
+  updateCryptoTotalInvestedAction,
   type CryptoActionError,
 } from "@/app/actions/crypto";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ interface CryptoPortfolioProps {
   holdings: CryptoHoldingView[];
   transactions: CryptoTransaction[];
   summary: CryptoPortfolioSummary;
+  totalInvestedEur: number;
   locale: string;
   isDemo: boolean;
   schemaReady: boolean;
@@ -72,6 +74,7 @@ export function CryptoPortfolio({
   holdings,
   transactions,
   summary,
+  totalInvestedEur,
   locale,
   isDemo,
   schemaReady,
@@ -128,6 +131,18 @@ export function CryptoPortfolio({
     });
   }
 
+  function handleUpdateTotalInvested(formData: FormData) {
+    setError(null);
+    startTransition(async () => {
+      const result = await updateCryptoTotalInvestedAction(formData);
+      if (result.error) {
+        setError(errorMessage(t, result.error));
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   async function handleRefreshPrices() {
     setRefreshingPrices(true);
     setError(null);
@@ -162,9 +177,43 @@ export function CryptoPortfolio({
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <Card>
+        <CardContent className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{t("totalInvestedTitle")}</p>
+            <p className="text-xs text-muted-foreground">{t("totalInvestedHint")}</p>
+          </div>
+          <form
+            className="flex w-full max-w-sm items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              handleUpdateTotalInvested(new FormData(event.currentTarget));
+            }}
+          >
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="crypto-total-invested" className="sr-only">
+                {t("totalInvestedLabel")}
+              </Label>
+              <Input
+                id="crypto-total-invested"
+                name="totalInvested"
+                type="number"
+                step="0.01"
+                min="0"
+                defaultValue={totalInvestedEur}
+                disabled={isPending || isDemo}
+                required
+              />
+            </div>
+            <Button type="submit" variant="outline" className="cursor-pointer" disabled={isPending || isDemo}>
+              {t("save")}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label={t("kpiCurrentValue")} value={formatCurrency(summary.currentValueEur, locale)} />
-        <KpiCard label={t("kpiInvested")} value={formatCurrency(summary.costBasisEur, locale)} />
         <KpiCard
           label={t("kpiLatentGain")}
           value={formatCurrency(summary.latentGainEur, locale)}
@@ -262,11 +311,8 @@ export function CryptoPortfolio({
                   <TableHead>{t("colName")}</TableHead>
                   <TableHead>{t("colSymbol")}</TableHead>
                   <TableHead className="text-right">{t("colQuantity")}</TableHead>
-                  <TableHead className="text-right">{t("colInvested")}</TableHead>
                   <TableHead className="text-right">{t("colPrice")}</TableHead>
                   <TableHead className="text-right">{t("colValue")}</TableHead>
-                  <TableHead className="text-right">{t("colFlatTax")}</TableHead>
-                  <TableHead className="text-right">{t("colNet")}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -286,26 +332,13 @@ export function CryptoPortfolio({
                       {holding.quantity}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCurrency(holding.cost_basis_eur, locale)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
                       {holding.priceEur != null
                         ? formatCurrency(holding.priceEur, locale)
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {holding.valuation
-                        ? formatCurrency(holding.valuation.currentValueEur, locale)
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {holding.valuation
-                        ? formatCurrency(holding.valuation.flatTaxEur, locale)
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {holding.valuation
-                        ? formatCurrency(holding.valuation.netIfSoldTodayEur, locale)
+                      {holding.currentValueEur != null
+                        ? formatCurrency(holding.currentValueEur, locale)
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right">

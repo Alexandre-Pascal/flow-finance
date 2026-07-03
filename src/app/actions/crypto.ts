@@ -28,6 +28,7 @@ function isSchemaError(message: string, code?: string): boolean {
     code === "PGRST205" ||
     normalized.includes("crypto_holdings") ||
     normalized.includes("crypto_transactions") ||
+    normalized.includes("crypto_portfolio_settings") ||
     normalized.includes("does not exist")
   );
 }
@@ -211,6 +212,43 @@ export async function deleteCryptoHoldingAction(
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
+
+  if (error) {
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" };
+    }
+    return { error: "save" };
+  }
+
+  revalidateCryptoPages();
+  return {};
+}
+
+export async function updateCryptoTotalInvestedAction(
+  formData: FormData,
+): Promise<{ error?: CryptoActionError }> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const totalInvested = parseAmount(String(formData.get("totalInvested") ?? ""));
+  if (totalInvested === null || totalInvested < 0) {
+    return { error: "invalid" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  const { error } = await supabase.from("crypto_portfolio_settings").upsert(
+    {
+      user_id: user.id,
+      total_invested_eur: totalInvested,
+    },
+    { onConflict: "user_id" },
+  );
 
   if (error) {
     if (isSchemaError(error.message, error.code)) {

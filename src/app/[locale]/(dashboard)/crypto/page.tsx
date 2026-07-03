@@ -11,7 +11,7 @@ export default async function CryptoPage({
   setRequestLocale(locale);
   const t = await getTranslations("crypto");
 
-  const { holdings, transactions, summary, schemaReady, isDemo } =
+  const { holdings, transactions, summary, totalInvestedEur, schemaReady, isDemo } =
     await getCryptoPortfolioData();
 
   return (
@@ -25,6 +25,7 @@ export default async function CryptoPage({
         holdings={holdings}
         transactions={transactions}
         summary={summary}
+        totalInvestedEur={totalInvestedEur}
         locale={locale}
         isDemo={isDemo}
         schemaReady={schemaReady}

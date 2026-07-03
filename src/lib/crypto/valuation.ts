@@ -1,14 +1,14 @@
 /**
  * @file valuation.ts
- * @description Valorisation des positions crypto et application des transactions manuelles.
+ * @description Valorisation des positions crypto et flat tax au niveau portefeuille.
  */
 
-import { computeFlatTax, type FlatTaxBreakdown } from "@/lib/crypto/flat-tax";
+import { computePortfolioFlatTax, type FlatTaxBreakdown } from "@/lib/crypto/flat-tax";
 import type { CryptoHolding, CryptoTransaction, CryptoTransactionKind } from "@/types/database";
 
 export interface CryptoHoldingView extends CryptoHolding {
   priceEur: number | null;
-  valuation: FlatTaxBreakdown | null;
+  currentValueEur: number | null;
 }
 
 export interface CryptoPortfolioSummary extends FlatTaxBreakdown {
@@ -21,7 +21,7 @@ function round(value: number): number {
 }
 
 /**
- * Applique une transaction manuelle au coût d'acquisition et à la quantité (PMP).
+ * Applique une transaction manuelle à la quantité (le coût d'acquisition par ligne n'impacte plus la flat tax).
  */
 export function applyCryptoTransaction(
   holding: Pick<CryptoHolding, "quantity" | "cost_basis_eur">,
@@ -54,50 +54,30 @@ export function buildCryptoHoldingViews(
 ): CryptoHoldingView[] {
   return holdings.map((holding) => {
     const priceEur = pricesEur[holding.symbol.toUpperCase()] ?? null;
-    const valuation =
-      priceEur != null
-        ? computeFlatTax(holding.quantity, holding.cost_basis_eur, priceEur)
-        : null;
+    const currentValueEur =
+      priceEur != null ? round(holding.quantity * priceEur) : null;
 
     return {
       ...holding,
       priceEur,
-      valuation,
+      currentValueEur,
     };
   });
 }
 
 export function buildCryptoPortfolioSummary(
   views: CryptoHoldingView[],
+  totalInvestedEur: number,
 ): CryptoPortfolioSummary {
-  const priced = views.filter((view) => view.valuation != null) as Array<
-    CryptoHoldingView & { valuation: FlatTaxBreakdown }
-  >;
-
-  const totals = priced.reduce(
-    (acc, view) => ({
-      currentValueEur: acc.currentValueEur + view.valuation.currentValueEur,
-      costBasisEur: acc.costBasisEur + view.valuation.costBasisEur,
-      latentGainEur: acc.latentGainEur + view.valuation.latentGainEur,
-      flatTaxEur: acc.flatTaxEur + view.valuation.flatTaxEur,
-      netIfSoldTodayEur: acc.netIfSoldTodayEur + view.valuation.netIfSoldTodayEur,
-    }),
-    {
-      currentValueEur: 0,
-      costBasisEur: 0,
-      latentGainEur: 0,
-      flatTaxEur: 0,
-      netIfSoldTodayEur: 0,
-    },
+  const priced = views.filter((view) => view.currentValueEur != null);
+  const currentValueEur = round(
+    priced.reduce((sum, view) => sum + (view.currentValueEur ?? 0), 0),
   );
 
+  const tax = computePortfolioFlatTax(currentValueEur, totalInvestedEur);
+
   return {
-    ...totals,
-    currentValueEur: round(totals.currentValueEur),
-    costBasisEur: round(totals.costBasisEur),
-    latentGainEur: round(totals.latentGainEur),
-    flatTaxEur: round(totals.flatTaxEur),
-    netIfSoldTodayEur: round(totals.netIfSoldTodayEur),
+    ...tax,
     holdingCount: views.length,
     pricedCount: priced.length,
   };
@@ -130,4 +110,13 @@ export function mapCryptoTransaction(row: Record<string, unknown>): CryptoTransa
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
+}
+
+export function mapCryptoPortfolioSettings(
+  row: Record<string, unknown> | null,
+): { totalInvestedEur: number } {
+  if (!row) {
+    return { totalInvestedEur: 2163 };
+  }
+  return { totalInvestedEur: Number(row.total_invested_eur ?? 2163) };
 }
