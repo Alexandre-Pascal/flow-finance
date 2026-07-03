@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { SavingsAnalytics } from "@/components/features/savings-analytics";
+import { getCryptoPortfolioData } from "@/lib/crypto/queries";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { getFinanceData } from "@/lib/finance/queries";
 import {
@@ -33,6 +34,7 @@ export default async function SavingsPage({
     locale,
   );
   const checking = buildCheckingOverview(accounts, transactions, locale);
+  const crypto = await getCryptoPortfolioData();
 
   const bankReady = isEnableBankingConfigured();
   const isBankLinked =
@@ -48,6 +50,10 @@ export default async function SavingsPage({
       <SavingsAnalytics
         overview={overview}
         checking={checking}
+        crypto={{
+          summary: crypto.summary,
+          schemaReady: crypto.schemaReady,
+        }}
         locale={locale}
         isDemo={isDemo}
         schemaReady={savingsSchemaReady}

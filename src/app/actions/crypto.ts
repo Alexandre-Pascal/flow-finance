@@ -16,6 +16,8 @@ export type CryptoActionError =
   | "parse";
 
 function revalidateCryptoPages() {
+  revalidatePath("/fr/savings");
+  revalidatePath("/en/savings");
   revalidatePath("/fr/crypto");
   revalidatePath("/en/crypto");
 }

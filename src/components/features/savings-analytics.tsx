@@ -7,8 +7,6 @@
 "use client";
 
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   Building2,
   Landmark,
   Pencil,
@@ -17,6 +15,7 @@ import {
   Trash2,
   TrendingUp,
   Wallet,
+  Bitcoin,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
@@ -25,7 +24,7 @@ import {
   AreaChart,
   CartesianGrid,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as ChartTooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -58,7 +57,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useRouter } from "@/i18n/navigation";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Link, useRouter } from "@/i18n/navigation";
+import type { CryptoPortfolioSummary } from "@/lib/crypto/valuation";
 import { type MonthlyPeriod } from "@/lib/finance/aggregates";
 import { CATEGORY_COLOR_PALETTE, normalizeColor } from "@/lib/finance/expense-categories";
 import {
@@ -76,9 +81,15 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SavingsAccount, SavingsAccountKind, SavingsAdjustmentKind } from "@/types/database";
 
+interface SavingsCryptoSummary {
+  summary: CryptoPortfolioSummary;
+  schemaReady: boolean;
+}
+
 interface SavingsAnalyticsProps {
   overview: SavingsOverview;
   checking: CheckingVehicle[];
+  crypto: SavingsCryptoSummary;
   locale: string;
   isDemo: boolean;
   schemaReady: boolean;
@@ -100,6 +111,7 @@ function formatCompactCurrency(value: number, locale: string): string {
 export function SavingsAnalytics({
   overview,
   checking,
+  crypto,
   locale,
   isDemo,
   schemaReady,
@@ -107,6 +119,7 @@ export function SavingsAnalytics({
   bankConfigured,
 }: SavingsAnalyticsProps) {
   const t = useTranslations("savings");
+  const tCrypto = useTranslations("crypto");
   const router = useRouter();
   const [period, setPeriod] = useState<MonthlyPeriod>(12);
   const [formState, setFormState] = useState<
@@ -116,39 +129,23 @@ export function SavingsAnalytics({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const totalBalance = useMemo(
+  const accountsBalance = useMemo(
     () =>
-      overview.totalBalance +
-      checking.reduce((sum, vehicle) => sum + vehicle.balance, 0),
+      overview.totalBalance + checking.reduce((sum, vehicle) => sum + vehicle.balance, 0),
     [overview.totalBalance, checking],
   );
 
-  const checkingTotals = useMemo(
+  const totalBalance = useMemo(
     () =>
-      checking.reduce(
-        (acc, vehicle) => {
-          for (const month of vehicle.monthly) {
-            acc.deposits += month.deposits;
-            acc.withdrawals += month.withdrawals;
-          }
-          return acc;
-        },
-        { deposits: 0, withdrawals: 0 },
-      ),
-    [checking],
+      accountsBalance + (crypto.schemaReady ? crypto.summary.currentValueEur : 0),
+    [accountsBalance, crypto.schemaReady, crypto.summary.currentValueEur],
   );
 
-  const totalDeposits = useMemo(
+  const netAfterCryptoSale = useMemo(
     () =>
-      overview.vehicles.reduce((sum, v) => sum + v.totalDeposits, 0) +
-      checkingTotals.deposits,
-    [overview.vehicles, checkingTotals.deposits],
-  );
-  const totalWithdrawals = useMemo(
-    () =>
-      overview.vehicles.reduce((sum, v) => sum + v.totalWithdrawals, 0) +
-      checkingTotals.withdrawals,
-    [overview.vehicles, checkingTotals.withdrawals],
+      accountsBalance +
+      (crypto.schemaReady ? crypto.summary.netIfSoldTodayEur : 0),
+    [accountsBalance, crypto.schemaReady, crypto.summary.netIfSoldTodayEur],
   );
 
   function translateError(actionError: SavingsActionError): string {
@@ -213,22 +210,41 @@ export function SavingsAnalytics({
       ) : null}
 
       {/* KPI summary */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid items-stretch gap-3 sm:grid-cols-3">
         <KpiCard
-          icon={<Wallet className="size-5" aria-hidden />}
+          icon={<Wallet className="size-4" aria-hidden />}
           label={t("totalBalance")}
           value={formatCurrency(totalBalance, locale)}
           accent
+          tooltip={
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-6 text-sm">
+                <span className="text-muted-foreground">{t("totalBalanceBreakdownAccounts")}</span>
+                <span className="tabular-nums font-medium text-foreground">
+                  {formatCurrency(accountsBalance, locale)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-6 text-sm">
+                <span className="text-muted-foreground">{t("totalBalanceBreakdownCrypto")}</span>
+                <span className="tabular-nums font-medium text-foreground">
+                  {formatCurrency(crypto.summary.currentValueEur, locale)}
+                </span>
+              </div>
+            </div>
+          }
         />
         <KpiCard
-          icon={<ArrowUpRight className="size-5" aria-hidden />}
-          label={t("totalDeposits")}
-          value={formatCurrency(totalDeposits, locale)}
+          icon={<Bitcoin className="size-4" aria-hidden />}
+          label={tCrypto("kpiCurrentValue")}
+          value={formatCurrency(crypto.summary.currentValueEur, locale)}
+          href="/crypto"
+          hint={t("kpiCryptoManage")}
         />
         <KpiCard
-          icon={<ArrowDownLeft className="size-5" aria-hidden />}
-          label={t("totalWithdrawals")}
-          value={formatCurrency(totalWithdrawals, locale)}
+          icon={<Landmark className="size-4" aria-hidden />}
+          label={t("kpiNetWealth")}
+          value={formatCurrency(netAfterCryptoSale, locale)}
+          hint={t("kpiNetWealthHint")}
         />
       </div>
 
@@ -404,18 +420,31 @@ function KpiCard({
   label,
   value,
   accent,
+  href,
+  hint,
+  tooltip,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   accent?: boolean;
+  href?: string;
+  hint?: string;
+  tooltip?: React.ReactNode;
 }) {
-  return (
-    <Card className={cn(accent && "border-primary/30 bg-primary/5")}>
-      <CardContent className="flex items-center gap-4 py-5">
+  const card = (
+    <Card
+      className={cn(
+        "h-full",
+        accent && "border-primary/30 bg-primary/5",
+        href && "transition-colors hover:border-primary/40 hover:bg-muted/30",
+        tooltip && "cursor-help",
+      )}
+    >
+      <CardContent className="flex h-full items-start gap-3 py-3">
         <div
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-full",
+            "flex size-8 shrink-0 items-center justify-center rounded-full",
             accent
               ? "bg-primary/15 text-primary"
               : "bg-muted text-muted-foreground",
@@ -423,13 +452,52 @@ function KpiCard({
         >
           {icon}
         </div>
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="truncate text-xl font-semibold tabular-nums">{value}</p>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="line-clamp-2 min-h-7 text-[11px] leading-tight text-muted-foreground">
+            {label}
+          </p>
+          <p className="truncate text-lg font-semibold tabular-nums leading-tight">{value}</p>
+          <p
+            className={cn(
+              "line-clamp-2 min-h-7 text-[11px] leading-tight text-muted-foreground/80",
+              !hint && "invisible",
+            )}
+            aria-hidden={!hint}
+          >
+            {hint ?? "\u00a0"}
+          </p>
         </div>
       </CardContent>
     </Card>
   );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block h-full cursor-pointer rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {card}
+      </Link>
+    );
+  }
+
+  if (tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="h-full rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {card}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="min-w-48">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return card;
 }
 
 function EmptyState({
@@ -538,7 +606,7 @@ function BalanceChart({
             className="text-muted-foreground"
             domain={["dataMin", "dataMax"]}
           />
-          <Tooltip
+          <ChartTooltip
             content={({ active, payload }) => (
               <BalanceTooltip
                 active={active}
