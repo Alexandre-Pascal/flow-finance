@@ -143,6 +143,33 @@ export interface Category {
   created_at: string;
 }
 
+export type CryptoTransactionKind = "buy" | "sell" | "deposit" | "withdrawal";
+
+export interface CryptoHolding {
+  id: string;
+  user_id: string;
+  name: string;
+  xpub: string | null;
+  symbol: string;
+  quantity: number;
+  cost_basis_eur: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CryptoTransaction {
+  id: string;
+  user_id: string;
+  holding_id: string;
+  kind: CryptoTransactionKind;
+  quantity: number;
+  amount_eur: number;
+  transaction_date: string;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Mouvement d'épargne associé à une transaction (virement vers/depuis un livret). */
 export interface SavingsTransferRef {
   account_id: string;

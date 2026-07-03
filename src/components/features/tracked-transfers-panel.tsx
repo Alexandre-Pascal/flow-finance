@@ -6,7 +6,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bar,
@@ -100,11 +100,11 @@ export function TrackedTransfersPanel({
   );
 
   const currentMonthKey = filtered.at(-1)?.monthKey ?? "";
-  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
-
-  useEffect(() => {
-    setSelectedMonthKey(currentMonthKey);
-  }, [currentMonthKey, period]);
+  const [manualMonthKey, setManualMonthKey] = useState<string | null>(null);
+  const selectedMonthKey =
+    manualMonthKey && filtered.some((row) => row.monthKey === manualMonthKey)
+      ? manualMonthKey
+      : currentMonthKey;
 
   const totals = useMemo(() => sumMonthlyTransferOverview(filtered), [filtered]);
   const currentMonth = filtered.at(-1);
@@ -254,7 +254,7 @@ export function TrackedTransfersPanel({
                 onClick={(bar) => {
                   const row = bar?.payload as MonthlyTransferOverview | undefined;
                   if (row?.monthKey) {
-                    setSelectedMonthKey(row.monthKey);
+                    setManualMonthKey(row.monthKey);
                   }
                 }}
               />
@@ -281,7 +281,7 @@ export function TrackedTransfersPanel({
                     "cursor-pointer",
                     selectedMonthKey === row.monthKey && "bg-muted/60",
                   )}
-                  onClick={() => setSelectedMonthKey(row.monthKey)}
+                  onClick={() => setManualMonthKey(row.monthKey)}
                 >
                   <TableCell className="font-medium">{row.monthFull}</TableCell>
                   <TableCell className="text-right font-medium text-accent">
