@@ -1,33 +1,34 @@
 /**
- * @file mother-transfers-panel.tsx
- * @description Suivi mensuel des virements reçus de Sophie Pascal.
+ * @file payroll-transfers-panel.tsx
+ * @description Suivi mensuel des virements de salaire CyFyn Paye.
  */
 
 "use client";
 
-import { Gift } from "lucide-react";
+import { Briefcase } from "lucide-react";
 import { TrackedTransfersPanel } from "@/components/features/tracked-transfers-panel";
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
-  isMotherTransfer,
+  isPayrollTransfer,
   type MonthlyTransferOverview,
 } from "@/lib/finance/tracked-transfers";
 import type { TransactionWithAccount } from "@/types/database";
 
-interface MotherTransfersPanelProps {
+interface PayrollTransfersPanelProps {
   data: MonthlyTransferOverview[];
   transactions: TransactionWithAccount[];
   locale: string;
   period: MonthlyPeriod;
 }
 
-export function MotherTransfersPanel(props: MotherTransfersPanelProps) {
+export function PayrollTransfersPanel(props: PayrollTransfersPanelProps) {
   return (
     <TrackedTransfersPanel
       {...props}
-      predicate={isMotherTransfer}
-      translationPrefix="motherTransfer"
-      icon={Gift}
+      predicate={isPayrollTransfer}
+      translationPrefix="payrollTransfer"
+      icon={Briefcase}
+      accentClassName="border-[var(--chart-2)]/30 bg-gradient-to-br from-[var(--chart-2)]/5 via-card to-card"
     />
   );
 }

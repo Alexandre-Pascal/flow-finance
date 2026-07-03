@@ -1,0 +1,61 @@
+import { describe, expect, it } from "vitest";
+import { isPayrollTransfer } from "./tracked-transfers";
+import type { TransactionWithAccount } from "@/types/database";
+
+function tx(
+  partial: Partial<TransactionWithAccount> & Pick<TransactionWithAccount, "description" | "amount">,
+): TransactionWithAccount {
+  return {
+    id: "tx-1",
+    account_id: "acc-1",
+    entry_reference: "ref-1",
+    booking_date: "2026-06-15",
+    currency: "EUR",
+    status: "BOOK",
+    category_id: null,
+    category_manual: false,
+    recurring_payment_id: null,
+    recurring_payment_manual: false,
+    note: null,
+    created_at: "2026-06-15T00:00:00Z",
+    updated_at: "2026-06-15T00:00:00Z",
+    account_name: "Compte courant",
+    account_type: "checking",
+    ...partial,
+  };
+}
+
+describe("isPayrollTransfer", () => {
+  it("matches CyFyn Paye incoming transfer", () => {
+    expect(
+      isPayrollTransfer(
+        tx({
+          amount: 3200,
+          description: "VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects negative amounts", () => {
+    expect(
+      isPayrollTransfer(
+        tx({
+          amount: -3200,
+          description: "VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects unrelated transfers", () => {
+    expect(
+      isPayrollTransfer(
+        tx({
+          amount: 100,
+          description: "VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE",
+        }),
+      ),
+    ).toBe(false);
+  });
+});

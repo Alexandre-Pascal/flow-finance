@@ -8,6 +8,7 @@ import {
 import {
   buildMonthlyTransferOverview,
   isMotherTransfer,
+  isPayrollTransfer,
 } from "@/lib/finance/tracked-transfers";
 
 export default async function AnalyticsPage({
@@ -26,6 +27,11 @@ export default async function AnalyticsPage({
     locale,
     isMotherTransfer,
   );
+  const payrollTransferData = buildMonthlyTransferOverview(
+    transactions,
+    locale,
+    isPayrollTransfer,
+  );
   const subscriptionData = buildMonthlySubscriptionOverview(
     transactions,
     recurringPayments,
@@ -42,6 +48,7 @@ export default async function AnalyticsPage({
       <MonthlyAnalytics
         data={monthlyOverview}
         motherTransferData={motherTransferData}
+        payrollTransferData={payrollTransferData}
         subscriptionData={subscriptionData}
         subscriptions={recurringPayments}
         transactions={transactions}

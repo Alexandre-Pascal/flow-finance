@@ -38,11 +38,13 @@ const DEBIT_DESCRIPTION_PATTERNS = [
 /** Libellés courants → entrée sur le compte. */
 const CREDIT_DESCRIPTION_PATTERNS = [
   /VOTRE FAVEUR\b/,
+  /^VIREMENT EN VOTRE FAVEUR\b/,
   /^VIREMENT (RECU|REÇU)\b/,
   /^VIR\.?\s*(RECU|REÇU)\b/,
   /^REMBOURSEMENT\b/,
   /^CREDIT\b/,
   /^SALAIRE\b/,
+  /\bCYFYN\b/,
 ];
 
 /**
@@ -108,7 +110,8 @@ export function inferIndicatorsFromBalanceSequence(
 }
 
 /**
- * Résout l'indicateur : API → libellé → solde (dans cet ordre).
+ * Résout l'indicateur : libellé débit → libellé crédit → API → solde.
+ * Les patterns crédit priment sur un indicateur API erroné (DBIT sur un virement reçu).
  */
 export function resolveTransactionIndicator(
   tx: TransactionSignInput,
@@ -116,10 +119,18 @@ export function resolveTransactionIndicator(
 ): CreditDebitIndicator | undefined {
   const description =
     tx.remittance_information?.join(" ") ?? "Transaction bancaire";
+  const upper = description.toUpperCase().trim();
+
+  for (const pattern of DEBIT_DESCRIPTION_PATTERNS) {
+    if (pattern.test(upper)) return "DBIT";
+  }
+
+  for (const pattern of CREDIT_DESCRIPTION_PATTERNS) {
+    if (pattern.test(upper)) return "CRDT";
+  }
 
   return (
     normalizeCreditDebitIndicator(tx.credit_debit_indicator) ??
-    inferIndicatorFromDescription(description) ??
     balanceInferred
   );
 }

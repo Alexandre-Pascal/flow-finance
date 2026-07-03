@@ -9,6 +9,9 @@ import type { TransactionWithAccount } from "@/types/database";
 /** Fragment distinctif du libellé bancaire (Crédit Agricole). */
 export const MOTHER_TRANSFER_SENDER = "PASCAL SOPHIE";
 
+/** Employeur — virements de salaire CyFyn Paye. */
+export const PAYROLL_SENDER = "CYFYN";
+
 export interface MonthlyTransferOverview {
   monthKey: string;
   month: string;
@@ -49,6 +52,24 @@ export function isMotherTransfer(tx: TransactionWithAccount): boolean {
   return (
     description.includes(MOTHER_TRANSFER_SENDER) &&
     (description.includes("VIREMENT EN VOTRE FAVEUR") ||
+      description.includes("VIR INST"))
+  );
+}
+
+/**
+ * Virement de salaire CyFyn Paye (ex. « VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye »).
+ */
+export function isPayrollTransfer(tx: TransactionWithAccount): boolean {
+  if (tx.amount <= 0) {
+    return false;
+  }
+
+  const description = tx.description.toUpperCase();
+
+  return (
+    description.includes(PAYROLL_SENDER) &&
+    (description.includes("VIREMENT EN VOTRE FAVEUR") ||
+      description.includes("VOTRE FAVEUR") ||
       description.includes("VIR INST"))
   );
 }

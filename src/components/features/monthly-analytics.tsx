@@ -43,11 +43,13 @@ import type { RecurringPayment, TransactionWithAccount } from "@/types/database"
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { MotherTransfersPanel } from "@/components/features/mother-transfers-panel";
+import { PayrollTransfersPanel } from "@/components/features/payroll-transfers-panel";
 import { SubscriptionsAnalyticsPanel } from "@/components/features/subscriptions-analytics-panel";
 
 interface MonthlyAnalyticsProps {
   data: MonthlyOverview[];
   motherTransferData: MonthlyTransferOverview[];
+  payrollTransferData: MonthlyTransferOverview[];
   subscriptionData: MonthlySubscriptionRow[];
   subscriptions: RecurringPayment[];
   transactions: TransactionWithAccount[];
@@ -161,11 +163,12 @@ function DeltaBadge({
   );
 }
 
-type AnalyticsView = "overview" | "mother" | "subscriptions";
+type AnalyticsView = "overview" | "mother" | "payroll" | "subscriptions";
 
 export function MonthlyAnalytics({
   data,
   motherTransferData,
+  payrollTransferData,
   subscriptionData,
   subscriptions,
   transactions,
@@ -219,6 +222,9 @@ export function MonthlyAnalytics({
             </TabsTrigger>
             <TabsTrigger value="mother" className="cursor-pointer px-4 py-2">
               {t("viewMotherTransfers")}
+            </TabsTrigger>
+            <TabsTrigger value="payroll" className="cursor-pointer px-4 py-2">
+              {t("viewPayroll")}
             </TabsTrigger>
             <TabsTrigger value="subscriptions" className="cursor-pointer px-4 py-2">
               {t("viewSubscriptions")}
@@ -493,6 +499,15 @@ export function MonthlyAnalytics({
         <TabsContent value="mother" className="mt-0">
           <MotherTransfersPanel
             data={motherTransferData}
+            transactions={transactions}
+            locale={locale}
+            period={period}
+          />
+        </TabsContent>
+
+        <TabsContent value="payroll" className="mt-0">
+          <PayrollTransfersPanel
+            data={payrollTransferData}
             transactions={transactions}
             locale={locale}
             period={period}
