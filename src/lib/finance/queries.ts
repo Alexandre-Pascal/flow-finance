@@ -10,7 +10,10 @@ import {
   mapCategory,
   syncDefaultCategories,
 } from "@/lib/finance/expense-categories";
-import { mapRecurringPayment } from "@/lib/finance/recurring-payments";
+import {
+  mapRecurringPayment,
+  resolveCanonicalRules,
+} from "@/lib/finance/recurring-payments";
 import {
   annotateSavingsTransfers,
   mapSavingsAccount,
@@ -375,10 +378,13 @@ async function fetchFromSupabase(
     mapRecurringPayment(row),
   );
 
+  // Nom canonique : une transaction rattachée à une règle fusionnée affiche le
+  // nom du service, pas celui de la variante de libellé.
+  const canonicalRuleById = resolveCanonicalRules(recurringPayments);
   const recurringNameById = new Map(
-    recurringPayments.map((payment: { id: string; name: string }) => [
+    recurringPayments.map((payment) => [
       payment.id,
-      payment.name,
+      canonicalRuleById.get(payment.id)?.name ?? payment.name,
     ]),
   );
 

@@ -19,6 +19,7 @@ import { useRouter } from "@/i18n/navigation";
 import { assignTransactionCategoryAction } from "@/app/actions/categories";
 import { assignTransactionSavingsAccountAction } from "@/app/actions/savings";
 import { updateTransactionNoteAction } from "@/app/actions/transactions";
+import { MarkAsSubscriptionDialog } from "@/components/features/mark-as-subscription-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ import { dedupeCategories } from "@/lib/finance/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type {
   Category,
+  RecurringPayment,
   SavingsAccount,
   TransactionWithAccount,
 } from "@/types/database";
@@ -73,6 +75,8 @@ interface TransactionsTableProps {
   categories: Category[];
   locale: string;
   savingsAccounts?: SavingsAccount[];
+  /** Abonnements existants, pour proposer un rattachement depuis une transaction. */
+  recurringPayments?: RecurringPayment[];
   compact?: boolean;
   isDemo?: boolean;
 }
@@ -482,6 +486,7 @@ export function TransactionsTable({
   categories,
   locale,
   savingsAccounts = [],
+  recurringPayments = [],
   compact = false,
   isDemo = false,
 }: TransactionsTableProps) {
@@ -613,6 +618,16 @@ export function TransactionsTable({
         ? formatMonthKey([...selectedMonths][0], locale)
         : t("monthCount", { count: selectedMonths.size });
 
+  function canMarkSubscription(tx: TransactionWithAccount): boolean {
+    return (
+      !compact &&
+      !isDemo &&
+      tx.amount < 0 &&
+      !tx.recurring_payment_id &&
+      !tx.savings_transfer
+    );
+  }
+
   if (transactions.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -648,6 +663,14 @@ export function TransactionsTable({
                 <span className="truncate">{tx.description}</span>
                 {!compact ? (
                   <TransactionNote tx={tx} isDemo={isDemo} />
+                ) : null}
+                {canMarkSubscription(tx) ? (
+                  <MarkAsSubscriptionDialog
+                    tx={tx}
+                    transactions={transactions}
+                    subscriptions={recurringPayments}
+                    locale={locale}
+                  />
                 ) : null}
               </span>
             </TableCell>

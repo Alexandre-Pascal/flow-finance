@@ -91,9 +91,83 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
       row.billing_month === null || row.billing_month === undefined
         ? null
         : Number(row.billing_month),
+    merged_into_id: row.merged_into_id ? String(row.merged_into_id) : null,
+    active_to: row.active_to ? String(row.active_to) : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
+}
+
+/**
+ * Résout, pour chaque règle, l'abonnement canonique auquel elle appartient en
+ * suivant `merged_into_id`. Une référence cassée ou un cycle retombe sur la
+ * règle elle-même.
+ */
+export function resolveCanonicalRules(
+  rules: RecurringPayment[],
+): Map<string, RecurringPayment> {
+  const byId = new Map(rules.map((rule) => [rule.id, rule]));
+  const canonical = new Map<string, RecurringPayment>();
+
+  for (const rule of rules) {
+    const seen = new Set<string>([rule.id]);
+    let current = rule;
+
+    while (current.merged_into_id) {
+      const parent = byId.get(current.merged_into_id);
+      if (!parent || seen.has(parent.id)) {
+        break;
+      }
+      seen.add(parent.id);
+      current = parent;
+    }
+
+    canonical.set(rule.id, current);
+  }
+
+  return canonical;
+}
+
+/** Abonnements « tête de groupe » : ceux qui ne sont pas fusionnés dans un autre. */
+export function listCanonicalRules(
+  rules: RecurringPayment[],
+): RecurringPayment[] {
+  const canonicalByRuleId = resolveCanonicalRules(rules);
+  return rules.filter(
+    (rule) => canonicalByRuleId.get(rule.id)?.id === rule.id,
+  );
+}
+
+export interface RecurringPaymentGroup {
+  canonical: RecurringPayment;
+  variants: RecurringPayment[];
+}
+
+/** Regroupe les règles fusionnées sous leur abonnement canonique. */
+export function groupRulesByCanonical(
+  rules: RecurringPayment[],
+): RecurringPaymentGroup[] {
+  const canonicalByRuleId = resolveCanonicalRules(rules);
+  const groups = new Map<string, RecurringPaymentGroup>();
+
+  for (const rule of rules) {
+    const canonical = canonicalByRuleId.get(rule.id) ?? rule;
+    const group = groups.get(canonical.id);
+
+    if (group) {
+      if (rule.id !== canonical.id) {
+        group.variants.push(rule);
+      }
+      continue;
+    }
+
+    groups.set(canonical.id, {
+      canonical,
+      variants: rule.id === canonical.id ? [] : [rule],
+    });
+  }
+
+  return [...groups.values()];
 }
 
 export function getBookingDay(bookingDate: string): number {
@@ -303,6 +377,12 @@ export function matchesRecurringPayment(
     return false;
   }
 
+  // Règle archivée : elle conserve son historique mais ne capte plus rien après
+  // sa date de fin (une règle PayPal ne discrimine que par montant et jour).
+  if (rule.active_to && tx.booking_date > rule.active_to) {
+    return false;
+  }
+
   const absAmount = Math.abs(tx.amount);
   const payPalRule = isPayPalRule(rule);
 
@@ -486,7 +566,9 @@ export function buildMonthlySubscriptionOverview(
     year: "numeric",
   });
 
-  const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
+  // Les règles fusionnées sont agrégées sous leur abonnement canonique, pour
+  // qu'un service payé via deux libellés successifs n'apparaisse qu'une fois.
+  const canonicalByRuleId = resolveCanonicalRules(rules);
   const buckets = new Map<
     string,
     Map<string, { name: string; amount: number }>
@@ -497,7 +579,7 @@ export function buildMonthlySubscriptionOverview(
       continue;
     }
 
-    const rule = ruleById.get(tx.recurring_payment_id);
+    const rule = canonicalByRuleId.get(tx.recurring_payment_id);
     if (!rule) {
       continue;
     }
@@ -680,21 +762,36 @@ export function listActiveSubscriptions(
   const rollingYearStart = new Date(referenceDate);
   rollingYearStart.setFullYear(rollingYearStart.getFullYear() - 1);
 
-  const lastPaymentByRule = new Map<string, string>();
+  const canonicalByRuleId = resolveCanonicalRules(rules);
+  const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
   const paymentDatesByRule = new Map<string, string[]>();
+  /** Le montant affiché suit la règle du paiement le plus récent du groupe. */
+  const lastPaymentByRule = new Map<
+    string,
+    { date: string; rule: RecurringPayment }
+  >();
 
   for (const tx of transactions) {
     if (tx.amount >= 0 || !tx.recurring_payment_id) {
       continue;
     }
 
-    const dates = paymentDatesByRule.get(tx.recurring_payment_id) ?? [];
-    dates.push(tx.booking_date);
-    paymentDatesByRule.set(tx.recurring_payment_id, dates);
+    const variant = ruleById.get(tx.recurring_payment_id);
+    const canonical = canonicalByRuleId.get(tx.recurring_payment_id);
+    if (!variant || !canonical) {
+      continue;
+    }
 
-    const existing = lastPaymentByRule.get(tx.recurring_payment_id);
-    if (!existing || tx.booking_date > existing) {
-      lastPaymentByRule.set(tx.recurring_payment_id, tx.booking_date);
+    const dates = paymentDatesByRule.get(canonical.id) ?? [];
+    dates.push(tx.booking_date);
+    paymentDatesByRule.set(canonical.id, dates);
+
+    const existing = lastPaymentByRule.get(canonical.id);
+    if (!existing || tx.booking_date > existing.date) {
+      lastPaymentByRule.set(canonical.id, {
+        date: tx.booking_date,
+        rule: variant,
+      });
     }
   }
 
@@ -702,8 +799,12 @@ export function listActiveSubscriptions(
   const active: ActiveSubscriptionRow[] = [];
 
   for (const rule of rules) {
-    const lastPaymentDate = lastPaymentByRule.get(rule.id);
-    if (!lastPaymentDate) {
+    if (canonicalByRuleId.get(rule.id)?.id !== rule.id) {
+      continue;
+    }
+
+    const lastPayment = lastPaymentByRule.get(rule.id);
+    if (!lastPayment) {
       continue;
     }
 
@@ -711,8 +812,8 @@ export function listActiveSubscriptions(
       rule,
       paymentDatesByRule.get(rule.id) ?? [],
     );
-    const paymentDate = new Date(lastPaymentDate);
-    const paymentMonthKey = lastPaymentDate.slice(0, 7);
+    const paymentDate = new Date(lastPayment.date);
+    const paymentMonthKey = lastPayment.date.slice(0, 7);
     const isActive =
       cadence === "yearly"
         ? paymentDate >= rollingYearStart
@@ -722,15 +823,17 @@ export function listActiveSubscriptions(
       continue;
     }
 
+    const billingAmount = lastPayment.rule.amount;
+
     active.push({
       id: rule.id,
       name: rule.name,
       cadence,
-      billingAmount: rule.amount,
+      billingAmount,
       monthlyAmount:
         cadence === "yearly"
-          ? Math.round((rule.amount / 12) * 100) / 100
-          : rule.amount,
+          ? Math.round((billingAmount / 12) * 100) / 100
+          : billingAmount,
     });
   }
 

@@ -130,6 +130,13 @@ export interface RecurringPayment {
   billing_day: number | null;
   cadence: RecurringCadence;
   billing_month: number | null;
+  /**
+   * Règle rattachée à un autre abonnement : le même service reconnu via un
+   * second libellé bancaire (ex. ère PayPal puis prélèvement direct).
+   */
+  merged_into_id: string | null;
+  /** Dernier jour de validité : au-delà, la règle ne capte plus de transaction. */
+  active_to: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -9,15 +9,21 @@ import {
 import {
   GENERAL_RECURRING_AMOUNT_TOLERANCE,
   generalRecurringMatchPattern,
+  recurringGroupKey,
 } from "@/lib/finance/recurring-labels";
 import {
   clusterDismissalKey,
+  DEFAULT_PAYPAL_PATTERN,
+  getBookingDay,
+  getBookingMonth,
   isPayPalClusterStillActive,
   mapRecurringPayment,
+  resolveCanonicalRules,
   type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { createClient } from "@/lib/supabase/server";
+import type { RecurringPayment } from "@/types/database";
 
 export type RecurringPaymentActionError =
   | "demo"
@@ -35,6 +41,8 @@ function revalidateFinancePages() {
   revalidatePath("/en/analytics");
   revalidatePath("/fr/transactions");
   revalidatePath("/en/transactions");
+  revalidatePath("/fr");
+  revalidatePath("/en");
 }
 
 function isSchemaError(message: string, code?: string): boolean {
@@ -49,6 +57,8 @@ function isSchemaError(message: string, code?: string): boolean {
     normalized.includes("cadence") ||
     normalized.includes("recurring_suggestion_dismissals") ||
     normalized.includes("recurring_payment_manual") ||
+    normalized.includes("merged_into_id") ||
+    normalized.includes("active_to") ||
     normalized.includes("does not exist")
   );
 }
@@ -316,6 +326,310 @@ export async function updateRecurringPaymentCadenceAction(formData: FormData) {
     await rematchRecurringPaymentsForUser(user.id, supabase);
   } catch (rematchError) {
     console.error("[updateRecurringPaymentCadence] rematch failed:", rematchError);
+    revalidateFinancePages();
+    return { success: true as const, warning: "rematch" as const };
+  }
+
+  revalidateFinancePages();
+  return { success: true as const };
+}
+
+async function loadOwnedTransaction(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  transactionId: string,
+  userId: string,
+) {
+  const { data: tx, error: txError } = await supabase
+    .from("transactions")
+    .select("id, account_id, amount, description, booking_date")
+    .eq("id", transactionId)
+    .maybeSingle();
+
+  if (txError) throw txError;
+  if (!tx) return null;
+
+  const { data: account, error: accountError } = await supabase
+    .from("accounts")
+    .select("user_id")
+    .eq("id", tx.account_id)
+    .maybeSingle();
+
+  if (accountError) throw accountError;
+  if (account?.user_id !== userId) return null;
+
+  return {
+    amount: Number(tx.amount),
+    description: String(tx.description),
+    booking_date: String(tx.booking_date),
+  };
+}
+
+/**
+ * Crée un abonnement depuis une seule transaction choisie à la main, ou rattache
+ * son libellé à un abonnement existant. Contrairement au flux par suggestion,
+ * aucune récurrence n'a besoin d'avoir été détectée au préalable.
+ */
+export async function createSubscriptionFromTransactionAction(formData: FormData) {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
+  }
+
+  const transactionId = String(formData.get("transactionId") ?? "").trim();
+  const attachToId = String(formData.get("attachToId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const cadence =
+    String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+
+  if (!transactionId || (!attachToId && !name)) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  let tx: Awaited<ReturnType<typeof loadOwnedTransaction>>;
+  let rules: Awaited<ReturnType<typeof getRecurringPaymentsForUser>>;
+  try {
+    [tx, rules] = await Promise.all([
+      loadOwnedTransaction(supabase, transactionId, user.id),
+      getRecurringPaymentsForUser(user.id),
+    ]);
+  } catch (loadError) {
+    console.error("[createSubscriptionFromTransaction] load failed:", loadError);
+    const message = loadError instanceof Error ? loadError.message : "";
+    return isSchemaError(message)
+      ? { error: "schema" as const satisfies RecurringPaymentActionError }
+      : { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  if (!tx || tx.amount >= 0) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const amount = Math.round(Math.abs(tx.amount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const payPal = isPayPalPattern(tx.description);
+  const descriptionPattern = payPal
+    ? DEFAULT_PAYPAL_PATTERN
+    : generalRecurringMatchPattern(recurringGroupKey(tx.description));
+
+  if (!descriptionPattern) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  let mergedIntoId: string | null = null;
+  let resolvedName = name;
+
+  if (attachToId) {
+    const target = resolveCanonicalRules(rules).get(attachToId);
+    if (!target) {
+      return { error: "invalid" as const satisfies RecurringPaymentActionError };
+    }
+    mergedIntoId = target.id;
+    resolvedName = name || target.name;
+  }
+
+  const { error } = await supabase.from("recurring_payments").insert({
+    user_id: user.id,
+    name: resolvedName,
+    amount,
+    amount_tolerance: payPal ? 0.05 : GENERAL_RECURRING_AMOUNT_TOLERANCE,
+    billing_day: getBookingDay(tx.booking_date),
+    billing_month: cadence === "yearly" ? getBookingMonth(tx.booking_date) : null,
+    cadence,
+    description_pattern: descriptionPattern,
+    merged_into_id: mergedIntoId,
+  });
+
+  if (error) {
+    console.error("[createSubscriptionFromTransaction] insert failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  try {
+    await rematchRecurringPaymentsForUser(user.id, supabase);
+  } catch (rematchError) {
+    console.error("[createSubscriptionFromTransaction] rematch failed:", rematchError);
+    revalidateFinancePages();
+    return {
+      success: true as const,
+      warning: "rematch" as const satisfies RecurringPaymentActionError,
+    };
+  }
+
+  revalidateFinancePages();
+  return { success: true as const };
+}
+
+/** Vérifie qu'attacher `ruleId` à `targetId` ne crée pas de boucle. */
+function wouldCreateMergeCycle(
+  rules: RecurringPayment[],
+  ruleId: string,
+  targetId: string,
+): boolean {
+  if (ruleId === targetId) {
+    return true;
+  }
+
+  const byId = new Map(rules.map((rule) => [rule.id, rule]));
+  const seen = new Set<string>([targetId]);
+  let current = byId.get(targetId);
+
+  while (current?.merged_into_id) {
+    if (current.merged_into_id === ruleId) {
+      return true;
+    }
+    if (seen.has(current.merged_into_id)) {
+      return false;
+    }
+    seen.add(current.merged_into_id);
+    current = byId.get(current.merged_into_id);
+  }
+
+  return false;
+}
+
+/**
+ * Rattache une règle à un autre abonnement (même service, libellé différent),
+ * ou la détache si `targetId` est vide.
+ */
+export async function mergeRecurringPaymentsAction(formData: FormData) {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  const targetId = String(formData.get("targetId") ?? "").trim();
+
+  if (!id) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  let mergedIntoId: string | null = null;
+
+  if (targetId) {
+    let rules: RecurringPayment[];
+    try {
+      rules = await getRecurringPaymentsForUser(user.id);
+    } catch (loadError) {
+      console.error("[mergeRecurringPayments] load failed:", loadError);
+      return { error: "save" as const satisfies RecurringPaymentActionError };
+    }
+
+    if (!rules.some((rule) => rule.id === id)) {
+      return { error: "invalid" as const satisfies RecurringPaymentActionError };
+    }
+
+    const target = resolveCanonicalRules(rules).get(targetId);
+    if (!target || wouldCreateMergeCycle(rules, id, target.id)) {
+      return { error: "invalid" as const satisfies RecurringPaymentActionError };
+    }
+
+    mergedIntoId = target.id;
+  }
+
+  const { error } = await supabase
+    .from("recurring_payments")
+    .update({ merged_into_id: mergedIntoId })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[mergeRecurringPayments] update failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  revalidateFinancePages();
+  return { success: true as const };
+}
+
+/**
+ * Fige une règle à la date de son dernier paiement : elle garde son historique
+ * mais ne capte plus les transactions suivantes. `restore` annule l'archivage.
+ */
+export async function archiveRecurringPaymentAction(formData: FormData) {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  const restore = String(formData.get("restore") ?? "") === "1";
+
+  if (!id) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  let activeTo: string | null = null;
+
+  if (!restore) {
+    const { data: accounts } = await supabase
+      .from("accounts")
+      .select("id")
+      .eq("user_id", user.id);
+
+    const accountIds = accounts?.map((account) => account.id) ?? [];
+
+    if (accountIds.length > 0) {
+      const { data: lastTx } = await supabase
+        .from("transactions")
+        .select("booking_date")
+        .in("account_id", accountIds)
+        .eq("recurring_payment_id", id)
+        .lt("amount", 0)
+        .order("booking_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastTx?.booking_date) {
+        activeTo = String(lastTx.booking_date);
+      }
+    }
+
+    activeTo = activeTo ?? new Date().toISOString().slice(0, 10);
+  }
+
+  const { error } = await supabase
+    .from("recurring_payments")
+    .update({ active_to: activeTo })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[archiveRecurringPayment] update failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  try {
+    await rematchRecurringPaymentsForUser(user.id, supabase);
+  } catch (rematchError) {
+    console.error("[archiveRecurringPayment] rematch failed:", rematchError);
     revalidateFinancePages();
     return { success: true as const, warning: "rematch" as const };
   }

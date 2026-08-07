@@ -5,20 +5,35 @@
 
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 import {
+  archiveRecurringPaymentAction,
   deleteRecurringPaymentAction,
+  mergeRecurringPaymentsAction,
   updateRecurringPaymentCadenceAction,
 } from "@/app/actions/recurring-payments";
 import { SubscriptionSuggestionSection } from "@/components/features/subscription-suggestion-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency } from "@/lib/format";
-import type { RecurringClusterSuggestion } from "@/lib/finance/recurring-payments";
-import type { RecurringPayment } from "@/types/database";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  groupRulesByCanonical,
+  type RecurringClusterSuggestion,
+} from "@/lib/finance/recurring-payments";
+import { cn } from "@/lib/utils";
+import type { RecurringCadence, RecurringPayment } from "@/types/database";
 
 interface SubscriptionsManagerProps {
   subscriptions: RecurringPayment[];
@@ -64,6 +79,137 @@ function subscriptionMeta(
       });
 }
 
+interface SubscriptionRowProps {
+  subscription: RecurringPayment;
+  /** Abonnements auxquels cette règle peut être rattachée. */
+  mergeTargets: RecurringPayment[];
+  /** Variante de libellé rattachée à un abonnement : le nom est déjà affiché au-dessus. */
+  isVariant: boolean;
+  isDemo: boolean;
+  isPending: boolean;
+  locale: string;
+  onCadenceChange: (id: string, cadence: RecurringCadence) => void;
+  onMerge: (id: string, targetId: string) => void;
+  onArchive: (id: string, restore: boolean) => void;
+  onDelete: (id: string) => void;
+}
+
+function SubscriptionRow({
+  subscription,
+  mergeTargets,
+  isVariant,
+  isDemo,
+  isPending,
+  locale,
+  onCadenceChange,
+  onMerge,
+  onArchive,
+  onDelete,
+}: SubscriptionRowProps) {
+  const t = useTranslations("subscriptions");
+  const isArchived = Boolean(subscription.active_to);
+
+  return (
+    <li
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3",
+        isVariant && "border-dashed bg-muted/30",
+      )}
+    >
+      <div className="min-w-0">
+        {isVariant ? null : (
+          <p className="font-medium text-foreground">{subscription.name}</p>
+        )}
+        <p className="truncate text-sm text-muted-foreground">
+          {subscriptionMeta(subscription, t, locale)}
+        </p>
+        {isArchived ? (
+          <p className="text-xs text-muted-foreground">
+            {t("archivedHint", {
+              date: formatDate(subscription.active_to as string, locale),
+            })}
+          </p>
+        ) : null}
+      </div>
+
+      {isDemo ? null : (
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex rounded-md border border-border p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={subscription.cadence === "monthly" ? "default" : "ghost"}
+              className="h-7 cursor-pointer px-2 text-xs"
+              disabled={isPending}
+              onClick={() => onCadenceChange(subscription.id, "monthly")}
+            >
+              {t("cadenceMonthly")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={subscription.cadence === "yearly" ? "default" : "ghost"}
+              className="h-7 cursor-pointer px-2 text-xs"
+              disabled={isPending}
+              onClick={() => onCadenceChange(subscription.id, "yearly")}
+            >
+              {t("cadenceYearly")}
+            </Button>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="cursor-pointer"
+                disabled={isPending}
+                aria-label={t("mergeWith")}
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel>{t("mergeWith")}</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={!subscription.merged_into_id}
+                onCheckedChange={() => onMerge(subscription.id, "")}
+                className="cursor-pointer"
+              >
+                {t("mergeNone")}
+              </DropdownMenuCheckboxItem>
+              {mergeTargets.map((target) => (
+                <DropdownMenuCheckboxItem
+                  key={target.id}
+                  checked={subscription.merged_into_id === target.id}
+                  onCheckedChange={() => onMerge(subscription.id, target.id)}
+                  className="cursor-pointer"
+                >
+                  {target.name}
+                </DropdownMenuCheckboxItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => onArchive(subscription.id, isArchived)}
+              >
+                {isArchived ? t("restore") : t("archive")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer text-destructive"
+                onClick={() => onDelete(subscription.id)}
+              >
+                {t("delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
+    </li>
+  );
+}
+
 export function SubscriptionsManager({
   subscriptions,
   paypalSuggestions,
@@ -77,13 +223,26 @@ export function SubscriptionsManager({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function handleCadenceChange(id: string, cadence: "monthly" | "yearly") {
+  const groups = useMemo(
+    () => groupRulesByCanonical(subscriptions),
+    [subscriptions],
+  );
+  const canonicalSubscriptions = useMemo(
+    () => groups.map((group) => group.canonical),
+    [groups],
+  );
+
+  function runAction(
+    action: (formData: FormData) => Promise<{
+      error?: string;
+      success?: true;
+      warning?: string;
+    }>,
+    formData: FormData,
+  ) {
     setError(null);
-    const formData = new FormData();
-    formData.set("id", id);
-    formData.set("cadence", cadence);
     startTransition(async () => {
-      const result = await updateRecurringPaymentCadenceAction(formData);
+      const result = await action(formData);
       if (result.error === "schema") {
         setError(t("schemaError"));
         return;
@@ -91,25 +250,39 @@ export function SubscriptionsManager({
       if (result.error) {
         setError(t("saveError"));
         return;
+      }
+      if (result.warning === "rematch") {
+        setError(t("rematchWarning"));
       }
       router.refresh();
     });
   }
 
-  function handleDelete(id: string) {
-    setError(null);
+  function handleCadenceChange(id: string, cadence: RecurringCadence) {
     const formData = new FormData();
     formData.set("id", id);
-    startTransition(async () => {
-      const result = await deleteRecurringPaymentAction(formData);
-      if (result.error === "schema") {
-        setError(t("schemaError"));
-        return;
-      }
-      if (result.error) {
-        setError(t("saveError"));
-      }
-    });
+    formData.set("cadence", cadence);
+    runAction(updateRecurringPaymentCadenceAction, formData);
+  }
+
+  function handleMerge(id: string, targetId: string) {
+    const formData = new FormData();
+    formData.set("id", id);
+    formData.set("targetId", targetId);
+    runAction(mergeRecurringPaymentsAction, formData);
+  }
+
+  function handleArchive(id: string, restore: boolean) {
+    const formData = new FormData();
+    formData.set("id", id);
+    formData.set("restore", restore ? "1" : "");
+    runAction(archiveRecurringPaymentAction, formData);
+  }
+
+  function handleDelete(id: string) {
+    const formData = new FormData();
+    formData.set("id", id);
+    runAction(deleteRecurringPaymentAction, formData);
   }
 
   return (
@@ -139,64 +312,63 @@ export function SubscriptionsManager({
 
         <div className="space-y-3">
           <p className="text-sm font-medium text-foreground">{t("listTitle")}</p>
-          {subscriptions.length === 0 ? (
+          {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t("empty")}</p>
           ) : (
             <ul className="space-y-2">
-              {subscriptions.map((subscription) => (
-                <li
-                  key={subscription.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium text-foreground">{subscription.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {subscriptionMeta(subscription, t, locale)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!isDemo ? (
-                      <div className="flex rounded-md border border-border p-0.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={subscription.cadence === "monthly" ? "default" : "ghost"}
-                          className="h-7 cursor-pointer px-2 text-xs"
-                          disabled={isPending}
-                          onClick={() => handleCadenceChange(subscription.id, "monthly")}
-                        >
-                          {t("cadenceMonthly")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={subscription.cadence === "yearly" ? "default" : "ghost"}
-                          className="h-7 cursor-pointer px-2 text-xs"
-                          disabled={isPending}
-                          onClick={() => handleCadenceChange(subscription.id, "yearly")}
-                        >
-                          {t("cadenceYearly")}
-                        </Button>
-                      </div>
-                    ) : null}
-                    {!isDemo ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="cursor-pointer text-destructive hover:text-destructive"
-                        disabled={isPending}
-                        onClick={() => handleDelete(subscription.id)}
-                        aria-label={t("delete")}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    ) : null}
-                  </div>
+              {groups.map((group) => (
+                <li key={group.canonical.id} className="space-y-2">
+                  <ul>
+                    <SubscriptionRow
+                      subscription={group.canonical}
+                      mergeTargets={canonicalSubscriptions.filter(
+                        (option) => option.id !== group.canonical.id,
+                      )}
+                      isVariant={false}
+                      isDemo={isDemo}
+                      isPending={isPending}
+                      locale={locale}
+                      onCadenceChange={handleCadenceChange}
+                      onMerge={handleMerge}
+                      onArchive={handleArchive}
+                      onDelete={handleDelete}
+                    />
+                  </ul>
+
+                  {group.variants.length > 0 ? (
+                    <div className="space-y-2 pl-4">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {t("variantsTitle")}
+                      </p>
+                      <ul className="space-y-2">
+                        {group.variants.map((variant) => (
+                          <SubscriptionRow
+                            key={variant.id}
+                            subscription={variant}
+                            mergeTargets={canonicalSubscriptions.filter(
+                              (option) => option.id !== variant.id,
+                            )}
+                            isVariant
+                            isDemo={isDemo}
+                            isPending={isPending}
+                            locale={locale}
+                            onCadenceChange={handleCadenceChange}
+                            onMerge={handleMerge}
+                            onArchive={handleArchive}
+                            onDelete={handleDelete}
+                          />
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
+
+          {!isDemo && groups.length > 1 ? (
+            <p className="text-xs text-muted-foreground">{t("mergeHint")}</p>
+          ) : null}
         </div>
 
         <SubscriptionSuggestionSection
