@@ -7,6 +7,7 @@ import {
   buildCheckingOverview,
   buildSavingsOverview,
 } from "@/lib/finance/savings";
+import { getPeaPortfolioData } from "@/lib/pea/queries";
 
 export default async function SavingsPage({
   params,
@@ -17,8 +18,8 @@ export default async function SavingsPage({
   setRequestLocale(locale);
   const t = await getTranslations("savings");
 
-  // Le portefeuille crypto ne dépend pas des données bancaires : les deux
-  // lectures partent ensemble au lieu de s'enchaîner.
+  // Les portefeuilles crypto et PEA ne dépendent pas des données bancaires :
+  // les trois lectures partent ensemble au lieu de s'enchaîner.
   const [
     {
       accounts,
@@ -30,9 +31,11 @@ export default async function SavingsPage({
       isDemo,
     },
     crypto,
+    pea,
   ] = await Promise.all([
     getFinanceData(locale, { dismissedSuggestions: false }),
     getCryptoPortfolioData(),
+    getPeaPortfolioData(),
   ]);
 
   const overview = buildSavingsOverview(
@@ -60,6 +63,10 @@ export default async function SavingsPage({
         crypto={{
           summary: crypto.summary,
           schemaReady: crypto.schemaReady,
+        }}
+        pea={{
+          summary: pea.summary,
+          schemaReady: pea.schemaReady,
         }}
         transactions={transactions}
         locale={locale}

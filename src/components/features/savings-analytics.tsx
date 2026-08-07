@@ -9,6 +9,7 @@
 import {
   Building2,
   Landmark,
+  LineChart,
   Pencil,
   PiggyBank,
   Plus,
@@ -70,6 +71,7 @@ import {
   type SavingsOverview,
   type SavingsVehicle,
 } from "@/lib/finance/savings";
+import type { PeaPortfolioSummary } from "@/lib/pea/valuation";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   formatCompactCurrency,
@@ -96,10 +98,16 @@ interface SavingsCryptoSummary {
   schemaReady: boolean;
 }
 
+interface SavingsPeaSummary {
+  summary: PeaPortfolioSummary;
+  schemaReady: boolean;
+}
+
 interface SavingsAnalyticsProps {
   overview: SavingsOverview;
   checking: CheckingVehicle[];
   crypto: SavingsCryptoSummary;
+  pea: SavingsPeaSummary;
   transactions: TransactionWithAccount[];
   locale: string;
   isDemo: boolean;
@@ -119,6 +127,7 @@ export function SavingsAnalytics({
   overview,
   checking,
   crypto,
+  pea,
   transactions,
   locale,
   isDemo,
@@ -128,6 +137,7 @@ export function SavingsAnalytics({
 }: SavingsAnalyticsProps) {
   const t = useTranslations("savings");
   const tCrypto = useTranslations("crypto");
+  const tPea = useTranslations("pea");
   const router = useRouter();
   const [period, setPeriod] = useState<MonthlyPeriod>(12);
   const [formState, setFormState] = useState<
@@ -143,17 +153,31 @@ export function SavingsAnalytics({
     [overview.totalBalance, checking],
   );
 
+  const cryptoValue = crypto.schemaReady ? crypto.summary.currentValueEur : 0;
+  const peaValue = pea.schemaReady ? pea.summary.totalValueEur : 0;
+
   const totalBalance = useMemo(
-    () =>
-      accountsBalance + (crypto.schemaReady ? crypto.summary.currentValueEur : 0),
-    [accountsBalance, crypto.schemaReady, crypto.summary.currentValueEur],
+    () => accountsBalance + cryptoValue + peaValue,
+    [accountsBalance, cryptoValue, peaValue],
   );
 
-  const netAfterCryptoSale = useMemo(
+  // Net après cession des deux enveloppes fiscales (crypto au PFU, PEA selon
+  // l'ancienneté du plan), les liquidités du PEA restant disponibles telles quelles.
+  const netAfterSale = useMemo(
     () =>
       accountsBalance +
-      (crypto.schemaReady ? crypto.summary.netIfSoldTodayEur : 0),
-    [accountsBalance, crypto.schemaReady, crypto.summary.netIfSoldTodayEur],
+      (crypto.schemaReady ? crypto.summary.netIfSoldTodayEur : 0) +
+      (pea.schemaReady
+        ? pea.summary.netIfSoldTodayEur + pea.summary.cashBalanceEur
+        : 0),
+    [
+      accountsBalance,
+      crypto.schemaReady,
+      crypto.summary.netIfSoldTodayEur,
+      pea.schemaReady,
+      pea.summary.netIfSoldTodayEur,
+      pea.summary.cashBalanceEur,
+    ],
   );
 
   function translateError(actionError: SavingsActionError): string {
@@ -218,7 +242,7 @@ export function SavingsAnalytics({
       ) : null}
 
       {/* KPI summary */}
-      <div className="grid items-stretch gap-3 sm:grid-cols-3">
+      <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           icon={<Wallet className="size-4" aria-hidden />}
           label={t("totalBalance")}
@@ -233,25 +257,38 @@ export function SavingsAnalytics({
                 </span>
               </div>
               <div className="flex items-center justify-between gap-6 text-sm">
+                <span className="text-muted-foreground">{t("totalBalanceBreakdownPea")}</span>
+                <span className="tabular-nums font-medium text-foreground">
+                  {formatCurrency(peaValue, locale)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-6 text-sm">
                 <span className="text-muted-foreground">{t("totalBalanceBreakdownCrypto")}</span>
                 <span className="tabular-nums font-medium text-foreground">
-                  {formatCurrency(crypto.summary.currentValueEur, locale)}
+                  {formatCurrency(cryptoValue, locale)}
                 </span>
               </div>
             </div>
           }
         />
         <KpiCard
+          icon={<LineChart className="size-4" aria-hidden />}
+          label={tPea("kpiCurrentValue")}
+          value={formatCurrency(peaValue, locale)}
+          href="/investments/pea"
+          hint={t("kpiPeaManage")}
+        />
+        <KpiCard
           icon={<Bitcoin className="size-4" aria-hidden />}
           label={tCrypto("kpiCurrentValue")}
-          value={formatCurrency(crypto.summary.currentValueEur, locale)}
-          href="/crypto"
+          value={formatCurrency(cryptoValue, locale)}
+          href="/investments/crypto"
           hint={t("kpiCryptoManage")}
         />
         <KpiCard
           icon={<Landmark className="size-4" aria-hidden />}
           label={t("kpiNetWealth")}
-          value={formatCurrency(netAfterCryptoSale, locale)}
+          value={formatCurrency(netAfterSale, locale)}
           hint={t("kpiNetWealthHint")}
         />
       </div>

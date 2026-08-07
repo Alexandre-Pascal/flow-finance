@@ -20,6 +20,11 @@ import {
   mapSavingsAdjustment,
 } from "@/lib/finance/savings";
 import {
+  annotatePeaTransfers,
+  mapPeaInvestmentPlan,
+} from "@/lib/pea/transfers";
+import { mapPeaHolding } from "@/lib/pea/valuation";
+import {
   MOCK_ACCOUNTS,
   MOCK_CATEGORIES,
   MOCK_MONTHLY_SPENDING,
@@ -30,6 +35,7 @@ import type {
   Account,
   BankConnection,
   Category,
+  PeaInvestmentPlan,
   RecurringPayment,
   SavingsAccount,
   SavingsAdjustment,
@@ -64,6 +70,8 @@ export interface FinanceData {
   recurringPayments: RecurringPayment[];
   savingsAccounts: SavingsAccount[];
   savingsAdjustments: SavingsAdjustment[];
+  /** Plans d'investissement PEA (mots-clés → ligne cible). */
+  peaInvestmentPlans: PeaInvestmentPlan[];
   dismissedSuggestionKeys: string[];
   subscriptionsSchemaReady: boolean;
   categoriesSchemaReady: boolean;
@@ -97,6 +105,8 @@ const TRANSACTION_COLUMNS = [
   "note",
   "savings_account_id",
   "savings_account_manual",
+  "pea_plan_id",
+  "pea_manual",
   "created_at",
   "updated_at",
 ].join(", ");
@@ -146,6 +156,8 @@ function mapTransaction(
       ? String(row.savings_account_id)
       : null,
     savings_account_manual: Boolean(row.savings_account_manual),
+    pea_plan_id: row.pea_plan_id ? String(row.pea_plan_id) : null,
+    pea_manual: Boolean(row.pea_manual),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
     account_name: account.name,
@@ -294,6 +306,7 @@ async function fetchFromSupabase(
       recurringPayments: [],
       savingsAccounts: [],
       savingsAdjustments: [],
+      peaInvestmentPlans: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       categoriesSchemaReady: false,
@@ -311,6 +324,8 @@ async function fetchFromSupabase(
     { rows: dismissalRows, error: dismissalError },
     { rows: savingsRows, error: savingsError },
     { rows: adjustmentRows, error: adjustmentError },
+    { rows: peaPlanRows },
+    { rows: peaHoldingRows },
   ] = await Promise.all([
     readRows(supabase.from("accounts").select("*").order("name")),
     readRow(
@@ -353,6 +368,19 @@ async function fetchFromSupabase(
             .select("*")
             .eq("user_id", user.id)
             .order("adjustment_date", { ascending: false }),
+    ),
+    readRows(
+      supabase
+        .from("pea_investment_plans")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at"),
+    ),
+    readRows(
+      supabase
+        .from("pea_holdings")
+        .select("id, user_id, isin, ticker, name, quantity, cost_basis_eur")
+        .eq("user_id", user.id),
     ),
   ]);
 
@@ -424,7 +452,16 @@ async function fetchFromSupabase(
     },
   );
 
+  const peaInvestmentPlans = peaPlanRows.map((row) =>
+    mapPeaInvestmentPlan(row),
+  );
+
   transactions = annotateSavingsTransfers(transactions, savingsAccounts);
+  transactions = annotatePeaTransfers(
+    transactions,
+    peaInvestmentPlans,
+    peaHoldingRows.map((row) => mapPeaHolding(row)),
+  );
 
   return {
     accounts,
@@ -433,6 +470,7 @@ async function fetchFromSupabase(
     recurringPayments,
     savingsAccounts,
     savingsAdjustments,
+    peaInvestmentPlans,
     dismissedSuggestionKeys: dismissalRows.map((row) =>
       String(row.cluster_key),
     ),
@@ -466,6 +504,7 @@ export async function getFinanceData(
       recurringPayments: [],
       savingsAccounts: [],
       savingsAdjustments: [],
+      peaInvestmentPlans: [],
       dismissedSuggestionKeys: [],
       subscriptionsSchemaReady: false,
       categoriesSchemaReady: false,
@@ -484,6 +523,7 @@ export async function getFinanceData(
       recurringPayments: [],
       savingsAccounts: [],
       savingsAdjustments: [],
+      peaInvestmentPlans: [],
       monthlySpending: MOCK_MONTHLY_SPENDING,
       dismissedSuggestionKeys: [],
       bankConnection: null,

@@ -16,6 +16,7 @@ export default async function TransactionsPage({
     transactions,
     categories,
     savingsAccounts,
+    peaInvestmentPlans,
     recurringPayments,
     isDemo,
   } = await getFinanceData(locale, {
@@ -42,6 +43,7 @@ export default async function TransactionsPage({
             categories={categories}
             locale={locale}
             savingsAccounts={savingsAccounts}
+            peaInvestmentPlans={peaInvestmentPlans}
             recurringPayments={recurringPayments}
             isDemo={isDemo}
           />

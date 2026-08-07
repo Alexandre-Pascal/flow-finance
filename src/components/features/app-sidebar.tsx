@@ -13,7 +13,7 @@ import {
   BarChart3,
   PieChart,
   PiggyBank,
-  Bitcoin,
+  LineChart,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
@@ -24,7 +24,7 @@ const navItems = [
   { href: "/analytics", icon: BarChart3, labelKey: "analytics" as const },
   { href: "/categories", icon: PieChart, labelKey: "categories" as const },
   { href: "/savings", icon: PiggyBank, labelKey: "savings" as const },
-  { href: "/crypto", icon: Bitcoin, labelKey: "crypto" as const },
+  { href: "/investments", icon: LineChart, labelKey: "investments" as const },
   {
     href: "/transactions",
     icon: ArrowLeftRight,

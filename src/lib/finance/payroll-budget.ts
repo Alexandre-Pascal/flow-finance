@@ -4,6 +4,7 @@
  */
 
 import { isPayrollTransfer } from "@/lib/finance/tracked-transfers";
+import { isInternalTransfer } from "@/lib/pea/transfers";
 import type { TransactionWithAccount } from "@/types/database";
 
 /**
@@ -49,7 +50,7 @@ export function sumBudgetMonthIncome(
   return transactions
     .filter(
       (tx) =>
-        !tx.savings_transfer &&
+        !isInternalTransfer(tx) &&
         tx.amount > 0 &&
         getIncomeMonthKey(tx) === currentBudgetMonth,
     )

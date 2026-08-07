@@ -5,6 +5,7 @@
 
 import type { Account, TransactionWithAccount } from "@/types/database";
 import { getIncomeMonthKey } from "@/lib/finance/payroll-budget";
+import { isInternalTransfer } from "@/lib/pea/transfers";
 
 export type MonthlyPeriod = 1 | 3 | 6 | 12 | "all";
 
@@ -60,7 +61,7 @@ export function buildMonthlySpending(
           booked.getFullYear() === date.getFullYear() &&
           booked.getMonth() === date.getMonth() &&
           tx.amount < 0 &&
-          !tx.savings_transfer
+          !isInternalTransfer(tx)
         );
       })
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
@@ -111,7 +112,7 @@ export function buildMonthlyOverview(
   const buckets = new Map<string, { income: number; expenses: number }>();
 
   for (const tx of transactions) {
-    if (tx.savings_transfer) {
+    if (isInternalTransfer(tx)) {
       continue;
     }
 

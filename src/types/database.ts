@@ -61,6 +61,9 @@ export interface Transaction {
   /** Affectation manuelle à un compte d'épargne (prime sur les mots-clés). */
   savings_account_id?: string | null;
   savings_account_manual?: boolean;
+  /** Affectation manuelle à un plan d'investissement PEA (prime sur les mots-clés). */
+  pea_plan_id?: string | null;
+  pea_manual?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -177,10 +180,84 @@ export interface CryptoTransaction {
   updated_at: string;
 }
 
+export type PeaTransactionKind =
+  | "buy"
+  | "sell"
+  | "dividend"
+  | "deposit"
+  | "withdrawal"
+  | "fee"
+  | "interest";
+
+/**
+ * Origine d'un mouvement PEA : `csv` fait autorité (export Trade Republic),
+ * `bank_estimate` est une estimation déduite d'un virement bancaire détecté,
+ * remplacée par le CSV à l'import.
+ */
+export type PeaTransactionSource = "csv" | "bank_estimate" | "manual";
+
+export interface PeaHolding {
+  id: string;
+  user_id: string;
+  isin: string;
+  ticker: string | null;
+  name: string;
+  quantity: number;
+  cost_basis_eur: number;
+  manual_price_eur: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PeaTransaction {
+  id: string;
+  user_id: string;
+  holding_id: string | null;
+  kind: PeaTransactionKind;
+  quantity: number;
+  amount_eur: number;
+  transaction_date: string;
+  note: string | null;
+  source: PeaTransactionSource;
+  external_ref: string | null;
+  bank_transaction_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PeaInvestmentPlan {
+  id: string;
+  user_id: string;
+  label: string;
+  keywords: string[];
+  holding_id: string | null;
+  expected_amount_eur: number | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PeaSettings {
+  user_id: string;
+  opening_date: string | null;
+  cash_balance_eur: number;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Mouvement d'épargne associé à une transaction (virement vers/depuis un livret). */
 export interface SavingsTransferRef {
   account_id: string;
   account_name: string;
+  direction: "deposit" | "withdrawal";
+}
+
+/** Virement vers le PEA associé à une transaction (plan d'investissement détecté). */
+export interface PeaTransferRef {
+  plan_id: string;
+  plan_label: string;
+  holding_id: string | null;
+  holding_name: string | null;
   direction: "deposit" | "withdrawal";
 }
 
@@ -192,4 +269,5 @@ export interface TransactionWithAccount extends Transaction {
   category_name?: string | null;
   category_color?: string | null;
   savings_transfer?: SavingsTransferRef | null;
+  pea_transfer?: PeaTransferRef | null;
 }

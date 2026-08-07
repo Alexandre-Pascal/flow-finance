@@ -16,10 +16,11 @@ export type CryptoActionError =
   | "parse";
 
 function revalidateCryptoPages() {
-  revalidatePath("/fr/savings");
-  revalidatePath("/en/savings");
-  revalidatePath("/fr/crypto");
-  revalidatePath("/en/crypto");
+  for (const locale of ["fr", "en"]) {
+    revalidatePath(`/${locale}/savings`);
+    revalidatePath(`/${locale}/crypto`);
+    revalidatePath(`/${locale}/investments/crypto`);
+  }
 }
 
 function isSchemaError(message: string, code?: string): boolean {

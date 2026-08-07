@@ -17,6 +17,10 @@ import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { assignTransactionCategoryAction } from "@/app/actions/categories";
+import {
+  assignTransactionPeaPlanAction,
+  syncPeaBankTransfersAction,
+} from "@/app/actions/pea";
 import { assignTransactionSavingsAccountAction } from "@/app/actions/savings";
 import { updateTransactionNoteAction } from "@/app/actions/transactions";
 import { MarkAsSubscriptionDialog } from "@/components/features/mark-as-subscription-dialog";
@@ -59,8 +63,10 @@ import {
 } from "@/components/ui/table";
 import { dedupeCategories } from "@/lib/finance/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { isInternalTransfer } from "@/lib/pea/transfers";
 import type {
   Category,
+  PeaInvestmentPlan,
   RecurringPayment,
   SavingsAccount,
   TransactionWithAccount,
@@ -75,6 +81,8 @@ interface TransactionsTableProps {
   categories: Category[];
   locale: string;
   savingsAccounts?: SavingsAccount[];
+  /** Plans d'investissement PEA, pour l'affectation manuelle d'un virement. */
+  peaInvestmentPlans?: PeaInvestmentPlan[];
   /** Abonnements existants, pour proposer un rattachement depuis une transaction. */
   recurringPayments?: RecurringPayment[];
   compact?: boolean;
@@ -214,6 +222,89 @@ function SavingsTransferBadge({ label }: { label: string }) {
   );
 }
 
+function PeaAssign({
+  tx,
+  peaInvestmentPlans,
+  isDemo,
+}: {
+  tx: TransactionWithAccount;
+  peaInvestmentPlans: PeaInvestmentPlan[];
+  isDemo: boolean;
+}) {
+  const t = useTranslations("transactions");
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const ref = tx.pea_transfer;
+  const currentId = ref?.plan_id ?? null;
+  const isManual = Boolean(tx.pea_manual);
+  const activePlans = peaInvestmentPlans.filter((plan) => plan.active);
+
+  const label = ref
+    ? ref.direction === "deposit"
+      ? t("peaDepositTo", { name: ref.plan_label })
+      : t("peaWithdrawalFrom", { name: ref.plan_label })
+    : t("peaAssignPlaceholder");
+
+  function assign(value: string) {
+    if (isDemo) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("transactionId", tx.id);
+    formData.set("planId", value === "auto" ? "" : value);
+
+    startTransition(async () => {
+      const result = await assignTransactionPeaPlanAction(formData);
+      if (result.error) {
+        return;
+      }
+      // Matérialise immédiatement le versement et l'estimation de parts.
+      await syncPeaBankTransfersAction();
+      router.refresh();
+    });
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={isPending || isDemo}
+          className={cn(
+            "inline-flex h-8 max-w-[180px] cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-normal text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
+          )}
+          aria-label={t("peaAssignLabel")}
+        >
+          <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{label}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>{t("peaAssignLabel")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {activePlans.map((plan) => (
+          <DropdownMenuCheckboxItem
+            key={plan.id}
+            checked={isManual && currentId === plan.id}
+            onCheckedChange={() => assign(plan.id)}
+            className="cursor-pointer"
+          >
+            {plan.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={!isManual}
+          onCheckedChange={() => assign("auto")}
+          className="cursor-pointer"
+        >
+          {t("peaAssignAuto")}
+        </DropdownMenuCheckboxItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function SavingsAssign({
   tx,
   savingsAccounts,
@@ -303,12 +394,14 @@ function TransactionExpenseType({
   tx,
   categories,
   savingsAccounts,
+  peaInvestmentPlans,
   compact,
   isDemo,
 }: {
   tx: TransactionWithAccount;
   categories: Category[];
   savingsAccounts: SavingsAccount[];
+  peaInvestmentPlans: PeaInvestmentPlan[];
   compact: boolean;
   isDemo: boolean;
 }) {
@@ -327,6 +420,26 @@ function TransactionExpenseType({
 
     return (
       <SavingsAssign tx={tx} savingsAccounts={savingsAccounts} isDemo={isDemo} />
+    );
+  }
+
+  if (tx.pea_transfer) {
+    const ref = tx.pea_transfer;
+    const label =
+      ref.direction === "deposit"
+        ? t("peaDepositTo", { name: ref.plan_label })
+        : t("peaWithdrawalFrom", { name: ref.plan_label });
+
+    if (compact || peaInvestmentPlans.length === 0) {
+      return <SavingsTransferBadge label={label} />;
+    }
+
+    return (
+      <PeaAssign
+        tx={tx}
+        peaInvestmentPlans={peaInvestmentPlans}
+        isDemo={isDemo}
+      />
     );
   }
 
@@ -486,6 +599,7 @@ export function TransactionsTable({
   categories,
   locale,
   savingsAccounts = [],
+  peaInvestmentPlans = [],
   recurringPayments = [],
   compact = false,
   isDemo = false,
@@ -528,13 +642,19 @@ export function TransactionsTable({
         } else {
           withdrawals += 1;
         }
+      } else if (tx.pea_transfer) {
+        if (tx.pea_transfer.direction === "deposit") {
+          deposits += 1;
+        } else {
+          withdrawals += 1;
+        }
       }
       if (tx.category_id) {
         counts.set(tx.category_id, (counts.get(tx.category_id) ?? 0) + 1);
       } else if (
         tx.amount < 0 &&
         !tx.recurring_payment_id &&
-        !tx.savings_transfer
+        !isInternalTransfer(tx)
       ) {
         uncategorized += 1;
       }
@@ -565,14 +685,20 @@ export function TransactionsTable({
           tx.amount < 0 &&
           !tx.recurring_payment_id &&
           !tx.category_id &&
-          !tx.savings_transfer
+          !isInternalTransfer(tx)
         );
       }
       if (categoryFilter === "deposits") {
-        return tx.savings_transfer?.direction === "deposit";
+        return (
+          tx.savings_transfer?.direction === "deposit" ||
+          tx.pea_transfer?.direction === "deposit"
+        );
       }
       if (categoryFilter === "withdrawals") {
-        return tx.savings_transfer?.direction === "withdrawal";
+        return (
+          tx.savings_transfer?.direction === "withdrawal" ||
+          tx.pea_transfer?.direction === "withdrawal"
+        );
       }
       if (categoryFilter !== "all") {
         return tx.category_id === categoryFilter;
@@ -624,7 +750,7 @@ export function TransactionsTable({
       !isDemo &&
       tx.amount < 0 &&
       !tx.recurring_payment_id &&
-      !tx.savings_transfer
+      !isInternalTransfer(tx)
     );
   }
 
@@ -689,6 +815,7 @@ export function TransactionsTable({
                 tx={tx}
                 categories={uniqueCategories}
                 savingsAccounts={savingsAccounts}
+                peaInvestmentPlans={peaInvestmentPlans}
                 compact={compact}
                 isDemo={isDemo}
               />
