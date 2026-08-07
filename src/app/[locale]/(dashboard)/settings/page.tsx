@@ -27,7 +27,7 @@ export default async function SettingsPage({
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
   const { accounts, bankConnection, transactions, recurringPayments, categories, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady, categoriesSchemaReady } =
-    await getFinanceData(locale);
+    await getFinanceData(locale, { savingsAdjustments: false });
   const recurringSuggestions = listRecurringClusterSuggestions(
     transactions,
     recurringPayments,

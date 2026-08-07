@@ -25,7 +25,11 @@ export default async function DashboardPage({
   const t = await getTranslations("dashboard");
 
   const { accounts, transactions, categories, monthlySpending, isDemo } =
-    await getFinanceData(locale);
+    await getFinanceData(locale, {
+      savingsAdjustments: false,
+      dismissedSuggestions: false,
+      bankConnection: false,
+    });
 
   const totalBalance = sumAccountBalances(accounts);
   const monthTx = getCurrentMonthTransactions(transactions).filter(

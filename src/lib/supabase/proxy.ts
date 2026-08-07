@@ -1,6 +1,6 @@
 /**
- * @file middleware.ts
- * @description Rafraîchissement de session Supabase dans le middleware Next.js.
+ * @file proxy.ts
+ * @description Rafraîchissement de session Supabase dans le proxy Next.js.
  */
 
 import { createServerClient } from "@supabase/ssr";
@@ -8,6 +8,11 @@ import type { NextRequest, NextResponse } from "next/server";
 
 /**
  * Rafraîchit le token de session et écrit les cookies sur la réponse fournie.
+ *
+ * `getClaims()` remplace ici `getUser()` : il rafraîchit la session quand le
+ * token approche de son expiration, mais valide le JWT localement (WebCrypto)
+ * au lieu d'appeler le serveur Auth à chaque navigation. Ce trajet réseau
+ * représentait 86 à 230 ms sur chaque requête.
  */
 export async function refreshSupabaseSession(
   request: NextRequest,
@@ -33,5 +38,5 @@ export async function refreshSupabaseSession(
     },
   });
 
-  await supabase.auth.getUser();
+  await supabase.auth.getClaims();
 }

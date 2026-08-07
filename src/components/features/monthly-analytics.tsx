@@ -6,19 +6,9 @@
 "use client";
 
 import { ArrowDownLeft, ArrowUpRight, Scale, TrendingDown, TrendingUp } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  Bar,
-  CartesianGrid,
-  ComposedChart,
-  Legend,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -41,10 +31,40 @@ import { type MonthlyTransferOverview } from "@/lib/finance/tracked-transfers";
 import type { MonthlySubscriptionRow } from "@/lib/finance/recurring-payments";
 import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 import { formatCurrency } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { MotherTransfersPanel } from "@/components/features/mother-transfers-panel";
-import { PayrollTransfersPanel } from "@/components/features/payroll-transfers-panel";
-import { SubscriptionsAnalyticsPanel } from "@/components/features/subscriptions-analytics-panel";
+
+const MonthlyAnalyticsGraph = dynamic(
+  () => import("@/components/features/monthly-analytics-graph"),
+  { ssr: false, loading: () => <Skeleton className="h-full w-full" /> },
+);
+
+// Les trois panneaux ci-dessous vivent dans des onglets inactifs au chargement.
+// Radix les démonte, mais leur code restait dans le bundle initial : on ne le
+// télécharge donc qu'au moment où l'utilisateur ouvre l'onglet.
+const MotherTransfersPanel = dynamic(
+  () =>
+    import("@/components/features/mother-transfers-panel").then(
+      (mod) => mod.MotherTransfersPanel,
+    ),
+  { loading: () => <Skeleton className="h-96 w-full" /> },
+);
+
+const PayrollTransfersPanel = dynamic(
+  () =>
+    import("@/components/features/payroll-transfers-panel").then(
+      (mod) => mod.PayrollTransfersPanel,
+    ),
+  { loading: () => <Skeleton className="h-96 w-full" /> },
+);
+
+const SubscriptionsAnalyticsPanel = dynamic(
+  () =>
+    import("@/components/features/subscriptions-analytics-panel").then(
+      (mod) => mod.SubscriptionsAnalyticsPanel,
+    ),
+  { loading: () => <Skeleton className="h-96 w-full" /> },
+);
 
 interface MonthlyAnalyticsProps {
   data: MonthlyOverview[];
@@ -54,82 +74,6 @@ interface MonthlyAnalyticsProps {
   subscriptions: RecurringPayment[];
   transactions: TransactionWithAccount[];
   locale: string;
-}
-
-interface ChartTooltipProps {
-  active?: boolean;
-  payload?: unknown;
-  label?: string | number;
-  locale: string;
-  incomeLabel: string;
-  expensesLabel: string;
-  netLabel: string;
-}
-
-function getPayloadValue(payload: unknown, key: string): number {
-  if (!Array.isArray(payload)) {
-    return 0;
-  }
-
-  const item = payload.find(
-    (entry) =>
-      entry &&
-      typeof entry === "object" &&
-      "name" in entry &&
-      String((entry as { name?: unknown }).name) === key,
-  ) as { value?: unknown } | undefined;
-
-  const value = item?.value;
-  return typeof value === "number" ? value : Number(value ?? 0);
-}
-
-function ChartTooltip({
-  active,
-  payload,
-  label,
-  locale,
-  incomeLabel,
-  expensesLabel,
-  netLabel,
-}: ChartTooltipProps) {
-  if (!active || !Array.isArray(payload) || payload.length === 0) {
-    return null;
-  }
-
-  const income = getPayloadValue(payload, "income");
-  const expenses = getPayloadValue(payload, "expenses");
-  const net = getPayloadValue(payload, "net");
-
-  return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="mb-2 font-medium text-foreground">{String(label)}</p>
-      <div className="space-y-1 text-muted-foreground">
-        <p className="flex items-center justify-between gap-6">
-          <span>{incomeLabel}</span>
-          <span className="font-medium text-[var(--chart-2)]">
-            {formatCurrency(income, locale)}
-          </span>
-        </p>
-        <p className="flex items-center justify-between gap-6">
-          <span>{expensesLabel}</span>
-          <span className="font-medium text-destructive">
-            {formatCurrency(expenses, locale)}
-          </span>
-        </p>
-        <p className="flex items-center justify-between gap-6 border-t border-border pt-1">
-          <span>{netLabel}</span>
-          <span
-            className={cn(
-              "font-medium",
-              net >= 0 ? "text-[var(--chart-2)]" : "text-destructive",
-            )}
-          >
-            {formatCurrency(net, locale)}
-          </span>
-        </p>
-      </div>
-    </div>
-  );
 }
 
 function DeltaBadge({
@@ -352,71 +296,13 @@ export function MonthlyAnalytics({
         </CardHeader>
         <CardContent>
           <div className="h-80 min-h-80 w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={filtered}
-                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 12 }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={56}
-                  tickFormatter={(value: number) =>
-                    new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
-                      notation: "compact",
-                      maximumFractionDigits: 1,
-                    }).format(value)
-                  }
-                />
-                <Tooltip
-                  cursor={{ fill: "var(--muted)" }}
-                  content={({ active, payload, label }) => (
-                    <ChartTooltip
-                      active={active}
-                      payload={payload}
-                      label={label}
-                      locale={locale}
-                      incomeLabel={t("income")}
-                      expensesLabel={t("expenses")}
-                      netLabel={t("net")}
-                    />
-                  )}
-                />
-                <Legend wrapperStyle={{ display: "none" }} />
-                <Bar
-                  dataKey="income"
-                  name="income"
-                  fill="var(--chart-2)"
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={28}
-                />
-                <Bar
-                  dataKey="expenses"
-                  name="expenses"
-                  fill="var(--destructive)"
-                  fillOpacity={0.85}
-                  radius={[4, 4, 0, 0]}
-                  maxBarSize={28}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="net"
-                  name="net"
-                  stroke="var(--accent)"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: "var(--accent)", strokeWidth: 0 }}
-                  activeDot={{ r: 5 }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <MonthlyAnalyticsGraph
+              data={filtered}
+              locale={locale}
+              incomeLabel={t("income")}
+              expensesLabel={t("expenses")}
+              netLabel={t("net")}
+            />
           </div>
         </CardContent>
       </Card>

@@ -13,7 +13,11 @@ export default async function TransactionsPage({
   const t = await getTranslations("transactions");
 
   const { transactions, categories, savingsAccounts, isDemo } =
-    await getFinanceData(locale);
+    await getFinanceData(locale, {
+      savingsAdjustments: false,
+      dismissedSuggestions: false,
+      bankConnection: false,
+    });
 
   const sorted = [...transactions].sort((a, b) =>
     b.booking_date.localeCompare(a.booking_date),

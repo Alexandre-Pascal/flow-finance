@@ -13,20 +13,9 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -37,6 +26,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type {
+  ChartMode,
+  DisplaySeries,
+  DonutDatum,
+} from "@/components/features/category-analytics-charts";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
@@ -48,106 +43,25 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const CategorySpendingBars = dynamic(
+  () =>
+    import("@/components/features/category-analytics-charts").then(
+      (mod) => mod.CategorySpendingBars,
+    ),
+  { ssr: false, loading: () => <Skeleton className="h-full w-full" /> },
+);
+
+const CategoryDonut = dynamic(
+  () =>
+    import("@/components/features/category-analytics-charts").then(
+      (mod) => mod.CategoryDonut,
+    ),
+  { ssr: false, loading: () => <Skeleton className="h-full w-full" /> },
+);
+
 interface CategoryAnalyticsProps {
   breakdown: CategoryBreakdown;
   locale: string;
-}
-
-type ChartMode = "amount" | "share";
-
-interface DisplaySeries {
-  key: string;
-  name: string;
-  color: string;
-}
-
-interface DonutDatum {
-  key: string;
-  name: string;
-  color: string;
-  value: number;
-}
-
-function formatCompactCurrency(value: number, locale: string): string {
-  return new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
-    style: "currency",
-    currency: "EUR",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
-function formatPercent(value: number, locale: string): string {
-  return new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
-    style: "percent",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-interface ChartTooltipPayloadItem {
-  name?: string;
-  value?: number;
-  payload?: { color?: string };
-  color?: string;
-  dataKey?: string;
-}
-
-function ChartTooltip({
-  active,
-  payload,
-  label,
-  locale,
-  totalLabel,
-}: {
-  active?: boolean;
-  payload?: readonly ChartTooltipPayloadItem[];
-  label?: string;
-  locale: string;
-  totalLabel: string;
-}) {
-  if (!active || !Array.isArray(payload) || payload.length === 0) {
-    return null;
-  }
-
-  const rows = payload
-    .filter((item) => typeof item.value === "number" && item.value > 0)
-    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-
-  const total = rows.reduce((sum, item) => sum + (item.value ?? 0), 0);
-
-  if (rows.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="min-w-52 rounded-lg border border-border bg-card px-3 py-2.5 text-sm shadow-lg">
-      <p className="mb-2 font-medium text-foreground">{label}</p>
-      <div className="space-y-1.5">
-        {rows.map((item) => (
-          <div
-            key={item.dataKey ?? item.name}
-            className="flex items-center justify-between gap-6 text-muted-foreground"
-          >
-            <span className="flex items-center gap-2">
-              <span
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ background: item.color ?? item.payload?.color }}
-                aria-hidden
-              />
-              {item.name}
-            </span>
-            <span className="font-medium text-foreground">
-              {formatCurrency(item.value ?? 0, locale)}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-6 border-t border-border pt-1.5 font-medium">
-        <span>{totalLabel}</span>
-        <span>{formatCurrency(total, locale)}</span>
-      </div>
-    </div>
-  );
 }
 
 export function CategoryAnalytics({
@@ -193,6 +107,11 @@ export function CategoryAnalytics({
 
     return { displaySeries: series, chartData: data };
   }, [totals, months]);
+
+  const monthKeys = useMemo(
+    () => months.map((month) => month.monthKey),
+    [months],
+  );
 
   const totalPeriod = useMemo(
     () => totals.reduce((sum, c) => sum + c.total, 0),
@@ -353,88 +272,16 @@ export function CategoryAnalytics({
           </CardHeader>
           <CardContent>
             <div className="h-80 w-full min-w-0 [&_.recharts-bar-rectangle]:cursor-pointer [&_.recharts-surface]:cursor-pointer">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  stackOffset={chartMode === "share" ? "expand" : "none"}
-                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                  onClick={(state) => {
-                    const index = (state as { activeTooltipIndex?: number })
-                      ?.activeTooltipIndex;
-                    if (typeof index === "number" && months[index]) {
-                      setSelectedMonthKey(months[index].monthKey);
-                    }
-                  }}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    className="stroke-border"
-                  />
-                  <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={56}
-                    tickFormatter={(value: number) =>
-                      chartMode === "share"
-                        ? formatPercent(value, locale)
-                        : formatCompactCurrency(value, locale)
-                    }
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--muted)", opacity: 0.4 }}
-                    content={(props) => (
-                      <ChartTooltip
-                        active={props.active}
-                        payload={
-                          props.payload as
-                            | readonly ChartTooltipPayloadItem[]
-                            | undefined
-                        }
-                        label={props.label as string}
-                        locale={locale}
-                        totalLabel={t("total")}
-                      />
-                    )}
-                  />
-                  {displaySeries.map((series, index) => (
-                    <Bar
-                      key={series.key}
-                      dataKey={series.key}
-                      name={series.name}
-                      stackId="spending"
-                      fill={series.color}
-                      radius={
-                        index === displaySeries.length - 1 ? [4, 4, 0, 0] : 0
-                      }
-                      isAnimationActive={false}
-                      onClick={(entry) =>
-                        handleSelectMonth(
-                          (entry as { payload?: { monthKey?: string } })
-                            ?.payload?.monthKey,
-                        )
-                      }
-                    >
-                      {chartData.map((row) => (
-                        <Cell
-                          key={`${series.key}-${row.monthKey}`}
-                          cursor="pointer"
-                          fillOpacity={
-                            row.monthKey === activeMonthKey ? 1 : 0.35
-                          }
-                        />
-                      ))}
-                    </Bar>
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+              <CategorySpendingBars
+                chartData={chartData}
+                displaySeries={displaySeries}
+                chartMode={chartMode}
+                monthKeys={monthKeys}
+                activeMonthKey={activeMonthKey}
+                locale={locale}
+                totalLabel={t("total")}
+                onSelectMonth={handleSelectMonth}
+              />
             </div>
 
             <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
@@ -470,40 +317,12 @@ export function CategoryAnalytics({
             {donutData.length > 0 && selectedMonth ? (
               <>
                 <div className="relative h-56 w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={donutData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={64}
-                        outerRadius={92}
-                        paddingAngle={2}
-                        strokeWidth={0}
-                        isAnimationActive={false}
-                      >
-                        {donutData.map((entry) => (
-                          <Cell key={entry.key} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        wrapperStyle={{ zIndex: 20 }}
-                        content={(props) => (
-                          <ChartTooltip
-                            active={props.active}
-                            payload={
-                              props.payload as
-                                | readonly ChartTooltipPayloadItem[]
-                                | undefined
-                            }
-                            label={selectedMonth.monthFull}
-                            locale={locale}
-                            totalLabel={t("total")}
-                          />
-                        )}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <CategoryDonut
+                    donutData={donutData}
+                    monthLabel={selectedMonth.monthFull}
+                    locale={locale}
+                    totalLabel={t("total")}
+                  />
                   <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                     <span className="text-xs text-muted-foreground">
                       {t("total")}

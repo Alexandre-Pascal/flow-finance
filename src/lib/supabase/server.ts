@@ -5,13 +5,18 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { isSupabaseConfigured } from "./client";
 
 /**
  * Crée un client Supabase lié aux cookies de la requête courante.
  * Retourne null si Supabase n'est pas configuré (mode démo).
+ *
+ * Mémoïsé par `cache()` : tous les appels d'une même requête HTTP partagent
+ * le même client, ce qui évite de relire les cookies et de rouvrir une
+ * connexion à chaque helper.
  */
-export async function createClient() {
+export const createClient = cache(async function createClient() {
   if (!isSupabaseConfigured()) {
     return null;
   }
@@ -38,4 +43,4 @@ export async function createClient() {
       },
     },
   );
-}
+});

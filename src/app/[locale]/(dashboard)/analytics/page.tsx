@@ -20,7 +20,11 @@ export default async function AnalyticsPage({
   setRequestLocale(locale);
   const t = await getTranslations("analytics");
 
-  const { transactions, recurringPayments } = await getFinanceData(locale);
+  const { transactions, recurringPayments } = await getFinanceData(locale, {
+    savingsAdjustments: false,
+    dismissedSuggestions: false,
+    bankConnection: false,
+  });
   const monthlyOverview = buildMonthlyOverview(transactions, locale);
   const motherTransferData = buildMonthlyTransferOverview(
     transactions,

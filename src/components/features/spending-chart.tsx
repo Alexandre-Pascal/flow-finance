@@ -1,19 +1,23 @@
 /**
  * @file spending-chart.tsx
- * @description Graphique des dépenses mensuelles (recharts).
+ * @description Graphique des dépenses mensuelles (recharts, chargé à la demande).
  */
 
 "use client";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// `ssr: false` évite de rendre le graphique côté serveur : recharts a besoin
+// des dimensions réelles du conteneur, ce qui produisait à chaque rendu les
+// avertissements « width(-1) and height(-1) of chart should be greater than 0 ».
+const SpendingChartGraph = dynamic(
+  () => import("@/components/features/spending-chart-graph"),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-full w-full" />,
+  },
+);
 
 interface SpendingChartProps {
   data: { month: string; amount: number }[];
@@ -23,38 +27,10 @@ interface SpendingChartProps {
 export function SpendingChart({ data, title }: SpendingChartProps) {
   return (
     <div className="h-64 min-h-64 w-full min-w-0">
-      <p className="mb-4 text-sm font-medium text-muted-foreground">{title}</p>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-          <XAxis
-            dataKey="month"
-            tick={{ fontSize: 12 }}
-            axisLine={false}
-            tickLine={false}
-          />
-          <YAxis
-            tick={{ fontSize: 12 }}
-            axisLine={false}
-            tickLine={false}
-            width={48}
-          />
-          <Tooltip
-            cursor={{ fill: "var(--muted)" }}
-            contentStyle={{
-              borderRadius: "8px",
-              border: "1px solid var(--border)",
-              background: "var(--card)",
-            }}
-          />
-          <Bar
-            dataKey="amount"
-            fill="var(--chart-3)"
-            radius={[4, 4, 0, 0]}
-            name="EUR"
-          />
-        </BarChart>
-      </ResponsiveContainer>
+      {title ? (
+        <p className="mb-4 text-sm font-medium text-muted-foreground">{title}</p>
+      ) : null}
+      <SpendingChartGraph data={data} />
     </div>
   );
 }

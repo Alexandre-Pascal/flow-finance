@@ -17,18 +17,11 @@ import {
   Wallet,
   Bitcoin,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip as ChartTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
+  assignTransactionSavingsAccountAction,
   createSavingsAccountAction,
   createSavingsAdjustmentAction,
   deleteSavingsAccountAction,
@@ -77,9 +70,26 @@ import {
   type SavingsOverview,
   type SavingsVehicle,
 } from "@/lib/finance/savings";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatDate,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { SavingsAccount, SavingsAccountKind, SavingsAdjustmentKind } from "@/types/database";
+import type {
+  SavingsAccount,
+  SavingsAccountKind,
+  SavingsAdjustmentKind,
+  TransactionWithAccount,
+} from "@/types/database";
+
+type MovementFormKind = SavingsAdjustmentKind | "transfer";
+
+const MOVEMENT_FORM_KINDS: MovementFormKind[] = [
+  ...SAVINGS_ADJUSTMENT_KINDS,
+  "transfer",
+];
 
 interface SavingsCryptoSummary {
   summary: CryptoPortfolioSummary;
@@ -90,6 +100,7 @@ interface SavingsAnalyticsProps {
   overview: SavingsOverview;
   checking: CheckingVehicle[];
   crypto: SavingsCryptoSummary;
+  transactions: TransactionWithAccount[];
   locale: string;
   isDemo: boolean;
   schemaReady: boolean;
@@ -99,19 +110,16 @@ interface SavingsAnalyticsProps {
 
 const CHECKING_COLOR = "#2563EB";
 
-function formatCompactCurrency(value: number, locale: string): string {
-  return new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
-    style: "currency",
-    currency: "EUR",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
-}
+const SavingsBalanceChart = dynamic(
+  () => import("@/components/features/savings-balance-chart"),
+  { ssr: false, loading: () => <Skeleton className="h-full w-full" /> },
+);
 
 export function SavingsAnalytics({
   overview,
   checking,
   crypto,
+  transactions,
   locale,
   isDemo,
   schemaReady,
@@ -341,6 +349,7 @@ export function SavingsAnalytics({
               <VehicleCard
                 key={vehicle.account.id}
                 vehicle={vehicle}
+                transactions={transactions}
                 period={period}
                 locale={locale}
                 isDemo={isDemo}
@@ -534,36 +543,6 @@ function EmptyState({
   );
 }
 
-interface ChartTooltipPayloadItem {
-  value?: number;
-  payload?: SavingsChartPoint;
-}
-
-function BalanceTooltip({
-  active,
-  payload,
-  locale,
-}: {
-  active?: boolean;
-  payload?: readonly ChartTooltipPayloadItem[];
-  locale: string;
-}) {
-  const tt = useTranslations("savings");
-  if (!active || !payload || payload.length === 0) {
-    return null;
-  }
-  const item = payload[0];
-  const point = item.payload;
-  return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
-      <p className="font-medium text-foreground">{point?.labelFull ?? ""}</p>
-      <p className="mt-0.5 text-muted-foreground">
-        {tt("balance")} : {formatCurrency(item.value ?? 0, locale)}
-      </p>
-    </div>
-  );
-}
-
 function BalanceChart({
   data,
   color,
@@ -579,51 +558,13 @@ function BalanceChart({
 }) {
   return (
     <div className="h-40 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={color} stopOpacity={0.35} />
-              <stop offset="95%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" className="stroke-border" vertical={false} />
-          <XAxis
-            dataKey="label"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 11 }}
-            className="text-muted-foreground"
-            interval={compactAxis ? "preserveStartEnd" : undefined}
-            minTickGap={compactAxis ? 28 : undefined}
-          />
-          <YAxis
-            tickLine={false}
-            axisLine={false}
-            width={48}
-            tick={{ fontSize: 11 }}
-            tickFormatter={(value: number) => formatCompactCurrency(value, locale)}
-            className="text-muted-foreground"
-            domain={["dataMin", "dataMax"]}
-          />
-          <ChartTooltip
-            content={({ active, payload }) => (
-              <BalanceTooltip
-                active={active}
-                payload={payload as readonly ChartTooltipPayloadItem[]}
-                locale={locale}
-              />
-            )}
-          />
-          <Area
-            type="monotone"
-            dataKey="balance"
-            stroke={color}
-            strokeWidth={2}
-            fill={`url(#${gradientId})`}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+      <SavingsBalanceChart
+        data={data}
+        color={color}
+        gradientId={gradientId}
+        locale={locale}
+        compactAxis={compactAxis}
+      />
     </div>
   );
 }
@@ -649,46 +590,96 @@ function SavingsAdjustmentDialog({
   open,
   onOpenChange,
   isPending,
-  onSubmit,
+  locale,
+  transactions,
+  onSubmitAdjustment,
+  onAssignTransfer,
 }: {
   account: SavingsAccount;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isPending: boolean;
-  onSubmit: (formData: FormData) => void;
+  locale: string;
+  transactions: TransactionWithAccount[];
+  onSubmitAdjustment: (formData: FormData) => void;
+  onAssignTransfer: (transactionId: string) => void;
 }) {
   const t = useTranslations("savings");
   const today = new Date().toISOString().slice(0, 10);
-  const [kind, setKind] = useState<SavingsAdjustmentKind>("cash");
+  const [kind, setKind] = useState<MovementFormKind>("cash");
+  const [search, setSearch] = useState("");
+  const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
+
+  const candidates = useMemo(() => {
+    const query = search.trim().toUpperCase();
+    return [...transactions]
+      .filter((tx) => {
+        // Déjà rattachée à ce livret : inutile de la proposer.
+        if (tx.savings_transfer?.account_id === account.id) {
+          return false;
+        }
+        if (!query) {
+          return true;
+        }
+        const haystack = `${tx.description} ${tx.amount} ${tx.booking_date}`.toUpperCase();
+        return haystack.includes(query);
+      })
+      .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
+      .slice(0, 50);
+  }, [transactions, account.id, search]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          setKind("cash");
+          setSearch("");
+          setSelectedTxId(null);
+        }
+        onOpenChange(next);
+      }}
+    >
+      <DialogContent className="flex max-h-[min(90vh,40rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <form
+          className="flex min-h-0 flex-1 flex-col"
           onSubmit={(event) => {
             event.preventDefault();
+            if (kind === "transfer") {
+              if (!selectedTxId) {
+                return;
+              }
+              onAssignTransfer(selectedTxId);
+              return;
+            }
             const formData = new FormData(event.currentTarget);
             formData.set("savingsAccountId", account.id);
             formData.set("kind", kind);
-            onSubmit(formData);
+            onSubmitAdjustment(formData);
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="shrink-0 space-y-1.5 p-4 pb-0">
             <DialogTitle>{t("adjustmentFormTitle")}</DialogTitle>
             <DialogDescription>
               {t("adjustmentFormDescription", { name: account.name })}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             <div className="space-y-2">
               <Label htmlFor={`adj-kind-${account.id}`}>{t("adjustmentKindLabel")}</Label>
-              <Select value={kind} onValueChange={(v) => setKind(v as SavingsAdjustmentKind)}>
+              <Select
+                value={kind}
+                onValueChange={(v) => {
+                  setKind(v as MovementFormKind);
+                  setSelectedTxId(null);
+                }}
+              >
                 <SelectTrigger id={`adj-kind-${account.id}`} className="cursor-pointer">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SAVINGS_ADJUSTMENT_KINDS.map((value) => (
+                  {MOVEMENT_FORM_KINDS.map((value) => (
                     <SelectItem key={value} value={value} className="cursor-pointer">
                       {t(`adjustmentKind_${value}` as never)}
                     </SelectItem>
@@ -696,52 +687,133 @@ function SavingsAdjustmentDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor={`adj-amount-${account.id}`}>{t("adjustmentAmountLabel")}</Label>
-                <Input
-                  id={`adj-amount-${account.id}`}
-                  name="amount"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  disabled={isPending}
-                  required
-                />
+
+            {kind === "transfer" ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor={`adj-tx-search-${account.id}`}>
+                    {t("transferSearchLabel")}
+                  </Label>
+                  <Input
+                    id={`adj-tx-search-${account.id}`}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={t("transferSearchPlaceholder")}
+                    disabled={isPending}
+                  />
+                </div>
+                {candidates.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+                    {t("transferNoCandidates")}
+                  </p>
+                ) : (
+                  <ul className="max-h-56 space-y-1 overflow-y-auto overflow-x-hidden rounded-lg border border-border p-1">
+                    {candidates.map((tx) => {
+                      const selected = selectedTxId === tx.id;
+                      const alreadyElsewhere =
+                        tx.savings_transfer != null &&
+                        tx.savings_transfer.account_id !== account.id;
+                      return (
+                        <li key={tx.id} className="min-w-0">
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => setSelectedTxId(tx.id)}
+                            className={cn(
+                              "flex w-full min-w-0 cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
+                              selected
+                                ? "bg-primary/10 ring-1 ring-primary/40"
+                                : "hover:bg-muted/60",
+                            )}
+                          >
+                            <div className="min-w-0 flex-1 overflow-hidden">
+                              <p className="truncate text-foreground" title={tx.description}>
+                                {tx.description}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {formatDate(tx.booking_date, locale)}
+                                {alreadyElsewhere ? (
+                                  <span className="ml-1.5">
+                                    · {tx.savings_transfer?.account_name}
+                                  </span>
+                                ) : null}
+                              </p>
+                            </div>
+                            <span
+                              className={cn(
+                                "shrink-0 tabular-nums",
+                                tx.amount >= 0
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-foreground",
+                              )}
+                            >
+                              {tx.amount >= 0 ? "+" : ""}
+                              {formatCurrency(tx.amount, locale)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {!selectedTxId ? (
+                  <p className="text-xs text-muted-foreground">{t("transferSelectRequired")}</p>
+                ) : null}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor={`adj-date-${account.id}`}>{t("adjustmentDateLabel")}</Label>
-                <Input
-                  id={`adj-date-${account.id}`}
-                  name="adjustmentDate"
-                  type="date"
-                  defaultValue={today}
-                  disabled={isPending}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`adj-note-${account.id}`}>{t("adjustmentNoteLabel")}</Label>
-              <Input
-                id={`adj-note-${account.id}`}
-                name="note"
-                placeholder={t("adjustmentNotePlaceholder")}
-                disabled={isPending}
-              />
-            </div>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor={`adj-amount-${account.id}`}>{t("adjustmentAmountLabel")}</Label>
+                    <Input
+                      id={`adj-amount-${account.id}`}
+                      name="amount"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      disabled={isPending}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`adj-date-${account.id}`}>{t("adjustmentDateLabel")}</Label>
+                    <Input
+                      id={`adj-date-${account.id}`}
+                      name="adjustmentDate"
+                      type="date"
+                      defaultValue={today}
+                      disabled={isPending}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`adj-note-${account.id}`}>{t("adjustmentNoteLabel")}</Label>
+                  <Input
+                    id={`adj-note-${account.id}`}
+                    name="note"
+                    placeholder={t("adjustmentNotePlaceholder")}
+                    disabled={isPending}
+                  />
+                </div>
+              </>
+            )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="mx-0 mb-0 shrink-0">
             <DialogClose asChild>
               <Button type="button" variant="ghost" className="cursor-pointer" disabled={isPending}>
                 {t("cancel")}
               </Button>
             </DialogClose>
-            <Button type="submit" className="cursor-pointer" disabled={isPending}>
-              {t("adjustmentSubmit")}
+            <Button
+              type="submit"
+              className="cursor-pointer"
+              disabled={isPending || (kind === "transfer" && !selectedTxId)}
+            >
+              {kind === "transfer" ? t("transferSubmit") : t("adjustmentSubmit")}
             </Button>
           </DialogFooter>
         </form>
@@ -752,6 +824,7 @@ function SavingsAdjustmentDialog({
 
 function VehicleCard({
   vehicle,
+  transactions,
   period,
   locale,
   isDemo,
@@ -760,6 +833,7 @@ function VehicleCard({
   onDelete,
 }: {
   vehicle: SavingsVehicle;
+  transactions: TransactionWithAccount[];
   period: MonthlyPeriod;
   locale: string;
   isDemo: boolean;
@@ -805,6 +879,19 @@ function VehicleCard({
   function handleCreateAdjustment(formData: FormData) {
     startMovementTransition(async () => {
       const result = await createSavingsAdjustmentAction(formData);
+      if (!result.error) {
+        setAdjustmentOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  function handleAssignTransfer(transactionId: string) {
+    const formData = new FormData();
+    formData.set("transactionId", transactionId);
+    formData.set("savingsAccountId", account.id);
+    startMovementTransition(async () => {
+      const result = await assignTransactionSavingsAccountAction(formData);
       if (!result.error) {
         setAdjustmentOpen(false);
         router.refresh();
@@ -1026,7 +1113,10 @@ function VehicleCard({
         open={adjustmentOpen}
         onOpenChange={setAdjustmentOpen}
         isPending={pending}
-        onSubmit={handleCreateAdjustment}
+        locale={locale}
+        transactions={transactions}
+        onSubmitAdjustment={handleCreateAdjustment}
+        onAssignTransfer={handleAssignTransfer}
       />
     </Card>
   );

@@ -17,15 +17,23 @@ export default async function SavingsPage({
   setRequestLocale(locale);
   const t = await getTranslations("savings");
 
-  const {
-    accounts,
-    transactions,
-    savingsAccounts,
-    savingsAdjustments,
-    savingsSchemaReady,
-    bankConnection,
-    isDemo,
-  } = await getFinanceData(locale);
+  // Le portefeuille crypto ne dépend pas des données bancaires : les deux
+  // lectures partent ensemble au lieu de s'enchaîner.
+  const [
+    {
+      accounts,
+      transactions,
+      savingsAccounts,
+      savingsAdjustments,
+      savingsSchemaReady,
+      bankConnection,
+      isDemo,
+    },
+    crypto,
+  ] = await Promise.all([
+    getFinanceData(locale, { dismissedSuggestions: false }),
+    getCryptoPortfolioData(),
+  ]);
 
   const overview = buildSavingsOverview(
     transactions,
@@ -34,7 +42,6 @@ export default async function SavingsPage({
     locale,
   );
   const checking = buildCheckingOverview(accounts, transactions, locale);
-  const crypto = await getCryptoPortfolioData();
 
   const bankReady = isEnableBankingConfigured();
   const isBankLinked =
@@ -54,6 +61,7 @@ export default async function SavingsPage({
           summary: crypto.summary,
           schemaReady: crypto.schemaReady,
         }}
+        transactions={transactions}
         locale={locale}
         isDemo={isDemo}
         schemaReady={savingsSchemaReady}

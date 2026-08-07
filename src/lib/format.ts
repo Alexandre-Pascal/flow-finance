@@ -18,6 +18,23 @@ export function formatCurrency(
 }
 
 /**
+ * Formate un montant en notation compacte (ex. « 12,3 k€ »), pour les axes de
+ * graphique et les libellés courts.
+ */
+export function formatCompactCurrency(
+  amount: number,
+  locale: string,
+  currency = "EUR",
+): string {
+  return new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
+    style: "currency",
+    currency,
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(amount);
+}
+
+/**
  * Formate une date ISO (YYYY-MM-DD) pour l'affichage.
  */
 export function formatDate(dateIso: string, locale: string): string {

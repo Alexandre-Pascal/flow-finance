@@ -10,6 +10,28 @@ import {
 } from "@/lib/finance/recurring-payments";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Applique les mises à jour groupées par abonnement cible, plutôt qu'un UPDATE
+ * séquentiel par transaction.
+ */
+async function applyRecurringUpdates(
+  supabase: SupabaseClient,
+  updatesByPayment: Map<string | null, string[]>,
+): Promise<void> {
+  for (const [recurringPaymentId, transactionIds] of updatesByPayment) {
+    for (let start = 0; start < transactionIds.length; start += 200) {
+      const chunk = transactionIds.slice(start, start + 200);
+
+      const { error } = await supabase
+        .from("transactions")
+        .update({ recurring_payment_id: recurringPaymentId })
+        .in("id", chunk);
+
+      if (error) throw error;
+    }
+  }
+}
+
 export async function rematchRecurringPaymentsForUser(
   userId: string,
   supabaseClient?: SupabaseClient,
@@ -20,11 +42,13 @@ export async function rematchRecurringPaymentsForUser(
     throw new Error("Supabase is not configured.");
   }
 
-  const [{ data: rules, error: rulesError }, { data: accounts, error: accountsError }] =
-    await Promise.all([
-      supabase.from("recurring_payments").select("*").eq("user_id", userId),
-      supabase.from("accounts").select("id").eq("user_id", userId),
-    ]);
+  const [
+    { data: rules, error: rulesError },
+    { data: accounts, error: accountsError },
+  ] = await Promise.all([
+    supabase.from("recurring_payments").select("*").eq("user_id", userId),
+    supabase.from("accounts").select("id").eq("user_id", userId),
+  ]);
 
   if (rulesError) throw rulesError;
   if (accountsError) throw accountsError;
@@ -37,49 +61,52 @@ export async function rematchRecurringPaymentsForUser(
     return { matched: 0 };
   }
 
+  const accountIds = accounts.map((account) => String(account.id));
+
+  // Une seule requête pour tous les comptes, au lieu d'une par compte.
+  const { data: transactions, error } = await supabase
+    .from("transactions")
+    .select("id, amount, description, booking_date, recurring_payment_id")
+    .in("account_id", accountIds)
+    .lt("amount", 0)
+    .eq("recurring_payment_manual", false);
+
+  if (error) throw error;
+  if (!transactions?.length) {
+    return { matched: 0 };
+  }
+
+  const updatesByPayment = new Map<string | null, string[]>();
   let matched = 0;
 
-  for (const account of accounts) {
-    const { data: transactions, error } = await supabase
-      .from("transactions")
-      .select("id, amount, description, booking_date, recurring_payment_id, recurring_payment_manual")
-      .eq("account_id", account.id)
-      .lt("amount", 0);
+  for (const tx of transactions) {
+    const rule = findMatchingRecurringPayment(
+      {
+        amount: Number(tx.amount),
+        description: String(tx.description),
+        booking_date: String(tx.booking_date),
+      },
+      recurringRules,
+    );
+    const nextId = rule?.id ?? null;
 
-    if (error) throw error;
-    if (!transactions?.length) continue;
+    if (tx.recurring_payment_id === nextId) {
+      continue;
+    }
 
-    for (const tx of transactions) {
-      if (tx.recurring_payment_manual) {
-        continue;
-      }
+    const bucket = updatesByPayment.get(nextId);
+    if (bucket) {
+      bucket.push(String(tx.id));
+    } else {
+      updatesByPayment.set(nextId, [String(tx.id)]);
+    }
 
-      const rule = findMatchingRecurringPayment(
-        {
-          amount: Number(tx.amount),
-          description: String(tx.description),
-          booking_date: String(tx.booking_date),
-        },
-        recurringRules,
-      );
-      const nextId = rule?.id ?? null;
-
-      if (tx.recurring_payment_id === nextId) {
-        continue;
-      }
-
-      const { error: updateError } = await supabase
-        .from("transactions")
-        .update({ recurring_payment_id: nextId })
-        .eq("id", tx.id);
-
-      if (updateError) throw updateError;
-
-      if (nextId) {
-        matched += 1;
-      }
+    if (nextId) {
+      matched += 1;
     }
   }
+
+  await applyRecurringUpdates(supabase, updatesByPayment);
 
   return { matched };
 }

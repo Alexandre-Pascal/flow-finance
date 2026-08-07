@@ -65,6 +65,9 @@ import type {
 } from "@/types/database";
 import { cn } from "@/lib/utils";
 
+/** Nombre de lignes rendues par tranche (voir `visibleCount`). */
+const PAGE_SIZE = 60;
+
 interface TransactionsTableProps {
   transactions: TransactionWithAccount[];
   categories: Category[];
@@ -573,6 +576,24 @@ export function TransactionsTable({
     });
   }, [transactions, categoryFilter, selectedMonths, search]);
 
+  // Chaque ligne monte deux popovers Radix : tout afficher d'un coup rendait
+  // l'hydratation de la page proportionnelle à l'historique complet. On rend
+  // donc par tranches, la tranche repartant de zéro à chaque changement de
+  // filtre (comparaison de `filterKey` plutôt qu'un effet de synchronisation).
+  const filterKey = `${categoryFilter}|${search}|${[...selectedMonths]
+    .sort()
+    .join(",")}`;
+  const [pagination, setPagination] = useState({
+    key: filterKey,
+    count: PAGE_SIZE,
+  });
+  const visibleCount =
+    pagination.key === filterKey ? pagination.count : PAGE_SIZE;
+  const visible = useMemo(
+    () => (filtered.length > visibleCount ? filtered.slice(0, visibleCount) : filtered),
+    [filtered, visibleCount],
+  );
+
   function toggleMonth(key: string) {
     setSelectedMonths((prev) => {
       const next = new Set(prev);
@@ -606,6 +627,7 @@ export function TransactionsTable({
         {t("noResults")}
       </p>
     ) : (
+      <>
       <Table>
         <TableHeader>
           <TableRow>
@@ -616,7 +638,7 @@ export function TransactionsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filtered.map((tx) => (
+          {visible.map((tx) => (
           <TableRow key={tx.id} className="group transition-colors duration-150">
             <TableCell className="whitespace-nowrap text-muted-foreground">
               {formatDate(tx.booking_date, locale)}
@@ -652,6 +674,31 @@ export function TransactionsTable({
         ))}
         </TableBody>
       </Table>
+
+      {filtered.length > visible.length ? (
+        <div className="flex flex-col items-center gap-2 pt-4">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {t("shownCount", {
+              shown: visible.length,
+              total: filtered.length,
+            })}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="cursor-pointer"
+            onClick={() =>
+              setPagination({
+                key: filterKey,
+                count: visible.length + PAGE_SIZE,
+              })
+            }
+          >
+            {t("loadMore")}
+          </Button>
+        </div>
+      ) : null}
+      </>
     );
 
   if (compact) {

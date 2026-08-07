@@ -6,7 +6,7 @@
 "use client";
 
 import { Repeat } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bar,
@@ -59,11 +59,16 @@ export function SubscriptionsAnalyticsPanel({
   );
 
   const currentMonthKey = filtered.at(-1)?.monthKey ?? "";
-  const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey);
-
-  useEffect(() => {
-    setSelectedMonthKey(currentMonthKey);
-  }, [currentMonthKey, period]);
+  // La sélection est mémorisée avec sa période pour retomber sur le mois courant
+  // dès que la période change, sans effet de synchronisation.
+  const [monthOverride, setMonthOverride] = useState<{
+    period: MonthlyPeriod;
+    monthKey: string;
+  } | null>(null);
+  const selectedMonthKey =
+    monthOverride?.period === period ? monthOverride.monthKey : currentMonthKey;
+  const setSelectedMonthKey = (monthKey: string) =>
+    setMonthOverride({ period, monthKey });
 
   const selectedMonth = useMemo(
     () => filtered.find((row) => row.monthKey === selectedMonthKey),

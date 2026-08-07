@@ -6,7 +6,6 @@
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
   descriptionMatchesGeneralPattern,
-  generalRecurringMatchPattern,
   GENERAL_RECURRING_AMOUNT_TOLERANCE,
 } from "@/lib/finance/recurring-labels";
 import type {

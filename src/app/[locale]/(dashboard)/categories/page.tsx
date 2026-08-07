@@ -12,7 +12,11 @@ export default async function CategoriesPage({
   setRequestLocale(locale);
   const t = await getTranslations("categoryAnalytics");
 
-  const { transactions } = await getFinanceData(locale);
+  const { transactions } = await getFinanceData(locale, {
+    savingsAdjustments: false,
+    dismissedSuggestions: false,
+    bankConnection: false,
+  });
   const breakdown = buildCategoryBreakdown(transactions, locale, {
     subscriptions: t("subscriptions"),
     uncategorized: t("uncategorized"),
