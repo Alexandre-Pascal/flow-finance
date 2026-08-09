@@ -1,13 +1,16 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { LanguageSwitcher } from "@/components/features/language-switcher";
+import { BankConnectButtons } from "@/components/features/bank-connect-buttons";
 import { BankSyncButtons } from "@/components/features/bank-sync-buttons";
 import { CategoriesManager } from "@/components/features/categories-manager";
+import { ProfileSettingsForm } from "@/components/features/profile-settings-form";
 import { SubscriptionsManager } from "@/components/features/subscriptions-manager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { getAppUser } from "@/lib/auth";
 import { getFinanceData } from "@/lib/finance/queries";
+import { getProfileSettings } from "@/lib/get-profile-settings";
 import { listRecurringClusterSuggestions } from "@/lib/finance/recurring-suggestions";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -26,15 +29,34 @@ export default async function SettingsPage({
   const tNav = await getTranslations("nav");
   const user = await getAppUser();
   const bankReady = isEnableBankingConfigured();
-  const { accounts, bankConnection, transactions, recurringPayments, categories, dismissedSuggestionKeys, isDemo, subscriptionsSchemaReady, categoriesSchemaReady } =
-    await getFinanceData(locale, { savingsAdjustments: false });
+  const [
+    {
+      accounts,
+      bankConnection,
+      transactions,
+      recurringPayments,
+      categories,
+      dismissedSuggestionKeys,
+      isDemo,
+      subscriptionsSchemaReady,
+      categoriesSchemaReady,
+    },
+    profileSettings,
+  ] = await Promise.all([
+    getFinanceData(locale, { savingsAdjustments: false }),
+    getProfileSettings(),
+  ]);
   const recurringSuggestions = listRecurringClusterSuggestions(
     transactions,
     recurringPayments,
     dismissedSuggestionKeys,
   );
-  const paypalSuggestions = recurringSuggestions.filter((suggestion) => suggestion.source === "paypal");
-  const generalSuggestions = recurringSuggestions.filter((suggestion) => suggestion.source === "general");
+  const paypalSuggestions = recurringSuggestions.filter(
+    (suggestion) => suggestion.source === "paypal",
+  );
+  const generalSuggestions = recurringSuggestions.filter(
+    (suggestion) => suggestion.source === "general",
+  );
 
   const hasSyncedAccounts = accounts.length > 0;
   const isBankLinked =
@@ -81,6 +103,11 @@ export default async function SettingsPage({
               {isBankLinked ? t("bankConnected") : t("bankNotConnected")}
             </span>
           </div>
+          {bankConnection?.aspsp_name ? (
+            <p className="text-sm text-muted-foreground">
+              {t("aspspConnected", { name: bankConnection.aspsp_name })}
+            </p>
+          ) : null}
           {bankConnection?.valid_until ? (
             <p className="text-sm text-muted-foreground">
               {t("consentExpires", {
@@ -90,19 +117,18 @@ export default async function SettingsPage({
               })}
             </p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            {bankReady && !isBankLinked ? (
-              <form action="/api/bank/connect" method="get">
-                <Button
-                  type="submit"
-                  className="cursor-pointer bg-accent text-accent-foreground hover:bg-accent/90"
-                >
-                  {t("connectBank")}
-                </Button>
-              </form>
-            ) : null}
-            {bankReady && isBankLinked ? <BankSyncButtons /> : null}
-          </div>
+          {bankReady && !isBankLinked ? <BankConnectButtons /> : null}
+          {bankReady && isBankLinked ? <BankSyncButtons /> : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("profilePreferences")}</CardTitle>
+          <CardDescription>{t("profilePreferencesDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProfileSettingsForm settings={profileSettings} isDemo={isDemo} />
         </CardContent>
       </Card>
 

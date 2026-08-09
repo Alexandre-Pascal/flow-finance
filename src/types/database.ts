@@ -13,6 +13,8 @@ export interface Profile {
   id: string;
   locale: string;
   currency: string;
+  /** Préférences modules / mots-clés — voir `normalizeProfileSettings`. */
+  settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

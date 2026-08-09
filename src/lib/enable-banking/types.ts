@@ -102,12 +102,13 @@ function sortTransactionsChronologically(
  */
 export function mapEnableBankingTransactions(
   transactions: EnableBankingTransactionResource[],
+  creditKeywords?: string[],
 ) {
   const sorted = sortTransactionsChronologically(transactions);
   const balanceIndicators = inferIndicatorsFromBalanceSequence(sorted);
 
   return sorted.map((tx, index) =>
-    mapEnableBankingTransaction(tx, balanceIndicators[index]),
+    mapEnableBankingTransaction(tx, balanceIndicators[index], creditKeywords),
   );
 }
 
@@ -117,10 +118,15 @@ export function mapEnableBankingTransactions(
 export function mapEnableBankingTransaction(
   tx: EnableBankingTransactionResource,
   balanceInferred?: CreditDebitIndicator,
+  creditKeywords?: string[],
 ) {
   const description =
     tx.remittance_information?.join(" ") ?? "Transaction bancaire";
-  const indicator = resolveTransactionIndicator(tx, balanceInferred);
+  const indicator = resolveTransactionIndicator(
+    tx,
+    balanceInferred,
+    creditKeywords,
+  );
   const amount = mapSignedTransactionAmount(
     tx.transaction_amount?.amount,
     indicator,

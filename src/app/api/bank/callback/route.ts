@@ -19,6 +19,7 @@ export async function GET(request: Request) {
 
   const cookieStore = await cookies();
   const savedState = cookieStore.get("eb_oauth_state")?.value;
+  const savedAspspName = cookieStore.get("eb_oauth_aspsp")?.value;
 
   if (
     !isEnableBankingConfigured() ||
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
   }
 
   cookieStore.delete("eb_oauth_state");
+  cookieStore.delete("eb_oauth_aspsp");
 
   const supabase = await createClient();
   if (!supabase) {
@@ -56,7 +58,8 @@ export async function GET(request: Request) {
         user_id: user.id,
         provider: "enable_banking",
         session_id: session.session_id,
-        aspsp_name: process.env.ENABLE_BANKING_ASPSP_NAME,
+        aspsp_name:
+          savedAspspName ?? process.env.ENABLE_BANKING_ASPSP_NAME ?? null,
         valid_until: validUntil.toISOString(),
         status: "active",
       })

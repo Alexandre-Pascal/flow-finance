@@ -48,8 +48,11 @@ interface TrackedTransfersPanelProps {
   translationPrefix: TransferTranslationPrefix;
   icon: LucideIcon;
   accentClassName?: string;
-  /** Salaire compté au mois budgétaire suivant (reçu en juillet → affiché en août). */
-  budgetMonthShift?: boolean;
+  /** Nombre de mois de décalage budgétaire (salaire). */
+  budgetMonthShift?: number;
+  payrollKeyword?: string | null;
+  titleValues?: Record<string, string | number>;
+  subtitleValues?: Record<string, string | number>;
 }
 
 function TransferTooltip({
@@ -92,11 +95,14 @@ export function TrackedTransfersPanel({
   translationPrefix,
   icon: Icon,
   accentClassName = "border-accent/30 bg-gradient-to-br from-accent/5 via-card to-card",
-  budgetMonthShift = false,
+  budgetMonthShift = 0,
+  payrollKeyword = null,
+  titleValues,
+  subtitleValues,
 }: TrackedTransfersPanelProps) {
   const t = useTranslations("analytics");
-  const title = t(`${translationPrefix}Title`);
-  const subtitle = t(`${translationPrefix}Subtitle`);
+  const title = t(`${translationPrefix}Title`, titleValues);
+  const subtitle = t(`${translationPrefix}Subtitle`, subtitleValues);
 
   const filtered = useMemo(
     () => sliceMonthlyTransferOverview(data, period, locale),
@@ -126,12 +132,17 @@ export function TrackedTransfersPanel({
         .filter((tx) => {
           if (!predicate(tx)) return false;
           if (budgetMonthShift) {
-            return getIncomeMonthKey(tx) === selectedMonthKey;
+            return (
+              getIncomeMonthKey(tx, {
+                payrollKeyword,
+                budgetShiftMonths: budgetMonthShift,
+              }) === selectedMonthKey
+            );
           }
           return tx.booking_date.startsWith(selectedMonthKey);
         })
         .sort((a, b) => b.booking_date.localeCompare(a.booking_date)),
-    [transactions, selectedMonthKey, predicate, budgetMonthShift],
+    [transactions, selectedMonthKey, predicate, budgetMonthShift, payrollKeyword],
   );
 
   const averagePerActiveMonth =

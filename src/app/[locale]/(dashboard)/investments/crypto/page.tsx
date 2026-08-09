@@ -1,6 +1,8 @@
 import { setRequestLocale } from "next-intl/server";
 import { CryptoPortfolio } from "@/components/features/crypto-portfolio";
 import { getCryptoPortfolioData } from "@/lib/crypto/queries";
+import { getProfileSettings } from "@/lib/get-profile-settings";
+import { redirect } from "@/i18n/navigation";
 
 export default async function InvestmentsCryptoPage({
   params,
@@ -9,6 +11,11 @@ export default async function InvestmentsCryptoPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+
+  const profileSettings = await getProfileSettings();
+  if (!profileSettings.modules.investments) {
+    redirect({ href: "/", locale });
+  }
 
   const { holdings, transactions, summary, totalInvestedEur, schemaReady, isDemo } =
     await getCryptoPortfolioData();

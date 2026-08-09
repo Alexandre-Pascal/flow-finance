@@ -74,6 +74,12 @@ interface MonthlyAnalyticsProps {
   subscriptions: RecurringPayment[];
   transactions: TransactionWithAccount[];
   locale: string;
+  showTrackedPerson?: boolean;
+  showPayroll?: boolean;
+  trackedPersonKeyword?: string | null;
+  trackedPersonLabel?: string | null;
+  payrollKeyword?: string | null;
+  payrollBudgetShiftMonths?: number;
 }
 
 function DeltaBadge({
@@ -117,6 +123,12 @@ export function MonthlyAnalytics({
   subscriptions,
   transactions,
   locale,
+  showTrackedPerson = false,
+  showPayroll = false,
+  trackedPersonKeyword = null,
+  trackedPersonLabel = null,
+  payrollKeyword = null,
+  payrollBudgetShiftMonths = 1,
 }: MonthlyAnalyticsProps) {
   const t = useTranslations("analytics");
   const [view, setView] = useState<AnalyticsView>("overview");
@@ -164,12 +176,18 @@ export function MonthlyAnalytics({
             <TabsTrigger value="overview" className="cursor-pointer px-4 py-2">
               {t("viewOverview")}
             </TabsTrigger>
-            <TabsTrigger value="mother" className="cursor-pointer px-4 py-2">
-              {t("viewMotherTransfers")}
-            </TabsTrigger>
-            <TabsTrigger value="payroll" className="cursor-pointer px-4 py-2">
-              {t("viewPayroll")}
-            </TabsTrigger>
+            {showTrackedPerson && trackedPersonKeyword ? (
+              <TabsTrigger value="mother" className="cursor-pointer px-4 py-2">
+                {t("viewMotherTransfers", {
+                  label: trackedPersonLabel || trackedPersonKeyword,
+                })}
+              </TabsTrigger>
+            ) : null}
+            {showPayroll && payrollKeyword ? (
+              <TabsTrigger value="payroll" className="cursor-pointer px-4 py-2">
+                {t("viewPayroll")}
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger value="subscriptions" className="cursor-pointer px-4 py-2">
               {t("viewSubscriptions")}
             </TabsTrigger>
@@ -382,23 +400,31 @@ export function MonthlyAnalytics({
           )}
         </TabsContent>
 
-        <TabsContent value="mother" className="mt-0">
-          <MotherTransfersPanel
-            data={motherTransferData}
-            transactions={transactions}
-            locale={locale}
-            period={period}
-          />
-        </TabsContent>
+        {showTrackedPerson && trackedPersonKeyword ? (
+          <TabsContent value="mother" className="mt-0">
+            <MotherTransfersPanel
+              data={motherTransferData}
+              transactions={transactions}
+              locale={locale}
+              period={period}
+              keyword={trackedPersonKeyword}
+              label={trackedPersonLabel || trackedPersonKeyword}
+            />
+          </TabsContent>
+        ) : null}
 
-        <TabsContent value="payroll" className="mt-0">
-          <PayrollTransfersPanel
-            data={payrollTransferData}
-            transactions={transactions}
-            locale={locale}
-            period={period}
-          />
-        </TabsContent>
+        {showPayroll && payrollKeyword ? (
+          <TabsContent value="payroll" className="mt-0">
+            <PayrollTransfersPanel
+              data={payrollTransferData}
+              transactions={transactions}
+              locale={locale}
+              period={period}
+              keyword={payrollKeyword}
+              budgetShiftMonths={payrollBudgetShiftMonths}
+            />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="subscriptions" className="mt-0">
           <SubscriptionsAnalyticsPanel

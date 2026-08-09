@@ -23,16 +23,34 @@ const navItems = [
   { href: "/", labelKey: "dashboard" as const },
   { href: "/analytics", labelKey: "analytics" as const },
   { href: "/categories", labelKey: "categories" as const },
-  { href: "/savings", labelKey: "savings" as const },
-  { href: "/investments", labelKey: "investments" as const },
+  { href: "/savings", labelKey: "savings" as const, module: "savings" as const },
+  {
+    href: "/investments",
+    labelKey: "investments" as const,
+    module: "investments" as const,
+  },
   { href: "/transactions", labelKey: "transactions" as const },
   { href: "/settings", labelKey: "settings" as const },
 ];
 
-export function MobileNav() {
+interface MobileNavProps {
+  showSavings?: boolean;
+  showInvestments?: boolean;
+}
+
+export function MobileNav({
+  showSavings = true,
+  showInvestments = true,
+}: MobileNavProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  const visibleItems = navItems.filter((item) => {
+    if (item.module === "savings") return showSavings;
+    if (item.module === "investments") return showInvestments;
+    return true;
+  });
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -51,7 +69,7 @@ export function MobileNav() {
           <SheetTitle className="text-sidebar-foreground">Flow Finance</SheetTitle>
         </SheetHeader>
         <nav className="mt-6 flex flex-col gap-1">
-          {navItems.map(({ href, labelKey }) => {
+          {visibleItems.map(({ href, labelKey }) => {
             const isActive =
               href === "/"
                 ? pathname === "/"

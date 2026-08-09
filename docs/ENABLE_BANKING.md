@@ -13,11 +13,23 @@
 ENABLE_BANKING_APP_ID=uuid-de-votre-app
 ENABLE_BANKING_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 ENABLE_BANKING_REDIRECT_URL=https://votre-app.vercel.app/api/bank/callback
-ENABLE_BANKING_ASPSP_NAME=Crédit Agricole [votre région]
+ENABLE_BANKING_ASPSP_NAME=Crédit Agricole Toulouse 31
 ENABLE_BANKING_ASPSP_COUNTRY=FR
 NEXT_PUBLIC_APP_URL=https://votre-app.vercel.app
 CRON_SECRET=secret-aleatoire-pour-cron
 ```
+
+### Choix de région CA
+
+L'UI Paramètres propose les caisses listées dans `src/lib/enable-banking/aspsps.ts` (Toulouse 31 et Nord Midi-Pyrénées). Le nom exact doit correspondre à Enable Banking ; `ENABLE_BANKING_ASPSP_NAME` sert de fallback si `?aspsp=` est absent.
+
+### Lier les comptes famille (mode restreint)
+
+1. Chaque personne se connecte avec son compte Google.
+2. Elle choisit sa région CA et lance OAuth.
+3. Dans le Control Panel Enable Banking → **Activate by linking accounts**, lier le compte bancaire de la personne à ton app.
+
+Sans cette étape, l'OAuth peut échouer ou ne renvoyer aucun compte.
 
 ## Endpoints
 

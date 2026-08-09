@@ -7,12 +7,6 @@ import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import { shiftMonthKey } from "@/lib/finance/payroll-budget";
 import type { TransactionWithAccount } from "@/types/database";
 
-/** Fragment distinctif du libellé bancaire (Crédit Agricole). */
-export const MOTHER_TRANSFER_SENDER = "PASCAL SOPHIE";
-
-/** Employeur — virements de salaire CyFyn Paye. */
-export const PAYROLL_SENDER = "CYFYN";
-
 export interface MonthlyTransferOverview {
   monthKey: string;
   month: string;
@@ -40,46 +34,71 @@ function enumerateCalendarMonths(from: Date, to: Date): string[] {
   return keys;
 }
 
-/**
- * Virement entrant de Sophie Pascal (ex. « VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE »).
- */
-export function isMotherTransfer(tx: TransactionWithAccount): boolean {
-  if (tx.amount <= 0) {
-    return false;
-  }
-
-  const description = tx.description.toUpperCase();
-
+function descriptionLooksLikeIncomingTransfer(description: string): boolean {
   return (
-    description.includes(MOTHER_TRANSFER_SENDER) &&
-    (description.includes("VIREMENT EN VOTRE FAVEUR") ||
-      description.includes("VIR INST"))
+    description.includes("VIREMENT EN VOTRE FAVEUR") ||
+    description.includes("VOTRE FAVEUR") ||
+    description.includes("VIR INST")
   );
 }
 
 /**
- * Virement de salaire CyFyn Paye (ex. « VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye »).
+ * Virement entrant dont le libellé contient le mot-clé configuré (ex. un proche).
  */
-export function isPayrollTransfer(tx: TransactionWithAccount): boolean {
-  if (tx.amount <= 0) {
+export function isTrackedPersonTransfer(
+  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  keyword: string | null | undefined,
+): boolean {
+  if (!keyword || tx.amount <= 0) {
     return false;
   }
 
   const description = tx.description.toUpperCase();
+  const needle = keyword.trim().toUpperCase();
+  if (!needle) {
+    return false;
+  }
 
   return (
-    description.includes(PAYROLL_SENDER) &&
-    (description.includes("VIREMENT EN VOTRE FAVEUR") ||
-      description.includes("VOTRE FAVEUR") ||
-      description.includes("VIR INST"))
+    description.includes(needle) && descriptionLooksLikeIncomingTransfer(description)
   );
+}
+
+/**
+ * Virement de salaire dont le libellé contient le mot-clé employeur configuré.
+ */
+export function isPayrollTransfer(
+  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  keyword: string | null | undefined,
+): boolean {
+  if (!keyword || tx.amount <= 0) {
+    return false;
+  }
+
+  const description = tx.description.toUpperCase();
+  const needle = keyword.trim().toUpperCase();
+  if (!needle) {
+    return false;
+  }
+
+  return (
+    description.includes(needle) && descriptionLooksLikeIncomingTransfer(description)
+  );
+}
+
+/** @deprecated Prefer isTrackedPersonTransfer with an explicit keyword. */
+export function isMotherTransfer(
+  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  keyword = "PASCAL SOPHIE",
+): boolean {
+  return isTrackedPersonTransfer(tx, keyword);
 }
 
 export function buildMonthlyTransferOverview(
   transactions: TransactionWithAccount[],
   locale: string,
   predicate: (tx: TransactionWithAccount) => boolean,
-  options?: { budgetMonthShift?: boolean },
+  options?: { budgetMonthShift?: number },
 ): MonthlyTransferOverview[] {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
   const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
@@ -93,13 +112,14 @@ export function buildMonthlyTransferOverview(
     return [];
   }
 
+  const shiftMonths = options?.budgetMonthShift ?? 0;
   const buckets = new Map<string, { amount: number; transferCount: number }>();
 
   for (const tx of matched) {
     const bookingMonth = tx.booking_date.slice(0, 7);
     const key =
-      options?.budgetMonthShift && tx.amount > 0
-        ? shiftMonthKey(bookingMonth, 1)
+      shiftMonths !== 0 && tx.amount > 0
+        ? shiftMonthKey(bookingMonth, shiftMonths)
         : bookingMonth;
     const bucket = buckets.get(key) ?? { amount: 0, transferCount: 0 };
     bucket.amount += tx.amount;

@@ -13,6 +13,7 @@ import {
 } from "@/lib/finance/aggregates";
 import { sumBudgetMonthIncome } from "@/lib/finance/payroll-budget";
 import { getFinanceData } from "@/lib/finance/queries";
+import { getProfileSettings } from "@/lib/get-profile-settings";
 import { formatCurrency } from "@/lib/format";
 
 export default async function DashboardPage({
@@ -24,12 +25,15 @@ export default async function DashboardPage({
   setRequestLocale(locale);
   const t = await getTranslations("dashboard");
 
-  const { accounts, transactions, categories, monthlySpending, isDemo } =
-    await getFinanceData(locale, {
-      savingsAdjustments: false,
-      dismissedSuggestions: false,
-      bankConnection: false,
-    });
+  const [{ accounts, transactions, categories, monthlySpending, isDemo }, profileSettings] =
+    await Promise.all([
+      getFinanceData(locale, {
+        savingsAdjustments: false,
+        dismissedSuggestions: false,
+        bankConnection: false,
+      }),
+      getProfileSettings(),
+    ]);
 
   const totalBalance = sumAccountBalances(accounts);
   const monthTx = getCurrentMonthTransactions(transactions).filter(
@@ -38,7 +42,10 @@ export default async function DashboardPage({
   const spending = monthTx
     .filter((tx) => tx.amount < 0)
     .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-  const income = sumBudgetMonthIncome(transactions);
+  const income = sumBudgetMonthIncome(transactions, new Date(), {
+    payrollKeyword: profileSettings.payroll.keyword,
+    budgetShiftMonths: profileSettings.payroll.budgetShiftMonths,
+  });
 
   const recent = [...transactions]
     .sort((a, b) => b.booking_date.localeCompare(a.booking_date))

@@ -44,8 +44,22 @@ const CREDIT_DESCRIPTION_PATTERNS = [
   /^REMBOURSEMENT\b/,
   /^CREDIT\b/,
   /^SALAIRE\b/,
-  /\bCYFYN\b/,
 ];
+
+function descriptionMatchesCreditKeyword(
+  description: string,
+  creditKeywords?: string[],
+): boolean {
+  if (!creditKeywords?.length) {
+    return false;
+  }
+
+  const upper = description.toUpperCase();
+  return creditKeywords.some((keyword) => {
+    const needle = keyword.trim().toUpperCase();
+    return needle.length > 0 && upper.includes(needle);
+  });
+}
 
 /**
  * Normalise l'indicateur renvoyé par Enable Banking.
@@ -65,6 +79,7 @@ export function normalizeCreditDebitIndicator(
  */
 export function inferIndicatorFromDescription(
   description: string,
+  creditKeywords?: string[],
 ): CreditDebitIndicator | undefined {
   const upper = description.toUpperCase().trim();
 
@@ -74,6 +89,10 @@ export function inferIndicatorFromDescription(
 
   for (const pattern of CREDIT_DESCRIPTION_PATTERNS) {
     if (pattern.test(upper)) return "CRDT";
+  }
+
+  if (descriptionMatchesCreditKeyword(upper, creditKeywords)) {
+    return "CRDT";
   }
 
   return undefined;
@@ -116,6 +135,7 @@ export function inferIndicatorsFromBalanceSequence(
 export function resolveTransactionIndicator(
   tx: TransactionSignInput,
   balanceInferred?: CreditDebitIndicator,
+  creditKeywords?: string[],
 ): CreditDebitIndicator | undefined {
   const description =
     tx.remittance_information?.join(" ") ?? "Transaction bancaire";
@@ -127,6 +147,10 @@ export function resolveTransactionIndicator(
 
   for (const pattern of CREDIT_DESCRIPTION_PATTERNS) {
     if (pattern.test(upper)) return "CRDT";
+  }
+
+  if (descriptionMatchesCreditKeyword(upper, creditKeywords)) {
+    return "CRDT";
   }
 
   return (

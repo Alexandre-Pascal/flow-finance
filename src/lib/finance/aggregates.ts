@@ -4,7 +4,10 @@
  */
 
 import type { Account, TransactionWithAccount } from "@/types/database";
-import { getIncomeMonthKey } from "@/lib/finance/payroll-budget";
+import {
+  getIncomeMonthKey,
+  type PayrollBudgetOptions,
+} from "@/lib/finance/payroll-budget";
 import { isInternalTransfer } from "@/lib/pea/transfers";
 
 export type MonthlyPeriod = 1 | 3 | 6 | 12 | "all";
@@ -100,6 +103,7 @@ function enumerateCalendarMonths(from: Date, to: Date): string[] {
 export function buildMonthlyOverview(
   transactions: TransactionWithAccount[],
   locale: string,
+  payrollOptions: PayrollBudgetOptions = {},
 ): MonthlyOverview[] {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
   const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
@@ -116,7 +120,7 @@ export function buildMonthlyOverview(
       continue;
     }
 
-    const key = getIncomeMonthKey(tx);
+    const key = getIncomeMonthKey(tx, payrollOptions);
     const bucket = buckets.get(key) ?? { income: 0, expenses: 0 };
 
     if (tx.amount > 0) {

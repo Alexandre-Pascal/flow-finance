@@ -7,7 +7,9 @@ import {
   buildCheckingOverview,
   buildSavingsOverview,
 } from "@/lib/finance/savings";
+import { getProfileSettings } from "@/lib/get-profile-settings";
 import { getPeaPortfolioData } from "@/lib/pea/queries";
+import { redirect } from "@/i18n/navigation";
 
 export default async function SavingsPage({
   params,
@@ -16,6 +18,12 @@ export default async function SavingsPage({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
+
+  const profileSettings = await getProfileSettings();
+  if (!profileSettings.modules.savings) {
+    redirect({ href: "/", locale });
+  }
+
   const t = await getTranslations("savings");
 
   // Les portefeuilles crypto et PEA ne dépendent pas des données bancaires :

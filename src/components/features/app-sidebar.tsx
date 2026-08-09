@@ -23,8 +23,18 @@ const navItems = [
   { href: "/", icon: LayoutDashboard, labelKey: "dashboard" as const },
   { href: "/analytics", icon: BarChart3, labelKey: "analytics" as const },
   { href: "/categories", icon: PieChart, labelKey: "categories" as const },
-  { href: "/savings", icon: PiggyBank, labelKey: "savings" as const },
-  { href: "/investments", icon: LineChart, labelKey: "investments" as const },
+  {
+    href: "/savings",
+    icon: PiggyBank,
+    labelKey: "savings" as const,
+    module: "savings" as const,
+  },
+  {
+    href: "/investments",
+    icon: LineChart,
+    labelKey: "investments" as const,
+    module: "investments" as const,
+  },
   {
     href: "/transactions",
     icon: ArrowLeftRight,
@@ -33,9 +43,23 @@ const navItems = [
   { href: "/settings", icon: Settings, labelKey: "settings" as const },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  showSavings?: boolean;
+  showInvestments?: boolean;
+}
+
+export function AppSidebar({
+  showSavings = true,
+  showInvestments = true,
+}: AppSidebarProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
+
+  const visibleItems = navItems.filter((item) => {
+    if (item.module === "savings") return showSavings;
+    if (item.module === "investments") return showInvestments;
+    return true;
+  });
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col">
@@ -49,7 +73,7 @@ export function AppSidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1 p-4" aria-label="Main">
-        {navItems.map(({ href, icon: Icon, labelKey }) => {
+        {visibleItems.map(({ href, icon: Icon, labelKey }) => {
           const isActive =
             href === "/"
               ? pathname === "/"

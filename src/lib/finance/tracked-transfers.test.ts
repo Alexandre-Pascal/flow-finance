@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isPayrollTransfer } from "./tracked-transfers";
+import {
+  isPayrollTransfer,
+  isTrackedPersonTransfer,
+} from "./tracked-transfers";
 import type { TransactionWithAccount } from "@/types/database";
 
 function tx(
@@ -26,15 +29,28 @@ function tx(
 }
 
 describe("isPayrollTransfer", () => {
-  it("matches CyFyn Paye incoming transfer", () => {
+  it("matches employer keyword on incoming transfer", () => {
     expect(
       isPayrollTransfer(
         tx({
           amount: 3200,
           description: "VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye",
         }),
+        "CYFYN",
       ),
     ).toBe(true);
+  });
+
+  it("rejects when keyword is missing", () => {
+    expect(
+      isPayrollTransfer(
+        tx({
+          amount: 3200,
+          description: "VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye",
+        }),
+        null,
+      ),
+    ).toBe(false);
   });
 
   it("rejects negative amounts", () => {
@@ -44,6 +60,7 @@ describe("isPayrollTransfer", () => {
           amount: -3200,
           description: "VIREMENT EN VOTRE FAVEUR VIR INST de CyFyn Paye",
         }),
+        "CYFYN",
       ),
     ).toBe(false);
   });
@@ -55,7 +72,22 @@ describe("isPayrollTransfer", () => {
           amount: 100,
           description: "VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE",
         }),
+        "CYFYN",
       ),
     ).toBe(false);
+  });
+});
+
+describe("isTrackedPersonTransfer", () => {
+  it("matches configured person keyword", () => {
+    expect(
+      isTrackedPersonTransfer(
+        tx({
+          amount: 200,
+          description: "VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE",
+        }),
+        "PASCAL SOPHIE",
+      ),
+    ).toBe(true);
   });
 });

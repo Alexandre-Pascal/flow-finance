@@ -24,27 +24,46 @@ function payrollTx(bookingDate: string, amount: number): TransactionWithAccount 
   };
 }
 
+const payrollOptions = {
+  payrollKeyword: "CYFYN",
+  budgetShiftMonths: 1 as const,
+};
+
 describe("payroll-budget", () => {
-  it("shifts July payroll to August budget month", () => {
-    expect(getIncomeMonthKey(payrollTx("2025-07-28", 3000))).toBe("2025-08");
+  it("shifts July payroll to August budget month when configured", () => {
+    expect(getIncomeMonthKey(payrollTx("2025-07-28", 3000), payrollOptions)).toBe(
+      "2025-08",
+    );
+  });
+
+  it("keeps payroll in booking month when shift is 0", () => {
+    expect(
+      getIncomeMonthKey(payrollTx("2025-07-28", 3000), {
+        payrollKeyword: "CYFYN",
+        budgetShiftMonths: 0,
+      }),
+    ).toBe("2025-07");
   });
 
   it("keeps non-payroll income in booking month", () => {
     const tx = payrollTx("2025-07-28", 100);
     tx.description = "VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE";
-    expect(getIncomeMonthKey(tx)).toBe("2025-07");
+    expect(getIncomeMonthKey(tx, payrollOptions)).toBe("2025-07");
   });
 
   it("sums August budget income from July payroll", () => {
     const income = sumBudgetMonthIncome(
       [payrollTx("2025-07-28", 3200)],
       new Date("2025-08-15T12:00:00Z"),
+      payrollOptions,
     );
     expect(income).toBe(3200);
   });
 
   it("shifts across year boundary", () => {
     expect(shiftMonthKey("2025-12", 1)).toBe("2026-01");
-    expect(getIncomeMonthKey(payrollTx("2025-12-30", 3000))).toBe("2026-01");
+    expect(getIncomeMonthKey(payrollTx("2025-12-30", 3000), payrollOptions)).toBe(
+      "2026-01",
+    );
   });
 });

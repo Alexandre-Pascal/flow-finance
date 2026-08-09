@@ -1,11 +1,12 @@
 /**
  * @file payroll-transfers-panel.tsx
- * @description Suivi mensuel des virements de salaire CyFyn Paye.
+ * @description Suivi mensuel des virements de salaire (mot-clé configurable).
  */
 
 "use client";
 
 import { Briefcase } from "lucide-react";
+import { useMemo } from "react";
 import { TrackedTransfersPanel } from "@/components/features/tracked-transfers-panel";
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import {
@@ -19,17 +20,30 @@ interface PayrollTransfersPanelProps {
   transactions: TransactionWithAccount[];
   locale: string;
   period: MonthlyPeriod;
+  keyword: string;
+  budgetShiftMonths: number;
 }
 
-export function PayrollTransfersPanel(props: PayrollTransfersPanelProps) {
+export function PayrollTransfersPanel({
+  keyword,
+  budgetShiftMonths,
+  ...props
+}: PayrollTransfersPanelProps) {
+  const predicate = useMemo(
+    () => (tx: TransactionWithAccount) => isPayrollTransfer(tx, keyword),
+    [keyword],
+  );
+
   return (
     <TrackedTransfersPanel
       {...props}
-      predicate={isPayrollTransfer}
+      predicate={predicate}
       translationPrefix="payrollTransfer"
       icon={Briefcase}
       accentClassName="border-[var(--chart-2)]/30 bg-gradient-to-br from-[var(--chart-2)]/5 via-card to-card"
-      budgetMonthShift
+      budgetMonthShift={budgetShiftMonths}
+      payrollKeyword={keyword}
+      subtitleValues={{ keyword, shift: budgetShiftMonths }}
     />
   );
 }

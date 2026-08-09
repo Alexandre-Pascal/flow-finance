@@ -2,14 +2,19 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { MonthlyAnalytics } from "@/components/features/monthly-analytics";
 import { buildMonthlyOverview } from "@/lib/finance/aggregates";
 import { getFinanceData } from "@/lib/finance/queries";
+import { getProfileSettings } from "@/lib/get-profile-settings";
 import {
   buildMonthlySubscriptionOverview,
 } from "@/lib/finance/recurring-payments";
 import {
   buildMonthlyTransferOverview,
-  isMotherTransfer,
   isPayrollTransfer,
+  isTrackedPersonTransfer,
 } from "@/lib/finance/tracked-transfers";
+import {
+  isPayrollConfigured,
+  isTrackedPersonConfigured,
+} from "@/lib/profile-settings";
 
 export default async function AnalyticsPage({
   params,
@@ -20,23 +25,45 @@ export default async function AnalyticsPage({
   setRequestLocale(locale);
   const t = await getTranslations("analytics");
 
-  const { transactions, recurringPayments } = await getFinanceData(locale, {
-    savingsAdjustments: false,
-    dismissedSuggestions: false,
-    bankConnection: false,
-  });
-  const monthlyOverview = buildMonthlyOverview(transactions, locale);
-  const motherTransferData = buildMonthlyTransferOverview(
+  const [{ transactions, recurringPayments }, profileSettings] =
+    await Promise.all([
+      getFinanceData(locale, {
+        savingsAdjustments: false,
+        dismissedSuggestions: false,
+        bankConnection: false,
+      }),
+      getProfileSettings(),
+    ]);
+
+  const payrollOptions = {
+    payrollKeyword: profileSettings.payroll.keyword,
+    budgetShiftMonths: profileSettings.payroll.budgetShiftMonths,
+  };
+
+  const monthlyOverview = buildMonthlyOverview(
     transactions,
     locale,
-    isMotherTransfer,
+    payrollOptions,
   );
-  const payrollTransferData = buildMonthlyTransferOverview(
-    transactions,
-    locale,
-    isPayrollTransfer,
-    { budgetMonthShift: true },
-  );
+
+  const showTrackedPerson = isTrackedPersonConfigured(profileSettings);
+  const showPayroll = isPayrollConfigured(profileSettings);
+
+  const motherTransferData = showTrackedPerson
+    ? buildMonthlyTransferOverview(transactions, locale, (tx) =>
+        isTrackedPersonTransfer(tx, profileSettings.trackedPerson.keyword),
+      )
+    : [];
+
+  const payrollTransferData = showPayroll
+    ? buildMonthlyTransferOverview(
+        transactions,
+        locale,
+        (tx) => isPayrollTransfer(tx, profileSettings.payroll.keyword),
+        { budgetMonthShift: profileSettings.payroll.budgetShiftMonths },
+      )
+    : [];
+
   const subscriptionData = buildMonthlySubscriptionOverview(
     transactions,
     recurringPayments,
@@ -58,6 +85,12 @@ export default async function AnalyticsPage({
         subscriptions={recurringPayments}
         transactions={transactions}
         locale={locale}
+        showTrackedPerson={showTrackedPerson}
+        showPayroll={showPayroll}
+        trackedPersonKeyword={profileSettings.trackedPerson.keyword}
+        trackedPersonLabel={profileSettings.trackedPerson.label}
+        payrollKeyword={profileSettings.payroll.keyword}
+        payrollBudgetShiftMonths={profileSettings.payroll.budgetShiftMonths}
       />
     </div>
   );

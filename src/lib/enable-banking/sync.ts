@@ -15,7 +15,30 @@ import { computeTransactionDateFrom } from "@/lib/enable-banking/sync-date";
 import { inferIndicatorsFromBalanceSequence } from "@/lib/enable-banking/transaction-sign";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
 import { rematchCategoriesForUser } from "@/lib/finance/rematch-categories";
+import { normalizeProfileSettings } from "@/lib/profile-settings";
 import { createClient } from "@/lib/supabase/server";
+
+async function loadPayrollCreditKeywords(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string[] | undefined> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("settings")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return undefined;
+    }
+
+    const settings = normalizeProfileSettings(data.settings);
+    return settings.payroll.keyword ? [settings.payroll.keyword] : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function sortStoredTransactions<
   T extends { booking_date: string; entry_reference: string },
@@ -90,6 +113,7 @@ export async function remapStoredTransactions(
   if (accountsError) throw accountsError;
   if (!accounts?.length) return { remapped: 0 };
 
+  const creditKeywords = await loadPayrollCreditKeywords(supabase, userId);
   let remapped = 0;
 
   for (const account of accounts) {
@@ -112,6 +136,7 @@ export async function remapStoredTransactions(
       const mapped = mapEnableBankingTransaction(
         rawTransactions[index],
         balanceIndicators[index],
+        creditKeywords,
       );
 
       const { error: updateError } = await supabase
@@ -150,6 +175,7 @@ export async function syncUserTransactions(
   if (accountsError) throw accountsError;
   if (!accounts?.length) return { synced: 0 };
 
+  const creditKeywords = await loadPayrollCreditKeywords(supabase, userId);
   let synced = 0;
 
   for (const account of accounts) {
@@ -176,7 +202,10 @@ export async function syncUserTransactions(
       hasMore = Boolean(continuationKey);
     }
 
-    const rows = mapEnableBankingTransactions(apiTransactions).map((mapped) => ({
+    const rows = mapEnableBankingTransactions(
+      apiTransactions,
+      creditKeywords,
+    ).map((mapped) => ({
       account_id: account.id,
       ...mapped,
     }));
