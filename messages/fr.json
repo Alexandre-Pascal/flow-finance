@@ -275,6 +275,7 @@
     "filterLabel": "Catégorie",
     "filterAll": "Toutes les catégories",
     "filterUncategorized": "Non classé uniquement",
+    "filterRecurring": "Charges fixes & abonnements",
     "filterDeposits": "Versements (épargne / PEA)",
     "filterWithdrawals": "Retraits (épargne / PEA)",
     "filterCount": "{count, plural, one {# transaction} other {# transactions}}",

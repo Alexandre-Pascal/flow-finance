@@ -275,6 +275,7 @@
     "filterLabel": "Category",
     "filterAll": "All categories",
     "filterUncategorized": "Uncategorized only",
+    "filterRecurring": "Fixed costs & subscriptions",
     "filterDeposits": "Deposits (savings / PEA)",
     "filterWithdrawals": "Withdrawals (savings / PEA)",
     "filterCount": "{count, plural, one {# transaction} other {# transactions}}",

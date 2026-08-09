@@ -629,12 +629,16 @@ export function TransactionsTable({
     let uncategorized = 0;
     let deposits = 0;
     let withdrawals = 0;
+    let recurring = 0;
     for (const tx of transactions) {
       if (
         selectedMonths.size > 0 &&
         !selectedMonths.has(tx.booking_date.slice(0, 7))
       ) {
         continue;
+      }
+      if (tx.recurring_payment_id) {
+        recurring += 1;
       }
       if (tx.savings_transfer) {
         if (tx.savings_transfer.direction === "deposit") {
@@ -659,7 +663,7 @@ export function TransactionsTable({
         uncategorized += 1;
       }
     }
-    return { counts, uncategorized, deposits, withdrawals };
+    return { counts, uncategorized, deposits, withdrawals, recurring };
   }, [transactions, selectedMonths]);
 
   const filtered = useMemo(() => {
@@ -687,6 +691,9 @@ export function TransactionsTable({
           !tx.category_id &&
           !isInternalTransfer(tx)
         );
+      }
+      if (categoryFilter === "recurring") {
+        return Boolean(tx.recurring_payment_id);
       }
       if (categoryFilter === "deposits") {
         return (
@@ -915,6 +922,20 @@ export function TransactionsTable({
                     <span>{t("filterUncategorized")}</span>
                     <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
                       {categoryCounts.uncategorized}
+                    </span>
+                  </span>
+                </SelectItem>
+                <SelectItem
+                  value="recurring"
+                  className={cn(
+                    "cursor-pointer",
+                    categoryCounts.recurring === 0 && "text-muted-foreground/60",
+                  )}
+                >
+                  <span className="flex w-full items-center gap-2">
+                    <span>{t("filterRecurring")}</span>
+                    <span className="ml-auto pr-1 text-xs tabular-nums text-muted-foreground">
+                      {categoryCounts.recurring}
                     </span>
                   </span>
                 </SelectItem>
