@@ -347,4 +347,50 @@ describe("listActiveSubscriptions with merged rules", () => {
     expect(active[0].monthlyAmountMax).toBe(150);
     expect(active[0].monthlyAmount).toBe(120.5);
   });
+
+  it("keeps semi-annual water bills active and spreads amount over 6 months", () => {
+    const water = rule({
+      id: "eau",
+      name: "Eau Assmt Cacg",
+      amount: 85.23,
+      amount_flexible: true,
+      cadence: "semiannual",
+      description_pattern: "EAU ASSMT CACG",
+    });
+    const transactions = [
+      tx({
+        id: "tx-eau-1",
+        amount: -98.19,
+        description: "PAIEMENT PAR CARTE X5947 EAU ASSMT CACG 46 CA 04/11",
+        booking_date: "2025-11-05",
+        recurring_payment_id: "eau",
+      }),
+      tx({
+        id: "tx-eau-2",
+        amount: -85.23,
+        description: "PAIEMENT PAR CARTE X5947 EAU ASSMT CACG 46 CA 21/05",
+        booking_date: "2026-05-22",
+        recurring_payment_id: "eau",
+      }),
+    ];
+
+    const active = listActiveSubscriptions(transactions, [water], "fr", reference);
+
+    expect(active).toHaveLength(1);
+    expect(active[0].cadence).toBe("semiannual");
+    expect(active[0].billingAmountMin).toBe(85.23);
+    expect(active[0].billingAmountMax).toBe(98.19);
+    expect(active[0].monthlyAmountMin).toBe(14.21);
+    expect(active[0].monthlyAmountMax).toBe(16.36);
+    expect(active[0].monthlyAmount).toBe(14.21);
+  });
+});
+
+describe("inferCadenceFromPaymentDates", () => {
+  it("detects semi-annual gaps around six months", async () => {
+    const { inferCadenceFromPaymentDates } = await import("./recurring-payments");
+    expect(
+      inferCadenceFromPaymentDates(["2025-11-05", "2026-05-22"]),
+    ).toBe("semiannual");
+  });
 });

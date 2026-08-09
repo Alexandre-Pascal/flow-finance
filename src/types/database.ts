@@ -110,7 +110,7 @@ export interface SavingsAdjustment {
   updated_at: string;
 }
 
-export type RecurringCadence = "monthly" | "yearly";
+export type RecurringCadence = "monthly" | "semiannual" | "yearly";
 
 export interface RecurringSuggestionDismissal {
   id: string;

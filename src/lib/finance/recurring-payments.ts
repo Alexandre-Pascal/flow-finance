@@ -20,7 +20,25 @@ export const BILLING_DAY_TOLERANCE = 3;
 export const RULE_MATCH_DAY_TOLERANCE = 1;
 export const MIN_SUGGESTION_OCCURRENCES = 2;
 
-export type RecurringCadence = "monthly" | "yearly";
+export type RecurringCadence = "monthly" | "semiannual" | "yearly";
+
+export function parseRecurringCadence(value: unknown): RecurringCadence {
+  if (value === "yearly" || value === "semiannual") {
+    return value;
+  }
+  return "monthly";
+}
+
+/** Diviseur pour convertir un prélèvement en équivalent mensuel. */
+export function cadenceMonthlyDivisor(cadence: RecurringCadence): number {
+  if (cadence === "yearly") {
+    return 12;
+  }
+  if (cadence === "semiannual") {
+    return 6;
+  }
+  return 1;
+}
 
 export interface RecurringClusterSuggestion {
   amount: number;
@@ -59,6 +77,10 @@ export interface ActiveSubscriptionRow {
   /** Plus grand montant mensuel observé (charges variables). */
   monthlyAmountMax: number;
   billingAmount: number;
+  /** Plus petit prélèvement observé (avant lissage mensuel). */
+  billingAmountMin: number;
+  /** Plus grand prélèvement observé (avant lissage mensuel). */
+  billingAmountMax: number;
   amountFlexible: boolean;
 }
 
@@ -94,7 +116,7 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
       row.billing_day === null || row.billing_day === undefined
         ? null
         : Number(row.billing_day),
-    cadence: row.cadence === "yearly" ? "yearly" : "monthly",
+    cadence: parseRecurringCadence(row.cadence),
     billing_month:
       row.billing_month === null || row.billing_month === undefined
         ? null
@@ -415,12 +437,13 @@ export function matchesRecurringPayment(
     }
   }
 
-  const cadence = rule.cadence ?? "monthly";
+  const cadence = parseRecurringCadence(rule.cadence);
 
   // Prélèvements hors PayPal : on ignore le jour de prélèvement.
-  // Mensuel → libellé + montant suffisent ; annuel → on vérifie aussi le mois.
+  // Mensuel / semestriel → libellé (+ montant) suffisent.
+  // Annuel → on vérifie aussi le mois (sauf montant variable multi-mois).
   if (!payPalRule) {
-    if (cadence === "yearly" && rule.billing_month !== null) {
+    if (cadence === "yearly" && rule.billing_month !== null && !rule.amount_flexible) {
       const txMonth = getBookingMonth(tx.booking_date);
       return monthDistance(txMonth, rule.billing_month) <= 1;
     }
@@ -443,6 +466,7 @@ export function matchesRecurringPayment(
     return dayDistance(txDay, rule.billing_day) <= RULE_MATCH_DAY_TOLERANCE;
   }
 
+  // Semestriel PayPal : tolérance sur le jour uniquement.
   if (rule.billing_day === null) {
     return true;
   }
@@ -685,7 +709,7 @@ export function inferCadenceFromPaymentDates(dates: string[]): RecurringCadence 
   const monthKeys = new Set(sorted.map((date) => date.slice(0, 7)));
   const years = new Set(sorted.map((date) => date.slice(0, 4)));
 
-  if (sorted.length >= MIN_SUGGESTION_OCCURRENCES && monthKeys.size >= MIN_SUGGESTION_OCCURRENCES) {
+  function dayGaps(): number[] {
     const gaps: number[] = [];
     for (let index = 1; index < sorted.length; index += 1) {
       const previous = new Date(sorted[index - 1]);
@@ -694,22 +718,24 @@ export function inferCadenceFromPaymentDates(dates: string[]): RecurringCadence 
         Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
       );
     }
+    return gaps;
+  }
 
+  if (sorted.length >= MIN_SUGGESTION_OCCURRENCES && monthKeys.size >= MIN_SUGGESTION_OCCURRENCES) {
+    const gaps = dayGaps();
     const monthlyGaps = gaps.filter((gap) => gap >= 25 && gap <= 38);
     if (monthlyGaps.length >= gaps.length * 0.6) {
       return "monthly";
     }
+
+    const semiannualGaps = gaps.filter((gap) => gap >= 150 && gap <= 220);
+    if (semiannualGaps.length >= Math.max(1, gaps.length * 0.5)) {
+      return "semiannual";
+    }
   }
 
   if (sorted.length >= MIN_SUGGESTION_OCCURRENCES && years.size >= MIN_SUGGESTION_OCCURRENCES) {
-    const gaps: number[] = [];
-    for (let index = 1; index < sorted.length; index += 1) {
-      const previous = new Date(sorted[index - 1]);
-      const current = new Date(sorted[index]);
-      gaps.push(
-        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
-      );
-    }
+    const gaps = dayGaps();
 
     const yearlyGaps = gaps.filter((gap) => gap >= 335 && gap <= 395);
     if (yearlyGaps.length >= Math.max(1, gaps.length * 0.5)) {
@@ -722,18 +748,16 @@ export function inferCadenceFromPaymentDates(dates: string[]): RecurringCadence 
   }
 
   if (sorted.length >= 2) {
-    const gaps: number[] = [];
-    for (let index = 1; index < sorted.length; index += 1) {
-      const previous = new Date(sorted[index - 1]);
-      const current = new Date(sorted[index]);
-      gaps.push(
-        Math.round((current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24)),
-      );
-    }
+    const gaps = dayGaps();
 
     const yearlyGaps = gaps.filter((gap) => gap >= 335 && gap <= 395);
     if (yearlyGaps.length >= Math.max(1, gaps.length * 0.5)) {
       return "yearly";
+    }
+
+    const semiannualGaps = gaps.filter((gap) => gap >= 150 && gap <= 220);
+    if (semiannualGaps.length >= Math.max(1, gaps.length * 0.5)) {
+      return "semiannual";
     }
 
     const monthlyGaps = gaps.filter((gap) => gap >= 25 && gap <= 38);
@@ -749,16 +773,17 @@ export function resolveEffectiveCadence(
   rule: RecurringPayment,
   paymentDates: string[],
 ): RecurringCadence {
-  if (rule.cadence === "yearly") {
-    return "yearly";
+  const declared = parseRecurringCadence(rule.cadence);
+  if (declared === "yearly" || declared === "semiannual") {
+    return declared;
   }
 
   const inferred = inferCadenceFromPaymentDates(paymentDates);
-  if (inferred === "yearly") {
-    return "yearly";
+  if (inferred === "yearly" || inferred === "semiannual") {
+    return inferred;
   }
 
-  return rule.cadence ?? "monthly";
+  return declared;
 }
 
 export function listActiveSubscriptions(
@@ -775,6 +800,8 @@ export function listActiveSubscriptions(
   );
   const rollingYearStart = new Date(referenceDate);
   rollingYearStart.setFullYear(rollingYearStart.getFullYear() - 1);
+  const semiannualCutoff = new Date(referenceDate);
+  semiannualCutoff.setMonth(semiannualCutoff.getMonth() - 8);
 
   const canonicalByRuleId = resolveCanonicalRules(rules);
   const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
@@ -838,7 +865,9 @@ export function listActiveSubscriptions(
     const isActive =
       cadence === "yearly"
         ? paymentDate >= rollingYearStart
-        : paymentMonthKey === previousMonthKey || paymentMonthKey === currentMonthKey;
+        : cadence === "semiannual"
+          ? paymentDate >= semiannualCutoff
+          : paymentMonthKey === previousMonthKey || paymentMonthKey === currentMonthKey;
 
     if (!isActive) {
       continue;
@@ -857,16 +886,17 @@ export function listActiveSubscriptions(
     );
     const observedMin = Math.min(...roundedObserved);
     const observedMax = Math.max(...roundedObserved);
+    const divisor = cadenceMonthlyDivisor(cadence);
     const toMonthly = (amount: number) =>
-      cadence === "yearly"
-        ? Math.round((amount / 12) * 100) / 100
-        : amount;
+      Math.round((amount / divisor) * 100) / 100;
 
     active.push({
       id: rule.id,
       name: rule.name,
       cadence,
       billingAmount,
+      billingAmountMin: observedMin,
+      billingAmountMax: observedMax,
       amountFlexible,
       monthlyAmount: toMonthly(billingAmount),
       monthlyAmountMin: toMonthly(observedMin),

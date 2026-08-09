@@ -18,6 +18,7 @@ import {
   getBookingMonth,
   isPayPalClusterStillActive,
   mapRecurringPayment,
+  parseRecurringCadence,
   resolveCanonicalRules,
   type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
@@ -113,7 +114,7 @@ export async function createRecurringPaymentAction(formData: FormData) {
   const billingDay = billingDayRaw ? Number(billingDayRaw) : null;
   const billingMonthRaw = String(formData.get("billing_month") ?? "").trim();
   const billingMonth = billingMonthRaw ? Number(billingMonthRaw) : null;
-  const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+  const cadence = parseRecurringCadence(formData.get("cadence"));
   const descriptionPatternRaw = String(formData.get("description_pattern") ?? "").trim();
   const descriptionPattern = isPayPalPattern(descriptionPatternRaw)
     ? descriptionPatternRaw
@@ -287,7 +288,7 @@ export async function updateRecurringPaymentCadenceAction(formData: FormData) {
   }
 
   const id = String(formData.get("id") ?? "");
-  const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+  const cadence = parseRecurringCadence(formData.get("cadence"));
 
   if (!id) {
     return { error: "invalid" as const satisfies RecurringPaymentActionError };
@@ -396,8 +397,7 @@ export async function createSubscriptionFromTransactionAction(formData: FormData
   const transactionId = String(formData.get("transactionId") ?? "").trim();
   const attachToId = String(formData.get("attachToId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  const cadence =
-    String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+  const cadence = parseRecurringCadence(formData.get("cadence"));
   const amountFlexibleRaw = String(formData.get("amount_flexible") ?? "").trim();
   const amountFlexibleRequested =
     amountFlexibleRaw === "1" ||
@@ -668,7 +668,7 @@ function parseSuggestionFromFormData(formData: FormData): RecurringClusterSugges
   const billingDay = Number(formData.get("billing_day"));
   const billingMonthRaw = String(formData.get("billing_month") ?? "").trim();
   const billingMonth = billingMonthRaw ? Number(billingMonthRaw) : null;
-  const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+  const cadence = parseRecurringCadence(formData.get("cadence"));
   const descriptionPattern = String(formData.get("description_pattern") ?? "").trim();
   const source = String(formData.get("source") ?? "general") === "paypal" ? "paypal" : "general";
   const descriptionPreview = String(formData.get("description_preview") ?? descriptionPattern).trim();

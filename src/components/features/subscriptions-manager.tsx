@@ -74,6 +74,18 @@ function subscriptionMeta(
         );
   }
 
+  if (subscription.cadence === "semiannual") {
+    return t(
+      subscription.amount_flexible
+        ? "subscriptionMetaSemiannualFlexible"
+        : "subscriptionMetaSemiannual",
+      {
+        amount,
+        pattern: subscription.description_pattern,
+      },
+    );
+  }
+
   if (subscription.description_pattern.toUpperCase().includes("PAYPAL")) {
     return subscription.billing_day
       ? t("subscriptionMetaWithDay", { amount, day: subscription.billing_day })
@@ -157,27 +169,26 @@ function SubscriptionRow({
 
       {isDemo ? null : (
         <div className="flex shrink-0 items-center gap-2">
-          <div className="flex rounded-md border border-border p-0.5">
-            <Button
-              type="button"
-              size="sm"
-              variant={subscription.cadence === "monthly" ? "default" : "ghost"}
-              className="h-7 cursor-pointer px-2 text-xs"
-              disabled={isPending}
-              onClick={() => onCadenceChange(subscription.id, "monthly")}
-            >
-              {t("cadenceMonthly")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={subscription.cadence === "yearly" ? "default" : "ghost"}
-              className="h-7 cursor-pointer px-2 text-xs"
-              disabled={isPending}
-              onClick={() => onCadenceChange(subscription.id, "yearly")}
-            >
-              {t("cadenceYearly")}
-            </Button>
+          <div className="flex flex-wrap rounded-md border border-border p-0.5">
+            {(
+              [
+                ["monthly", "cadenceMonthly"],
+                ["semiannual", "cadenceSemiannual"],
+                ["yearly", "cadenceYearly"],
+              ] as const
+            ).map(([value, labelKey]) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={subscription.cadence === value ? "default" : "ghost"}
+                className="h-7 cursor-pointer px-2 text-xs"
+                disabled={isPending}
+                onClick={() => onCadenceChange(subscription.id, value)}
+              >
+                {t(labelKey)}
+              </Button>
+            ))}
           </div>
 
           <DropdownMenu>
@@ -433,27 +444,26 @@ export function SubscriptionsManager({
               </div>
               <div className="space-y-2">
                 <Label>{t("cadenceLabel")}</Label>
-                <div className="flex w-fit rounded-md border border-border p-0.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={manualCadence === "monthly" ? "default" : "ghost"}
-                    className="h-7 cursor-pointer px-2 text-xs"
-                    disabled={isPending}
-                    onClick={() => setManualCadence("monthly")}
-                  >
-                    {t("cadenceMonthly")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={manualCadence === "yearly" ? "default" : "ghost"}
-                    className="h-7 cursor-pointer px-2 text-xs"
-                    disabled={isPending}
-                    onClick={() => setManualCadence("yearly")}
-                  >
-                    {t("cadenceYearly")}
-                  </Button>
+                <div className="flex w-fit flex-wrap rounded-md border border-border p-0.5">
+                  {(
+                    [
+                      ["monthly", "cadenceMonthly"],
+                      ["semiannual", "cadenceSemiannual"],
+                      ["yearly", "cadenceYearly"],
+                    ] as const
+                  ).map(([value, labelKey]) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      size="sm"
+                      variant={manualCadence === value ? "default" : "ghost"}
+                      className="h-7 cursor-pointer px-2 text-xs"
+                      disabled={isPending}
+                      onClick={() => setManualCadence(value)}
+                    >
+                      {t(labelKey)}
+                    </Button>
+                  ))}
                 </div>
               </div>
             </div>

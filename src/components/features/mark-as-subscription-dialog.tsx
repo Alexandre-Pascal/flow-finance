@@ -34,12 +34,14 @@ import {
 import {
   generalRecurringMatchPattern,
   GENERAL_RECURRING_AMOUNT_TOLERANCE,
+  descriptionMatchesGeneralPattern,
   recurringGroupKey,
 } from "@/lib/finance/recurring-labels";
 import {
   DEFAULT_PAYPAL_PATTERN,
   getBookingDay,
   getBookingMonth,
+  inferCadenceFromPaymentDates,
   listCanonicalRules,
   matchesRecurringPayment,
 } from "@/lib/finance/recurring-payments";
@@ -51,6 +53,20 @@ import type {
 } from "@/types/database";
 
 const CREATE_MODE = "create";
+const CADENCE_OPTIONS: RecurringCadence[] = ["monthly", "semiannual", "yearly"];
+
+function cadenceLabel(
+  cadence: RecurringCadence,
+  t: ReturnType<typeof useTranslations<"transactions">>,
+): string {
+  if (cadence === "yearly") {
+    return t("subscriptionCadenceYearly");
+  }
+  if (cadence === "semiannual") {
+    return t("subscriptionCadenceSemiannual");
+  }
+  return t("subscriptionCadenceMonthly");
+}
 
 interface MarkAsSubscriptionDialogProps {
   tx: TransactionWithAccount;
@@ -95,6 +111,26 @@ export function MarkAsSubscriptionDialog({
   const pattern = isPayPal
     ? DEFAULT_PAYPAL_PATTERN
     : generalRecurringMatchPattern(recurringGroupKey(tx.description));
+
+  const inferredSetup = useMemo(() => {
+    if (!pattern || isPayPal) {
+      return { cadence: "monthly" as RecurringCadence, amountFlexible: false };
+    }
+
+    const related = transactions.filter(
+      (candidateTx) =>
+        candidateTx.amount < 0 &&
+        descriptionMatchesGeneralPattern(candidateTx.description, pattern),
+    );
+    const dates = related.map((row) => row.booking_date);
+    const amounts = new Set(
+      related.map((row) => Math.round(Math.abs(row.amount) * 100) / 100),
+    );
+    return {
+      cadence: inferCadenceFromPaymentDates(dates) ?? "monthly",
+      amountFlexible: amounts.size > 1,
+    };
+  }, [isPayPal, pattern, transactions]);
 
   // L'aperçu utilise exactement la règle que l'action serveur va créer, pour que
   // le nombre annoncé corresponde au rattachement réel.
@@ -143,8 +179,8 @@ export function MarkAsSubscriptionDialog({
     if (next) {
       setName(toDisplayName(pattern));
       setTarget(CREATE_MODE);
-      setCadence("monthly");
-      setAmountFlexible(false);
+      setCadence(inferredSetup.cadence);
+      setAmountFlexible(inferredSetup.amountFlexible);
       setError(null);
     }
     setOpen(next);
@@ -291,8 +327,8 @@ export function MarkAsSubscriptionDialog({
 
           <div className="space-y-2">
             <Label>{t("subscriptionCadenceLabel")}</Label>
-            <div className="flex w-fit rounded-md border border-border p-0.5">
-              {(["monthly", "yearly"] as const).map((value) => (
+            <div className="flex w-fit flex-wrap rounded-md border border-border p-0.5">
+              {CADENCE_OPTIONS.map((value) => (
                 <Button
                   key={value}
                   type="button"
@@ -301,9 +337,7 @@ export function MarkAsSubscriptionDialog({
                   className="h-7 cursor-pointer px-3 text-xs"
                   onClick={() => setCadence(value)}
                 >
-                  {value === "monthly"
-                    ? t("subscriptionCadenceMonthly")
-                    : t("subscriptionCadenceYearly")}
+                  {cadenceLabel(value, t)}
                 </Button>
               ))}
             </div>

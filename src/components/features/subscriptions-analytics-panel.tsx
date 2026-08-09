@@ -222,11 +222,34 @@ export function SubscriptionsAnalyticsPanel({
                   <TableRow key={subscription.id}>
                     <TableCell className="font-medium">
                       <div>{subscription.name}</div>
-                      {subscription.cadence === "yearly" ? (
+                      {subscription.cadence === "yearly" ||
+                      subscription.cadence === "semiannual" ? (
                         <p className="text-xs font-normal text-muted-foreground">
-                          {t("subscriptionsYearlyBilling", {
-                            amount: formatCurrency(subscription.billingAmount, locale),
-                          })}
+                          {subscription.cadence === "yearly"
+                            ? t("subscriptionsYearlyBilling", {
+                                amount: subscription.amountFlexible
+                                  ? formatCurrencyRange(
+                                      subscription.billingAmountMin,
+                                      subscription.billingAmountMax,
+                                      locale,
+                                    )
+                                  : formatCurrency(
+                                      subscription.billingAmount,
+                                      locale,
+                                    ),
+                              })
+                            : t("subscriptionsSemiannualBilling", {
+                                amount: subscription.amountFlexible
+                                  ? formatCurrencyRange(
+                                      subscription.billingAmountMin,
+                                      subscription.billingAmountMax,
+                                      locale,
+                                    )
+                                  : formatCurrency(
+                                      subscription.billingAmount,
+                                      locale,
+                                    ),
+                              })}
                         </p>
                       ) : null}
                     </TableCell>
