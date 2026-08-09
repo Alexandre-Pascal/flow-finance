@@ -56,23 +56,54 @@ export const DEFAULT_CATEGORY_COLORS = [
 export const CATEGORY_COLOR_PALETTE = [
   "#EF4444",
   "#F97316",
+  "#F59E0B",
   "#EAB308",
   "#CA8A04",
+  "#A3E635",
   "#84CC16",
+  "#65A30D",
   "#22C55E",
+  "#16A34A",
+  "#10B981",
   "#0D9488",
   "#14B8A6",
+  "#2DD4BF",
   "#06B6D4",
+  "#0891B2",
+  "#0EA5E9",
   "#3B82F6",
+  "#2563EB",
   "#6366F1",
+  "#4F46E5",
   "#8B5CF6",
+  "#7C3AED",
   "#A855F7",
+  "#C026D3",
   "#D946EF",
+  "#E879F9",
   "#EC4899",
+  "#DB2777",
   "#F43F5E",
+  "#E11D48",
+  "#FB7185",
+  "#F87171",
+  "#FB923C",
+  "#FBBF24",
+  "#FDE047",
+  "#4ADE80",
+  "#34D399",
+  "#67E8F9",
+  "#60A5FA",
+  "#818CF8",
+  "#C084FC",
+  "#F472B6",
   "#64748B",
+  "#475569",
   "#94A3B8",
   "#78716C",
+  "#A8A29E",
+  "#B45309",
+  "#9F1239",
 ];
 
 export function normalizeColor(color: string): string {
@@ -83,7 +114,97 @@ export function isValidHexColor(color: string): boolean {
   return /^#[0-9A-F]{6}$/.test(normalizeColor(color));
 }
 
-/** Renvoie la première couleur de la palette non utilisée, sinon une couleur de repli. */
+function toHexChannel(value: number): string {
+  return Math.round(Math.min(255, Math.max(0, value)))
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase();
+}
+
+/** Convertit HSL (h 0–360, s/l 0–100) en hex #RRGGBB. */
+export function hslToHex(h: number, s: number, l: number): string {
+  const saturation = s / 100;
+  const lightness = l / 100;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const huePrime = ((h % 360) + 360) % 360 / 60;
+  const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (huePrime < 1) {
+    r = chroma;
+    g = x;
+  } else if (huePrime < 2) {
+    r = x;
+    g = chroma;
+  } else if (huePrime < 3) {
+    g = chroma;
+    b = x;
+  } else if (huePrime < 4) {
+    g = x;
+    b = chroma;
+  } else if (huePrime < 5) {
+    r = x;
+    g = 0;
+    b = chroma;
+  } else {
+    r = chroma;
+    b = x;
+  }
+
+  const match = lightness - chroma / 2;
+  return `#${toHexChannel((r + match) * 255)}${toHexChannel((g + match) * 255)}${toHexChannel((b + match) * 255)}`;
+}
+
+/** Génère une couleur distincte hors palette (angle d’or). */
+export function generateDistinctColor(index: number): string {
+  const hue = (index * 137.508) % 360;
+  const lightness = 42 + (index % 5) * 4;
+  const saturation = 58 + (index % 3) * 8;
+  return hslToHex(hue, saturation, lightness);
+}
+
+/**
+ * Couleurs affichables dans le sélecteur : palette + teintes libres
+ * si presque toutes les couleurs de base sont prises.
+ */
+export function listSelectableColors(
+  usedColors: Iterable<string>,
+  selectedColor?: string | null,
+  minFree = 12,
+): string[] {
+  const used = new Set([...usedColors].map((color) => normalizeColor(color)));
+  const selected = selectedColor ? normalizeColor(selectedColor) : null;
+  const choices: string[] = [...CATEGORY_COLOR_PALETTE];
+  const seen = new Set(choices.map((color) => normalizeColor(color)));
+
+  const freeCount = () =>
+    choices.filter((color) => {
+      const normalized = normalizeColor(color);
+      return !used.has(normalized) || normalized === selected;
+    }).length;
+
+  let generated = 0;
+  while (freeCount() < minFree && generated < 360) {
+    const candidate = generateDistinctColor(generated);
+    generated += 1;
+    const normalized = normalizeColor(candidate);
+    if (seen.has(normalized) || used.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    choices.push(candidate);
+  }
+
+  if (selected && !seen.has(selected) && isValidHexColor(selected)) {
+    choices.push(selected);
+  }
+
+  return choices;
+}
+
+/** Renvoie une couleur non utilisée (palette puis génération). */
 export function pickAvailableColor(usedColors: Iterable<string>): string {
   const used = new Set([...usedColors].map((color) => normalizeColor(color)));
 
@@ -93,9 +214,22 @@ export function pickAvailableColor(usedColors: Iterable<string>): string {
     }
   }
 
-  return CATEGORY_COLOR_PALETTE[
-    used.size % CATEGORY_COLOR_PALETTE.length
-  ];
+  for (let index = 0; index < 720; index += 1) {
+    const color = generateDistinctColor(index);
+    if (!used.has(normalizeColor(color))) {
+      return color;
+    }
+  }
+
+  // Dernier recours : variation de luminosité sur teinte fixe.
+  for (let lightness = 20; lightness <= 80; lightness += 1) {
+    const color = hslToHex(210, 70, lightness);
+    if (!used.has(normalizeColor(color))) {
+      return color;
+    }
+  }
+
+  return generateDistinctColor(used.size);
 }
 
 export const DEFAULT_EXPENSE_CATEGORIES: Array<{

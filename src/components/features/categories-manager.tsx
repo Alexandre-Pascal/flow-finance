@@ -30,8 +30,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  CATEGORY_COLOR_PALETTE,
   dedupeCategories,
+  listSelectableColors,
   normalizeColor,
   pickAvailableColor,
 } from "@/lib/finance/expense-categories";
@@ -56,10 +56,14 @@ function ColorPicker({
   disabled?: boolean;
 }) {
   const t = useTranslations("categories");
+  const colors = useMemo(
+    () => listSelectableColors(disabledColors, value),
+    [disabledColors, value],
+  );
 
   return (
     <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("colorLabel")}>
-      {CATEGORY_COLOR_PALETTE.map((color) => {
+      {colors.map((color) => {
         const normalized = normalizeColor(color);
         const isSelected = normalizeColor(value) === normalized;
         const isTaken = disabledColors.has(normalized) && !isSelected;
