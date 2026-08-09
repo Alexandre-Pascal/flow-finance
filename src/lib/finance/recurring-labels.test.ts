@@ -36,4 +36,16 @@ describe("recurring label normalization", () => {
       descriptionMatchesGeneralPattern(b, generalRecurringMatchPattern(recurringGroupKey(a))),
     ).toBe(true);
   });
+
+  it("matches water bills even when a short code sits between pattern tokens", () => {
+    const may =
+      "PAIEMENT PAR CARTE X5947 EAU ASSMT CACG 46 CA 21/05";
+    const november =
+      "PAIEMENT PAR CARTE X5947 EAU ASSMT CACG 46 CA 04/11";
+
+    const pattern = generalRecurringMatchPattern(recurringGroupKey(may));
+    expect(pattern).toBe("EAU ASSMT CACG CA");
+    expect(descriptionMatchesGeneralPattern(may, pattern)).toBe(true);
+    expect(descriptionMatchesGeneralPattern(november, pattern)).toBe(true);
+  });
 });

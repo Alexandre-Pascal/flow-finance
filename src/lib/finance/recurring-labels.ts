@@ -92,13 +92,51 @@ export function descriptionMatchesGeneralPattern(
     return true;
   }
 
+  const patternTokens = normalizedPattern.split(/\s+/).filter(Boolean);
+  if (patternTokens.length === 0) {
+    return true;
+  }
+
   const upper = description.toUpperCase();
   if (upper.includes(normalizedPattern)) {
     return true;
   }
 
   const txKey = recurringGroupKey(description);
-  return txKey.includes(normalizedPattern) || normalizedPattern.includes(txKey);
+  const txPattern = generalRecurringMatchPattern(txKey);
+  if (
+    txPattern === normalizedPattern ||
+    txKey.includes(normalizedPattern) ||
+    normalizedPattern.includes(txKey)
+  ) {
+    return true;
+  }
+
+  // Tokens stables dans l'ordre, même si une ref (ex. « 46 ») s'intercale.
+  return (
+    tokensAppearInOrder(txKey, patternTokens) ||
+    tokensAppearInOrder(upper, patternTokens)
+  );
+}
+
+function tokensAppearInOrder(haystack: string, tokens: string[]): boolean {
+  const haystackTokens = haystack
+    .toUpperCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  let index = 0;
+
+  for (const token of tokens) {
+    while (index < haystackTokens.length && haystackTokens[index] !== token) {
+      index += 1;
+    }
+    if (index >= haystackTokens.length) {
+      return false;
+    }
+    index += 1;
+  }
+
+  return true;
 }
 
 export function generalPatternsMatch(
