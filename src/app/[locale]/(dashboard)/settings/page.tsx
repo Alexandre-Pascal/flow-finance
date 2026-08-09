@@ -20,10 +20,15 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ synced?: string; remapped?: string; error?: string }>;
+  searchParams: Promise<{
+    synced?: string;
+    remapped?: string;
+    connected?: string;
+    error?: string;
+  }>;
 }) {
   const { locale } = await params;
-  const { synced, remapped, error } = await searchParams;
+  const { synced, remapped, connected, error } = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations("settings");
   const tNav = await getTranslations("nav");
@@ -66,6 +71,11 @@ export default async function SettingsPage({
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
 
+      {connected ? (
+        <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
+          {t("connectSuccess")}
+        </p>
+      ) : null}
       {synced ? (
         <p className="rounded-lg border border-border bg-muted/50 px-4 py-3 text-sm text-foreground">
           {remapped
@@ -74,6 +84,16 @@ export default async function SettingsPage({
                 remapped: Number(remapped),
               })
             : t("syncSuccess", { count: Number(synced) })}
+        </p>
+      ) : null}
+      {error === "auth" ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {t("connectAuthError")}
+        </p>
+      ) : null}
+      {error === "no_accounts" ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {t("connectNoAccountsError")}
         </p>
       ) : null}
       {error === "sync" ? (
@@ -117,8 +137,17 @@ export default async function SettingsPage({
               })}
             </p>
           ) : null}
-          {bankReady && !isBankLinked ? <BankConnectButtons /> : null}
-          {bankReady && isBankLinked ? <BankSyncButtons /> : null}
+          {isBankLinked && !hasSyncedAccounts ? (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {t("connectNoAccountsError")}
+            </p>
+          ) : null}
+          {bankReady && (!isBankLinked || !hasSyncedAccounts) ? (
+            <BankConnectButtons />
+          ) : null}
+          {bankReady && isBankLinked && hasSyncedAccounts ? (
+            <BankSyncButtons />
+          ) : null}
         </CardContent>
       </Card>
 

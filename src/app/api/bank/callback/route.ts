@@ -3,13 +3,15 @@
  * @description Callback OAuth Enable Banking — crée session et enregistre les comptes.
  */
 
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createSession, fetchBalances } from "@/lib/enable-banking/client";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { syncUserFinanceData } from "@/lib/enable-banking/sync";
 import { pickAccountBalance } from "@/lib/enable-banking/types";
 import { createClient } from "@/lib/supabase/server";
+
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -27,7 +29,7 @@ export async function GET(request: Request) {
     !state ||
     state !== savedState
   ) {
-    return NextResponse.redirect(`${appUrl}/fr/accounts?error=auth`);
+    return NextResponse.redirect(`${appUrl}/fr/settings?error=auth`);
   }
 
   cookieStore.delete("eb_oauth_state");
@@ -68,6 +70,10 @@ export async function GET(request: Request) {
 
     if (connError) throw connError;
 
+    if (session.accounts.length === 0) {
+      return NextResponse.redirect(`${appUrl}/fr/settings?error=no_accounts`);
+    }
+
     const accountRows = await Promise.all(
       session.accounts.map(async (acc) => {
         let balance = 0;
@@ -96,10 +102,18 @@ export async function GET(request: Request) {
       if (accError && accError.code !== "23505") throw accError;
     }
 
-    await syncUserFinanceData(user.id, "longest");
+    // Ne pas bloquer le redirect OAuth sur la sync complète (peut prendre des minutes).
+    const userId = user.id;
+    after(async () => {
+      try {
+        await syncUserFinanceData(userId, "longest");
+      } catch (error) {
+        console.error("[bank/callback] background sync failed", error);
+      }
+    });
 
-    return NextResponse.redirect(`${appUrl}/fr/accounts?connected=1`);
+    return NextResponse.redirect(`${appUrl}/fr/settings?connected=1`);
   } catch {
-    return NextResponse.redirect(`${appUrl}/fr/accounts?error=sync`);
+    return NextResponse.redirect(`${appUrl}/fr/settings?error=sync`);
   }
 }
