@@ -205,24 +205,25 @@ export function MarkAsSubscriptionDialog({
         </button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("subscriptionDialogTitle")}</DialogTitle>
-          <DialogDescription>
-            {t("subscriptionDialogDescription")}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="flex max-h-[min(90vh,40rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+          <DialogHeader className="mb-4">
+            <DialogTitle>{t("subscriptionDialogTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("subscriptionDialogDescription")}
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2">
-            <p className="truncate font-medium text-foreground">
+          <form id={`mark-subscription-${tx.id}`} onSubmit={handleSubmit} className="space-y-4">
+          <div className="min-w-0 space-y-1 overflow-hidden rounded-lg border border-border bg-muted/40 px-3 py-2">
+            <p className="break-words font-medium text-foreground" title={tx.description}>
               {tx.description}
             </p>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(tx.amount, locale, tx.currency)} ·{" "}
               {formatDate(tx.booking_date, locale)}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="break-all text-xs text-muted-foreground">
               {t("subscriptionPatternLabel")} : <code>{pattern}</code>
             </p>
           </div>
@@ -330,24 +331,26 @@ export function MarkAsSubscriptionDialog({
               {error}
             </p>
           ) : null}
+          </form>
+        </div>
 
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button type="button" variant="outline" className="cursor-pointer">
-                {t("subscriptionCancel")}
-              </Button>
-            </DialogClose>
-            <Button
-              type="submit"
-              className="cursor-pointer"
-              disabled={isPending || !canSubmit || !pattern}
-            >
-              {isCreating
-                ? t("subscriptionSubmitCreate")
-                : t("subscriptionSubmitAttach")}
+        <DialogFooter className="mx-0 mb-0 shrink-0 rounded-none border-t">
+          <DialogClose asChild>
+            <Button type="button" variant="outline" className="cursor-pointer">
+              {t("subscriptionCancel")}
             </Button>
-          </DialogFooter>
-        </form>
+          </DialogClose>
+          <Button
+            type="submit"
+            form={`mark-subscription-${tx.id}`}
+            className="cursor-pointer"
+            disabled={isPending || !canSubmit || !pattern}
+          >
+            {isCreating
+              ? t("subscriptionSubmitCreate")
+              : t("subscriptionSubmitAttach")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

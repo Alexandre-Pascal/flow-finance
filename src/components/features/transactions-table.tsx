@@ -785,8 +785,21 @@ export function TransactionsTable({
               {formatDate(tx.booking_date, locale)}
             </TableCell>
             <TableCell className="max-w-[200px] font-medium md:max-w-xs">
-              <span className="flex items-center gap-1.5">
-                <span className="truncate">{tx.description}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="min-w-0 cursor-default truncate">
+                      {tx.description}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    align="start"
+                    className="max-w-sm break-words"
+                  >
+                    {tx.description}
+                  </TooltipContent>
+                </Tooltip>
                 {!compact ? (
                   <TransactionNote tx={tx} isDemo={isDemo} />
                 ) : null}
