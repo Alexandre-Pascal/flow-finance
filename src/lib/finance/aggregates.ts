@@ -6,6 +6,8 @@
 import type { Account, TransactionWithAccount } from "@/types/database";
 import {
   getIncomeMonthKey,
+  shouldCountAsBudgetExpense,
+  shouldCountAsBudgetIncome,
   type PayrollBudgetOptions,
 } from "@/lib/finance/payroll-budget";
 import { isInternalTransfer } from "@/lib/pea/transfers";
@@ -116,16 +118,20 @@ export function buildMonthlyOverview(
   const buckets = new Map<string, { income: number; expenses: number }>();
 
   for (const tx of transactions) {
-    if (isInternalTransfer(tx)) {
+    const isIncome = shouldCountAsBudgetIncome(tx, payrollOptions);
+    const isExpense = shouldCountAsBudgetExpense(tx, payrollOptions);
+    if (!isIncome && !isExpense) {
       continue;
     }
 
-    const key = getIncomeMonthKey(tx, payrollOptions);
+    const key = isIncome
+      ? getIncomeMonthKey(tx, payrollOptions)
+      : tx.booking_date.slice(0, 7);
     const bucket = buckets.get(key) ?? { income: 0, expenses: 0 };
 
-    if (tx.amount > 0) {
+    if (isIncome) {
       bucket.income += tx.amount;
-    } else if (tx.amount < 0) {
+    } else if (isExpense) {
       bucket.expenses += Math.abs(tx.amount);
     }
 

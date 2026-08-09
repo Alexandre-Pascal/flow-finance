@@ -14,6 +14,7 @@ import {
 import { sumBudgetMonthIncome } from "@/lib/finance/payroll-budget";
 import { getFinanceData } from "@/lib/finance/queries";
 import { getProfileSettings } from "@/lib/get-profile-settings";
+import { getConfiguredIncomeSources } from "@/lib/profile-settings";
 import { formatCurrency } from "@/lib/format";
 
 export default async function DashboardPage({
@@ -45,6 +46,7 @@ export default async function DashboardPage({
   const income = sumBudgetMonthIncome(transactions, new Date(), {
     payrollKeyword: profileSettings.payroll.keyword,
     budgetShiftMonths: profileSettings.payroll.budgetShiftMonths,
+    incomeSources: getConfiguredIncomeSources(profileSettings),
   });
 
   const recent = [...transactions]

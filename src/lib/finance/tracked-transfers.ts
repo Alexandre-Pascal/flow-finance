@@ -86,6 +86,17 @@ function descriptionHitsExclude(
   });
 }
 
+/** True si le libellé contient une exclusion d'une source de rentrées (ex. ALUTEC). */
+export function hitsTrackedIncomeExclude(
+  description: string,
+  sources: Array<Pick<ProfileTrackedIncomeSource, "excludeKeywords">>,
+): boolean {
+  const upper = description.toUpperCase();
+  return sources.some((source) =>
+    descriptionHitsExclude(upper, source.excludeKeywords),
+  );
+}
+
 /**
  * Rentrée non salariale d'une source configurée (plusieurs libellés possibles).
  * Hors salaire : ne pas confondre avec isPayrollTransfer.

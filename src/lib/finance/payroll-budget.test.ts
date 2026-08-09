@@ -60,6 +60,53 @@ describe("payroll-budget", () => {
     expect(income).toBe(3200);
   });
 
+  it("counts tracked family income in the budget month and skips ALUTEC", () => {
+    const mother = payrollTx("2025-08-10", 200);
+    mother.description = "VIREMENT EN VOTRE FAVEUR DE MME PASCAL SOPHIE";
+    const alutec = payrollTx("2025-08-12", 5000);
+    alutec.description =
+      "VIREMENT EN VOTRE FAVEUR ALUTEC MME PASCAL SOPHIE ALUTEC";
+
+    const options = {
+      ...payrollOptions,
+      incomeSources: [
+        {
+          id: "sophie",
+          label: "Sophie",
+          keywords: ["PASCAL SOPHIE"],
+          excludeKeywords: ["ALUTEC"],
+          requireRoundAmount: true,
+        },
+      ],
+    };
+
+    expect(
+      sumBudgetMonthIncome(
+        [mother, alutec, payrollTx("2025-07-28", 3200)],
+        new Date("2025-08-15T12:00:00Z"),
+        options,
+      ),
+    ).toBe(3400);
+  });
+
+  it("keeps tracked income in booking month even with payroll shift", () => {
+    const mother = payrollTx("2025-07-28", 200);
+    mother.description = "VIREMENT EN VOTRE FAVEUR DE MME PASCAL SOPHIE";
+    const options = {
+      ...payrollOptions,
+      incomeSources: [
+        {
+          id: "sophie",
+          label: "Sophie",
+          keywords: ["PASCAL SOPHIE"],
+          excludeKeywords: [],
+          requireRoundAmount: true,
+        },
+      ],
+    };
+    expect(getIncomeMonthKey(mother, options)).toBe("2025-07");
+  });
+
   it("shifts across year boundary", () => {
     expect(shiftMonthKey("2025-12", 1)).toBe("2026-01");
     expect(getIncomeMonthKey(payrollTx("2025-12-30", 3000), payrollOptions)).toBe(

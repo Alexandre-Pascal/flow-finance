@@ -42,6 +42,7 @@ export default async function AnalyticsPage({
   const payrollOptions = {
     payrollKeyword: profileSettings.payroll.keyword,
     budgetShiftMonths: profileSettings.payroll.budgetShiftMonths,
+    incomeSources: getConfiguredIncomeSources(profileSettings),
   };
 
   const monthlyOverview = buildMonthlyOverview(
