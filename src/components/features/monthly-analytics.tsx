@@ -42,10 +42,10 @@ const MonthlyAnalyticsGraph = dynamic(
 // Les trois panneaux ci-dessous vivent dans des onglets inactifs au chargement.
 // Radix les démonte, mais leur code restait dans le bundle initial : on ne le
 // télécharge donc qu'au moment où l'utilisateur ouvre l'onglet.
-const MotherTransfersPanel = dynamic(
+const IncomingTransfersPanel = dynamic(
   () =>
-    import("@/components/features/mother-transfers-panel").then(
-      (mod) => mod.MotherTransfersPanel,
+    import("@/components/features/incoming-transfers-panel").then(
+      (mod) => mod.IncomingTransfersPanel,
     ),
   { loading: () => <Skeleton className="h-96 w-full" /> },
 );
@@ -83,9 +83,20 @@ interface OutgoingPersonSeries {
   data: MonthlyTransferOverview[];
 }
 
+interface IncomingSourceSeries {
+  source: {
+    id: string;
+    label: string;
+    keywords: string[];
+    excludeKeywords: string[];
+    requireRoundAmount: boolean;
+  };
+  data: MonthlyTransferOverview[];
+}
+
 interface MonthlyAnalyticsProps {
   data: MonthlyOverview[];
-  motherTransferData: MonthlyTransferOverview[];
+  incomeTransferSeries?: IncomingSourceSeries[];
   payrollTransferData: MonthlyTransferOverview[];
   outgoingTransferSeries?: OutgoingPersonSeries[];
   subscriptionData: MonthlySubscriptionRow[];
@@ -95,8 +106,6 @@ interface MonthlyAnalyticsProps {
   showTrackedPerson?: boolean;
   showPayroll?: boolean;
   showTrackedOutgoing?: boolean;
-  trackedPersonKeyword?: string | null;
-  trackedPersonLabel?: string | null;
   payrollKeyword?: string | null;
   payrollBudgetShiftMonths?: number;
 }
@@ -134,14 +143,14 @@ function DeltaBadge({
 
 type AnalyticsView =
   | "overview"
-  | "mother"
+  | "incoming"
   | "payroll"
   | "outgoing"
   | "subscriptions";
 
 export function MonthlyAnalytics({
   data,
-  motherTransferData,
+  incomeTransferSeries = [],
   payrollTransferData,
   outgoingTransferSeries = [],
   subscriptionData,
@@ -151,8 +160,6 @@ export function MonthlyAnalytics({
   showTrackedPerson = false,
   showPayroll = false,
   showTrackedOutgoing = false,
-  trackedPersonKeyword = null,
-  trackedPersonLabel = null,
   payrollKeyword = null,
   payrollBudgetShiftMonths = 1,
 }: MonthlyAnalyticsProps) {
@@ -180,7 +187,7 @@ export function MonthlyAnalytics({
     ? computeMonthDelta(currentMonth.net, previousMonth.net)
     : null;
 
-  if (data.length === 0 && motherTransferData.length === 0) {
+  if (data.length === 0 && incomeTransferSeries.every((row) => row.data.length === 0)) {
     return (
       <Card>
         <CardContent className="flex min-h-48 items-center justify-center py-10 text-center text-sm text-muted-foreground">
@@ -202,11 +209,9 @@ export function MonthlyAnalytics({
             <TabsTrigger value="overview" className="cursor-pointer px-4 py-2">
               {t("viewOverview")}
             </TabsTrigger>
-            {showTrackedPerson && trackedPersonKeyword ? (
-              <TabsTrigger value="mother" className="cursor-pointer px-4 py-2">
-                {t("viewMotherTransfers", {
-                  label: trackedPersonLabel || trackedPersonKeyword,
-                })}
+            {showTrackedPerson && incomeTransferSeries.length > 0 ? (
+              <TabsTrigger value="incoming" className="cursor-pointer px-4 py-2">
+                {t("viewIncomingTransfers")}
               </TabsTrigger>
             ) : null}
             {showPayroll && payrollKeyword ? (
@@ -431,15 +436,13 @@ export function MonthlyAnalytics({
           )}
         </TabsContent>
 
-        {showTrackedPerson && trackedPersonKeyword ? (
-          <TabsContent value="mother" className="mt-0">
-            <MotherTransfersPanel
-              data={motherTransferData}
+        {showTrackedPerson && incomeTransferSeries.length > 0 ? (
+          <TabsContent value="incoming" className="mt-0">
+            <IncomingTransfersPanel
+              series={incomeTransferSeries}
               transactions={transactions}
               locale={locale}
               period={period}
-              keyword={trackedPersonKeyword}
-              label={trackedPersonLabel || trackedPersonKeyword}
             />
           </TabsContent>
         ) : null}

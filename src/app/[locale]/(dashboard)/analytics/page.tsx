@@ -9,10 +9,11 @@ import {
 import {
   buildMonthlyTransferOverview,
   isPayrollTransfer,
+  isTrackedIncomeTransfer,
   isTrackedOutgoingTransfer,
-  isTrackedPersonTransfer,
 } from "@/lib/finance/tracked-transfers";
 import {
+  getConfiguredIncomeSources,
   getConfiguredOutgoingPeople,
   isPayrollConfigured,
   isTrackedOutgoingConfigured,
@@ -52,13 +53,15 @@ export default async function AnalyticsPage({
   const showTrackedPerson = isTrackedPersonConfigured(profileSettings);
   const showPayroll = isPayrollConfigured(profileSettings);
   const showTrackedOutgoing = isTrackedOutgoingConfigured(profileSettings);
+  const incomeSources = getConfiguredIncomeSources(profileSettings);
   const outgoingPeople = getConfiguredOutgoingPeople(profileSettings);
 
-  const motherTransferData = showTrackedPerson
-    ? buildMonthlyTransferOverview(transactions, locale, (tx) =>
-        isTrackedPersonTransfer(tx, profileSettings.trackedPerson.keyword),
-      )
-    : [];
+  const incomeTransferSeries = incomeSources.map((source) => ({
+    source,
+    data: buildMonthlyTransferOverview(transactions, locale, (tx) =>
+      isTrackedIncomeTransfer(tx, source),
+    ),
+  }));
 
   const payrollTransferData = showPayroll
     ? buildMonthlyTransferOverview(
@@ -94,7 +97,7 @@ export default async function AnalyticsPage({
 
       <MonthlyAnalytics
         data={monthlyOverview}
-        motherTransferData={motherTransferData}
+        incomeTransferSeries={incomeTransferSeries}
         payrollTransferData={payrollTransferData}
         outgoingTransferSeries={outgoingTransferSeries}
         subscriptionData={subscriptionData}
@@ -104,8 +107,6 @@ export default async function AnalyticsPage({
         showTrackedPerson={showTrackedPerson}
         showPayroll={showPayroll}
         showTrackedOutgoing={showTrackedOutgoing}
-        trackedPersonKeyword={profileSettings.trackedPerson.keyword}
-        trackedPersonLabel={profileSettings.trackedPerson.label}
         payrollKeyword={profileSettings.payroll.keyword}
         payrollBudgetShiftMonths={profileSettings.payroll.budgetShiftMonths}
       />

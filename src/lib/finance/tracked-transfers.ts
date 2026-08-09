@@ -5,6 +5,7 @@
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import { shiftMonthKey } from "@/lib/finance/payroll-budget";
+import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import type { TransactionWithAccount } from "@/types/database";
 
 export interface MonthlyTransferOverview {
@@ -49,26 +50,90 @@ function descriptionLooksLikeOutgoingTransfer(description: string): boolean {
   );
 }
 
+/** Annulations / opérations techniques : pas une vraie rentrée. */
+export function isNonIncomeTransferDescription(description: string): boolean {
+  const upper = description.toUpperCase();
+  return (
+    upper.includes("ANNUL") ||
+    upper.includes("OPE. DEBITRICES") ||
+    upper.includes("OPE DEBITRICES") ||
+    upper.includes("ANNULATION")
+  );
+}
+
+/** Montant en euros entiers (ex. 200,00 — typique des aides familiales). */
+export function isRoundEuroAmount(amount: number): boolean {
+  return Math.round(Math.abs(amount) * 100) % 100 === 0;
+}
+
+function descriptionMatchesAnyKeyword(
+  description: string,
+  keywords: string[],
+): boolean {
+  return keywords.some((keyword) => {
+    const needle = keyword.trim().toUpperCase();
+    return needle.length > 0 && description.includes(needle);
+  });
+}
+
+function descriptionHitsExclude(
+  description: string,
+  excludeKeywords: string[],
+): boolean {
+  return excludeKeywords.some((keyword) => {
+    const needle = keyword.trim().toUpperCase();
+    return needle.length > 0 && description.includes(needle);
+  });
+}
+
 /**
- * Virement entrant dont le libellé contient le mot-clé configuré (ex. un proche).
+ * Rentrée non salariale d'une source configurée (plusieurs libellés possibles).
+ * Hors salaire : ne pas confondre avec isPayrollTransfer.
+ */
+export function isTrackedIncomeTransfer(
+  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  source: Pick<
+    ProfileTrackedIncomeSource,
+    "keywords" | "excludeKeywords" | "requireRoundAmount"
+  > | null | undefined,
+): boolean {
+  if (!source || tx.amount <= 0 || source.keywords.length === 0) {
+    return false;
+  }
+
+  const description = tx.description.toUpperCase();
+  if (isNonIncomeTransferDescription(description)) {
+    return false;
+  }
+  if (descriptionHitsExclude(description, source.excludeKeywords)) {
+    return false;
+  }
+  if (source.requireRoundAmount && !isRoundEuroAmount(tx.amount)) {
+    return false;
+  }
+  if (!descriptionLooksLikeIncomingTransfer(description)) {
+    return false;
+  }
+
+  return descriptionMatchesAnyKeyword(description, source.keywords);
+}
+
+/**
+ * @deprecated Prefer isTrackedIncomeTransfer with une source complète.
+ * Conservé pour les appels à un seul mot-clé.
  */
 export function isTrackedPersonTransfer(
   tx: Pick<TransactionWithAccount, "amount" | "description">,
   keyword: string | null | undefined,
 ): boolean {
-  if (!keyword || tx.amount <= 0) {
+  if (!keyword) {
     return false;
   }
-
-  const description = tx.description.toUpperCase();
-  const needle = keyword.trim().toUpperCase();
-  if (!needle) {
-    return false;
-  }
-
-  return (
-    description.includes(needle) && descriptionLooksLikeIncomingTransfer(description)
-  );
+  return isTrackedIncomeTransfer(tx, {
+    keywords: [keyword],
+    excludeKeywords: [],
+    requireRoundAmount: true,
+  });
 }
 
 /**
@@ -95,6 +160,7 @@ export function isTrackedOutgoingTransfer(
 
 /**
  * Virement de salaire dont le libellé contient le mot-clé employeur configuré.
+ * Indépendant des sources d'aide familiale (tracked income).
  */
 export function isPayrollTransfer(
   tx: Pick<TransactionWithAccount, "amount" | "description">,
@@ -110,12 +176,16 @@ export function isPayrollTransfer(
     return false;
   }
 
+  if (isNonIncomeTransferDescription(description)) {
+    return false;
+  }
+
   return (
     description.includes(needle) && descriptionLooksLikeIncomingTransfer(description)
   );
 }
 
-/** @deprecated Prefer isTrackedPersonTransfer with an explicit keyword. */
+/** @deprecated Prefer isTrackedIncomeTransfer. */
 export function isMotherTransfer(
   tx: Pick<TransactionWithAccount, "amount" | "description">,
   keyword = "PASCAL SOPHIE",

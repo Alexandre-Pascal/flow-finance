@@ -1,6 +1,6 @@
 /**
  * @file profile-settings-form.tsx
- * @description Modules visibles + mots-clés salaire / personnes suivies.
+ * @description Modules visibles + mots-clés salaire / rentrées / virements émis.
  */
 
 "use client";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
   ProfileSettings,
+  ProfileTrackedIncomeSource,
   ProfileTrackedOutgoingPerson,
 } from "@/lib/profile-settings";
 
@@ -23,12 +24,47 @@ interface ProfileSettingsFormProps {
   isDemo: boolean;
 }
 
+interface IncomeSourceDraft {
+  id: string;
+  label: string;
+  keywordsText: string;
+  excludeKeywordsText: string;
+  requireRoundAmount: boolean;
+}
+
 function newOutgoingPerson(): ProfileTrackedOutgoingPerson {
   return {
     id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     label: "",
     keyword: "",
   };
+}
+
+function newIncomeSource(): IncomeSourceDraft {
+  return {
+    id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: "",
+    keywordsText: "",
+    excludeKeywordsText: "",
+    requireRoundAmount: true,
+  };
+}
+
+function toIncomeDraft(source: ProfileTrackedIncomeSource): IncomeSourceDraft {
+  return {
+    id: source.id,
+    label: source.label,
+    keywordsText: source.keywords.join("\n"),
+    excludeKeywordsText: source.excludeKeywords.join("\n"),
+    requireRoundAmount: source.requireRoundAmount,
+  };
+}
+
+function parseLines(text: string): string[] {
+  return text
+    .split(/[\n,;]+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 export function ProfileSettingsForm({
@@ -46,11 +82,10 @@ export function ProfileSettingsForm({
   const [payrollShift, setPayrollShift] = useState<0 | 1>(
     settings.payroll.budgetShiftMonths,
   );
-  const [trackedKeyword, setTrackedKeyword] = useState(
-    settings.trackedPerson.keyword ?? "",
-  );
-  const [trackedLabel, setTrackedLabel] = useState(
-    settings.trackedPerson.label ?? "",
+  const [incomeSources, setIncomeSources] = useState<IncomeSourceDraft[]>(
+    settings.trackedIncomeSources.length > 0
+      ? settings.trackedIncomeSources.map(toIncomeDraft)
+      : [],
   );
   const [outgoingPeople, setOutgoingPeople] = useState<
     ProfileTrackedOutgoingPerson[]
@@ -75,6 +110,17 @@ export function ProfileSettingsForm({
     );
   }
 
+  function updateIncomeSource(
+    id: string,
+    patch: Partial<Omit<IncomeSourceDraft, "id">>,
+  ) {
+    setIncomeSources((prev) =>
+      prev.map((source) =>
+        source.id === id ? { ...source, ...patch } : source,
+      ),
+    );
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isDemo) {
@@ -91,8 +137,20 @@ export function ProfileSettingsForm({
     formData.set("module_tracked_outgoing", modules.trackedOutgoing ? "1" : "0");
     formData.set("payroll_keyword", payrollKeyword);
     formData.set("payroll_shift", String(payrollShift));
-    formData.set("tracked_person_keyword", trackedKeyword);
-    formData.set("tracked_person_label", trackedLabel);
+    formData.set(
+      "tracked_income_sources",
+      JSON.stringify(
+        incomeSources
+          .map((source) => ({
+            id: source.id,
+            label: source.label.trim(),
+            keywords: parseLines(source.keywordsText),
+            excludeKeywords: parseLines(source.excludeKeywordsText),
+            requireRoundAmount: source.requireRoundAmount,
+          }))
+          .filter((source) => source.keywords.length > 0),
+      ),
+    );
     formData.set(
       "tracked_outgoing_people",
       JSON.stringify(
@@ -190,31 +248,130 @@ export function ProfileSettingsForm({
 
       <div className="space-y-3 border-t border-border pt-4">
         <p className="text-sm font-medium text-foreground">
-          {t("trackedPersonTitle")}
+          {t("trackedIncomeTitle")}
         </p>
         <p className="text-sm text-muted-foreground">
-          {t("trackedPersonDescription")}
+          {t("trackedIncomeDescription")}
         </p>
-        <div className="space-y-2">
-          <Label htmlFor="tracked-label">{t("trackedPersonLabelLabel")}</Label>
-          <Input
-            id="tracked-label"
-            value={trackedLabel}
-            onChange={(event) => setTrackedLabel(event.target.value)}
-            placeholder={t("trackedPersonLabelPlaceholder")}
-            disabled={isDemo || isPending}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="tracked-keyword">{t("trackedPersonKeywordLabel")}</Label>
-          <Input
-            id="tracked-keyword"
-            value={trackedKeyword}
-            onChange={(event) => setTrackedKeyword(event.target.value)}
-            placeholder={t("trackedPersonKeywordPlaceholder")}
-            disabled={isDemo || isPending}
-          />
-        </div>
+
+        {incomeSources.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("trackedIncomeEmpty")}</p>
+        ) : (
+          <ul className="space-y-3">
+            {incomeSources.map((source, index) => (
+              <li
+                key={source.id}
+                className="space-y-3 rounded-lg border border-border p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {t("trackedIncomeSourceTitle", { index: index + 1 })}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 cursor-pointer text-muted-foreground hover:text-destructive"
+                    disabled={isDemo || isPending}
+                    onClick={() =>
+                      setIncomeSources((prev) =>
+                        prev.filter((row) => row.id !== source.id),
+                      )
+                    }
+                    aria-label={t("trackedIncomeRemove")}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`income-label-${source.id}`}>
+                    {t("trackedIncomeLabelLabel")}
+                  </Label>
+                  <Input
+                    id={`income-label-${source.id}`}
+                    value={source.label}
+                    onChange={(event) =>
+                      updateIncomeSource(source.id, {
+                        label: event.target.value,
+                      })
+                    }
+                    placeholder={t("trackedIncomeLabelPlaceholder")}
+                    disabled={isDemo || isPending}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`income-keywords-${source.id}`}>
+                    {t("trackedIncomeKeywordsLabel")}
+                  </Label>
+                  <textarea
+                    id={`income-keywords-${source.id}`}
+                    value={source.keywordsText}
+                    onChange={(event) =>
+                      updateIncomeSource(source.id, {
+                        keywordsText: event.target.value,
+                      })
+                    }
+                    placeholder={t("trackedIncomeKeywordsPlaceholder")}
+                    disabled={isDemo || isPending}
+                    rows={3}
+                    className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("trackedIncomeKeywordsHint")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`income-exclude-${source.id}`}>
+                    {t("trackedIncomeExcludeLabel")}
+                  </Label>
+                  <textarea
+                    id={`income-exclude-${source.id}`}
+                    value={source.excludeKeywordsText}
+                    onChange={(event) =>
+                      updateIncomeSource(source.id, {
+                        excludeKeywordsText: event.target.value,
+                      })
+                    }
+                    placeholder={t("trackedIncomeExcludePlaceholder")}
+                    disabled={isDemo || isPending}
+                    rows={2}
+                    className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("trackedIncomeExcludeHint")}
+                  </p>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4 cursor-pointer"
+                    checked={source.requireRoundAmount}
+                    disabled={isDemo || isPending}
+                    onChange={(event) =>
+                      updateIncomeSource(source.id, {
+                        requireRoundAmount: event.target.checked,
+                      })
+                    }
+                  />
+                  <span>{t("trackedIncomeRoundLabel")}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          className="cursor-pointer"
+          disabled={isDemo || isPending}
+          onClick={() =>
+            setIncomeSources((prev) => [...prev, newIncomeSource()])
+          }
+        >
+          <Plus className="size-4" aria-hidden />
+          {t("trackedIncomeAdd")}
+        </Button>
       </div>
 
       <div className="space-y-3 border-t border-border pt-4">

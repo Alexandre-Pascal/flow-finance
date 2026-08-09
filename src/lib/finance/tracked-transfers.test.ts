@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isPayrollTransfer,
+  isTrackedIncomeTransfer,
   isTrackedOutgoingTransfer,
   isTrackedPersonTransfer,
 } from "./tracked-transfers";
@@ -90,6 +91,82 @@ describe("isTrackedPersonTransfer", () => {
         "PASCAL SOPHIE",
       ),
     ).toBe(true);
+  });
+});
+
+describe("isTrackedIncomeTransfer", () => {
+  const sophie = {
+    keywords: ["PASCAL SOPHIE", "MME PASCAL SOPHIE"],
+    excludeKeywords: ["ALUTEC"],
+    requireRoundAmount: true,
+  };
+
+  it("matches round incoming transfers from mother labels", () => {
+    expect(
+      isTrackedIncomeTransfer(
+        tx({
+          amount: 500,
+          description: "VIREMENT EN VOTRE FAVEUR DE MME PASCAL SOPHIE",
+        }),
+        sophie,
+      ),
+    ).toBe(true);
+    expect(
+      isTrackedIncomeTransfer(
+        tx({
+          amount: 200,
+          description:
+            "VIREMENT EN VOTRE FAVEUR VIR INST de PASCAL SOPHIE de PASCAL SOPHIE",
+        }),
+        sophie,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects ALUTEC earmarked transfers and cancellations", () => {
+    expect(
+      isTrackedIncomeTransfer(
+        tx({
+          amount: 5000,
+          description:
+            "VIREMENT EN VOTRE FAVEUR ALUTEC MME PASCAL SOPHIE ALUTEC",
+        }),
+        sophie,
+      ),
+    ).toBe(false);
+    expect(
+      isTrackedIncomeTransfer(
+        tx({
+          amount: 5000,
+          description: "ANNUL. OPE. DEBITRICES VIR INST vers Sophie PASCAL",
+        }),
+        sophie,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects non-round amounts when required", () => {
+    expect(
+      isTrackedIncomeTransfer(
+        tx({
+          amount: 123.45,
+          description: "VIREMENT EN VOTRE FAVEUR DE MME PASCAL SOPHIE",
+        }),
+        sophie,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not treat mother transfers as payroll", () => {
+    expect(
+      isPayrollTransfer(
+        tx({
+          amount: 500,
+          description: "VIREMENT EN VOTRE FAVEUR DE MME PASCAL SOPHIE",
+        }),
+        "CYFYN",
+      ),
+    ).toBe(false);
   });
 });
 

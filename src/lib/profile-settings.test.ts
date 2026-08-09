@@ -21,7 +21,17 @@ describe("normalizeProfileSettings", () => {
     expect(settings.modules.payroll).toBe(true);
     expect(settings.payroll.keyword).toBe("CYFYN");
     expect(settings.payroll.budgetShiftMonths).toBe(0);
+    expect(settings.trackedIncomeSources).toEqual([
+      {
+        id: "sophie-pascal-sophie-0",
+        label: "Sophie",
+        keywords: ["PASCAL SOPHIE"],
+        excludeKeywords: [],
+        requireRoundAmount: true,
+      },
+    ]);
     expect(settings.trackedPerson.label).toBe("Sophie");
+    expect(settings.trackedPerson.keyword).toBe("PASCAL SOPHIE");
   });
 
   it("normalizes multiple outgoing recipients in parallel", () => {
@@ -42,6 +52,30 @@ describe("normalizeProfileSettings", () => {
         keyword: "PASCAL ALEXANDRE",
       },
       { id: "julie", label: "Julie", keyword: "PASCAL JULIE" },
+    ]);
+  });
+
+  it("normalizes multiple income sources with keywords and exclusions", () => {
+    const settings = normalizeProfileSettings({
+      modules: { trackedPerson: true },
+      trackedIncomeSources: [
+        {
+          label: " Sophie ",
+          keywords: ["PASCAL SOPHIE", "MME PASCAL SOPHIE"],
+          excludeKeywords: [" ALUTEC "],
+          requireRoundAmount: true,
+        },
+      ],
+    });
+
+    expect(settings.trackedIncomeSources).toEqual([
+      {
+        id: expect.stringMatching(/^sophie-/),
+        label: "Sophie",
+        keywords: ["PASCAL SOPHIE", "MME PASCAL SOPHIE"],
+        excludeKeywords: ["ALUTEC"],
+        requireRoundAmount: true,
+      },
     ]);
   });
 });

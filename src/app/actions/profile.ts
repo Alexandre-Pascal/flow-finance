@@ -50,6 +50,16 @@ function parseSettingsFromFormData(formData: FormData): ProfileSettings {
     }
   }
 
+  let trackedIncomeSources: unknown = [];
+  const rawSources = String(formData.get("tracked_income_sources") ?? "").trim();
+  if (rawSources) {
+    try {
+      trackedIncomeSources = JSON.parse(rawSources);
+    } catch {
+      trackedIncomeSources = [];
+    }
+  }
+
   return normalizeProfileSettings({
     modules: {
       savings: formData.get("module_savings") === "1",
@@ -62,10 +72,7 @@ function parseSettingsFromFormData(formData: FormData): ProfileSettings {
       keyword: String(formData.get("payroll_keyword") ?? ""),
       budgetShiftMonths: String(formData.get("payroll_shift") ?? "1") === "0" ? 0 : 1,
     },
-    trackedPerson: {
-      keyword: String(formData.get("tracked_person_keyword") ?? ""),
-      label: String(formData.get("tracked_person_label") ?? ""),
-    },
+    trackedIncomeSources,
     trackedOutgoingPeople,
   });
 }
