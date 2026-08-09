@@ -56,6 +56,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ContributionFlowPanel } from "@/components/features/contribution-flow-panel";
 import { Link, useRouter } from "@/i18n/navigation";
 import type { CryptoPortfolioSummary } from "@/lib/crypto/valuation";
 import { type MonthlyPeriod } from "@/lib/finance/aggregates";
@@ -292,6 +293,13 @@ export function SavingsAnalytics({
           hint={t("kpiNetWealthHint")}
         />
       </div>
+
+      <ContributionFlowPanel
+        transactions={transactions}
+        savingsAccounts={overview.vehicles.map((vehicle) => vehicle.account)}
+        locale={locale}
+        includePea={pea.schemaReady}
+      />
 
       {hasAnyChart ? (
         <div className="flex justify-end">

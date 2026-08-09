@@ -372,7 +372,20 @@
     "movementCash": "Dépôt espèces",
     "movementCheck": "Dépôt chèque",
     "movementInterest": "Intérêts",
-    "movementTransfer": "Virement"
+    "movementTransfer": "Virement",
+    "contributionTitle": "Ce que j'épargne",
+    "contributionSubtitle": "Versements nets vers vos livrets et votre PEA, mois par mois.",
+    "contributionEmpty": "Aucun versement détecté sur la période. Liez des virements à vos livrets ou configurez un plan PEA.",
+    "contributionThisMonth": "Ce mois-ci",
+    "contributionVsPreviousUp": "+{percent} % vs mois précédent",
+    "contributionVsPreviousDown": "−{percent} % vs mois précédent",
+    "contributionVsPreviousNone": "Pas de référence le mois précédent",
+    "contributionAverage": "Moyenne mensuelle",
+    "contributionAverageHint": "Sur les mois avec activité",
+    "contributionPeriodTotal": "Total période",
+    "contributionPeriodHint": "Somme des versements nets",
+    "contributionNet": "Net",
+    "contributionByEnvelope": "Par enveloppe"
   },
   "categories": {
     "title": "Catégories de dépenses",

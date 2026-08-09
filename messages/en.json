@@ -372,7 +372,20 @@
     "movementInterest": "Interest",
     "movementTransfer": "Transfer",
     "totalBalanceBreakdownPea": "PEA",
-    "kpiPeaManage": "Manage →"
+    "kpiPeaManage": "Manage →",
+    "contributionTitle": "What I save",
+    "contributionSubtitle": "Net transfers into your savings accounts and PEA, month by month.",
+    "contributionEmpty": "No transfers detected in this period. Link bank transfers to your savings accounts or set up a PEA plan.",
+    "contributionThisMonth": "This month",
+    "contributionVsPreviousUp": "+{percent}% vs previous month",
+    "contributionVsPreviousDown": "−{percent}% vs previous month",
+    "contributionVsPreviousNone": "No previous-month baseline",
+    "contributionAverage": "Monthly average",
+    "contributionAverageHint": "Across months with activity",
+    "contributionPeriodTotal": "Period total",
+    "contributionPeriodHint": "Sum of net contributions",
+    "contributionNet": "Net",
+    "contributionByEnvelope": "By envelope"
   },
   "categories": {
     "title": "Expense categories",
