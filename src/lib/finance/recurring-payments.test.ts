@@ -15,6 +15,7 @@ function rule(
   return {
     user_id: "user-1",
     amount_tolerance: 0.15,
+    amount_flexible: false,
     description_pattern: partial.name.toUpperCase(),
     billing_day: 5,
     cadence: "monthly",

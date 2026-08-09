@@ -59,6 +59,7 @@ function isSchemaError(message: string, code?: string): boolean {
     normalized.includes("recurring_payment_manual") ||
     normalized.includes("merged_into_id") ||
     normalized.includes("active_to") ||
+    normalized.includes("amount_flexible") ||
     normalized.includes("does not exist")
   );
 }
@@ -106,22 +107,37 @@ export async function createRecurringPaymentAction(formData: FormData) {
   }
 
   const name = String(formData.get("name") ?? "").trim();
-  const amount = Number(formData.get("amount"));
+  const amountRaw = String(formData.get("amount") ?? "").trim();
+  const amountParsed = amountRaw === "" ? Number.NaN : Number(amountRaw);
   const billingDayRaw = String(formData.get("billing_day") ?? "").trim();
   const billingDay = billingDayRaw ? Number(billingDayRaw) : null;
   const billingMonthRaw = String(formData.get("billing_month") ?? "").trim();
   const billingMonth = billingMonthRaw ? Number(billingMonthRaw) : null;
   const cadence = String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
-  const descriptionPatternRaw =
-    String(formData.get("description_pattern") ?? "PAYPAL").trim() || "PAYPAL";
+  const descriptionPatternRaw = String(formData.get("description_pattern") ?? "").trim();
   const descriptionPattern = isPayPalPattern(descriptionPatternRaw)
     ? descriptionPatternRaw
     : generalRecurringMatchPattern(descriptionPatternRaw);
   const amountTolerance = isPayPalPattern(descriptionPatternRaw)
     ? 0.05
     : GENERAL_RECURRING_AMOUNT_TOLERANCE;
+  const amountFlexibleRaw = String(formData.get("amount_flexible") ?? "").trim();
+  const amountFlexible =
+    !isPayPalPattern(descriptionPatternRaw) &&
+    (amountFlexibleRaw === "1" || amountFlexibleRaw === "true" || amountFlexibleRaw === "on");
+  const amount =
+    amountFlexible && !Number.isFinite(amountParsed) ? 0 : amountParsed;
 
-  if (!name || !Number.isFinite(amount) || amount <= 0) {
+  if (
+    !name ||
+    !Number.isFinite(amount) ||
+    amount < 0 ||
+    (!amountFlexible && amount <= 0)
+  ) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  if (!descriptionPattern || descriptionPattern.length < 2) {
     return { error: "invalid" as const satisfies RecurringPaymentActionError };
   }
 
@@ -161,6 +177,7 @@ export async function createRecurringPaymentAction(formData: FormData) {
             billingMonth: cadence === "yearly" ? billingMonth : null,
             cadence,
             descriptionPattern,
+            amountFlexible,
           });
       if (!stillActive) {
         return { error: "inactive" as const satisfies RecurringPaymentActionError };
@@ -176,6 +193,7 @@ export async function createRecurringPaymentAction(formData: FormData) {
     name,
     amount,
     amount_tolerance: amountTolerance,
+    amount_flexible: amountFlexible,
     billing_day: billingDay,
     billing_month: cadence === "yearly" ? billingMonth : null,
     cadence,
@@ -380,6 +398,11 @@ export async function createSubscriptionFromTransactionAction(formData: FormData
   const name = String(formData.get("name") ?? "").trim();
   const cadence =
     String(formData.get("cadence") ?? "monthly") === "yearly" ? "yearly" : "monthly";
+  const amountFlexibleRaw = String(formData.get("amount_flexible") ?? "").trim();
+  const amountFlexibleRequested =
+    amountFlexibleRaw === "1" ||
+    amountFlexibleRaw === "true" ||
+    amountFlexibleRaw === "on";
 
   if (!transactionId || (!attachToId && !name)) {
     return { error: "invalid" as const satisfies RecurringPaymentActionError };
@@ -415,6 +438,7 @@ export async function createSubscriptionFromTransactionAction(formData: FormData
   }
 
   const payPal = isPayPalPattern(tx.description);
+  const amountFlexible = !payPal && amountFlexibleRequested;
   const descriptionPattern = payPal
     ? DEFAULT_PAYPAL_PATTERN
     : generalRecurringMatchPattern(recurringGroupKey(tx.description));
@@ -440,6 +464,7 @@ export async function createSubscriptionFromTransactionAction(formData: FormData
     name: resolvedName,
     amount,
     amount_tolerance: payPal ? 0.05 : GENERAL_RECURRING_AMOUNT_TOLERANCE,
+    amount_flexible: amountFlexible,
     billing_day: getBookingDay(tx.booking_date),
     billing_month: cadence === "yearly" ? getBookingMonth(tx.booking_date) : null,
     cadence,
@@ -649,6 +674,11 @@ function parseSuggestionFromFormData(formData: FormData): RecurringClusterSugges
   const descriptionPreview = String(formData.get("description_preview") ?? descriptionPattern).trim();
   const lastDate = String(formData.get("last_date") ?? "").trim();
   const count = Number(formData.get("count"));
+  const amountFlexibleRaw = String(formData.get("amount_flexible") ?? "").trim();
+  const amountFlexible =
+    amountFlexibleRaw === "1" ||
+    amountFlexibleRaw === "true" ||
+    amountFlexibleRaw === "on";
 
   if (
     !Number.isFinite(amount) ||
@@ -681,6 +711,7 @@ function parseSuggestionFromFormData(formData: FormData): RecurringClusterSugges
     descriptionPattern,
     descriptionPreview: descriptionPreview || descriptionPattern,
     source,
+    amountFlexible,
   };
 }
 

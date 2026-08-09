@@ -49,21 +49,27 @@ function suggestionLabel(
   }
 
   if (suggestion.cadence === "yearly") {
-    return t("clusterLabelYearly", {
-      amount: formatCurrency(-suggestion.amount, locale),
-      preview: suggestion.descriptionPreview,
-      month: suggestion.billingMonth ?? 1,
-      day: suggestion.billingDay,
-      count: suggestion.count,
-    });
+    return t(
+      suggestion.amountFlexible ? "clusterLabelYearlyFlexible" : "clusterLabelYearly",
+      {
+        amount: formatCurrency(-suggestion.amount, locale),
+        preview: suggestion.descriptionPreview,
+        month: suggestion.billingMonth ?? 1,
+        day: suggestion.billingDay,
+        count: suggestion.count,
+      },
+    );
   }
 
-  return t("clusterLabelMonthly", {
-    amount: formatCurrency(-suggestion.amount, locale),
-    preview: suggestion.descriptionPreview,
-    day: suggestion.billingDay,
-    count: suggestion.count,
-  });
+  return t(
+    suggestion.amountFlexible ? "clusterLabelMonthlyFlexible" : "clusterLabelMonthly",
+    {
+      amount: formatCurrency(-suggestion.amount, locale),
+      preview: suggestion.descriptionPreview,
+      day: suggestion.billingDay,
+      count: suggestion.count,
+    },
+  );
 }
 
 function suggestionSummary(
@@ -79,19 +85,29 @@ function suggestionSummary(
   }
 
   if (suggestion.cadence === "yearly") {
-    return t("unidentifiedClusterYearly", {
-      amount: formatCurrency(-suggestion.amount, locale),
-      preview: suggestion.descriptionPreview,
-      month: suggestion.billingMonth ?? 1,
-      day: suggestion.billingDay,
-    });
+    return t(
+      suggestion.amountFlexible
+        ? "unidentifiedClusterYearlyFlexible"
+        : "unidentifiedClusterYearly",
+      {
+        amount: formatCurrency(-suggestion.amount, locale),
+        preview: suggestion.descriptionPreview,
+        month: suggestion.billingMonth ?? 1,
+        day: suggestion.billingDay,
+      },
+    );
   }
 
-  return t("unidentifiedClusterMonthly", {
-    amount: formatCurrency(-suggestion.amount, locale),
-    preview: suggestion.descriptionPreview,
-    day: suggestion.billingDay,
-  });
+  return t(
+    suggestion.amountFlexible
+      ? "unidentifiedClusterMonthlyFlexible"
+      : "unidentifiedClusterMonthly",
+    {
+      amount: formatCurrency(-suggestion.amount, locale),
+      preview: suggestion.descriptionPreview,
+      day: suggestion.billingDay,
+    },
+  );
 }
 
 function appendSuggestionFields(formData: FormData, suggestion: RecurringClusterSuggestion) {
@@ -104,6 +120,7 @@ function appendSuggestionFields(formData: FormData, suggestion: RecurringCluster
   formData.set("source", suggestion.source);
   formData.set("last_date", suggestion.lastDate);
   formData.set("count", String(suggestion.count));
+  formData.set("amount_flexible", suggestion.amountFlexible ? "1" : "0");
 }
 
 export function SubscriptionSuggestionSection({

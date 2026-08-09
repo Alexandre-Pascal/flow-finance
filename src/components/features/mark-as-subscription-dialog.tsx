@@ -82,6 +82,7 @@ export function MarkAsSubscriptionDialog({
   const [cadence, setCadence] = useState<RecurringCadence>("monthly");
   const [target, setTarget] = useState<string>(CREATE_MODE);
   const [name, setName] = useState("");
+  const [amountFlexible, setAmountFlexible] = useState(false);
 
   const canonicalSubscriptions = useMemo(
     () => listCanonicalRules(subscriptions),
@@ -108,6 +109,7 @@ export function MarkAsSubscriptionDialog({
       name: "",
       amount: Math.round(Math.abs(tx.amount) * 100) / 100,
       amount_tolerance: isPayPal ? 0.05 : GENERAL_RECURRING_AMOUNT_TOLERANCE,
+      amount_flexible: !isPayPal && amountFlexible,
       description_pattern: pattern,
       billing_day: getBookingDay(tx.booking_date),
       cadence,
@@ -127,13 +129,22 @@ export function MarkAsSubscriptionDialog({
       )
       .map((candidateTx) => candidateTx.booking_date)
       .sort();
-  }, [cadence, isPayPal, pattern, transactions, tx.amount, tx.booking_date]);
+  }, [
+    amountFlexible,
+    cadence,
+    isPayPal,
+    pattern,
+    transactions,
+    tx.amount,
+    tx.booking_date,
+  ]);
 
   function handleOpenChange(next: boolean) {
     if (next) {
       setName(toDisplayName(pattern));
       setTarget(CREATE_MODE);
       setCadence("monthly");
+      setAmountFlexible(false);
       setError(null);
     }
     setOpen(next);
@@ -146,6 +157,9 @@ export function MarkAsSubscriptionDialog({
     const formData = new FormData();
     formData.set("transactionId", tx.id);
     formData.set("cadence", cadence);
+    if (amountFlexible && !isPayPal) {
+      formData.set("amount_flexible", "1");
+    }
 
     if (target === CREATE_MODE) {
       formData.set("name", name.trim());
@@ -293,6 +307,23 @@ export function MarkAsSubscriptionDialog({
               ))}
             </div>
           </div>
+
+          {!isPayPal && isCreating ? (
+            <div className="space-y-1">
+              <label className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer"
+                  checked={amountFlexible}
+                  onChange={(event) => setAmountFlexible(event.target.checked)}
+                />
+                <span>{t("subscriptionAmountFlexible")}</span>
+              </label>
+              <p className="text-xs text-muted-foreground">
+                {t("subscriptionAmountFlexibleHint")}
+              </p>
+            </div>
+          ) : null}
 
           {error ? (
             <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">

@@ -32,6 +32,8 @@ export interface RecurringClusterSuggestion {
   descriptionPattern: string;
   descriptionPreview: string;
   source: "paypal" | "general";
+  /** Montants divergents mois après mois : matching par libellé uniquement. */
+  amountFlexible: boolean;
 }
 
 export type PayPalClusterSuggestion = RecurringClusterSuggestion;
@@ -81,6 +83,7 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
     name: String(row.name),
     amount: Number(row.amount),
     amount_tolerance: Number(row.amount_tolerance),
+    amount_flexible: Boolean(row.amount_flexible),
     description_pattern: String(row.description_pattern),
     billing_day:
       row.billing_day === null || row.billing_day === undefined
@@ -394,12 +397,17 @@ export function matchesRecurringPayment(
     return false;
   }
 
-  const amountTolerance = payPalRule
-    ? rule.amount_tolerance
-    : Math.max(rule.amount_tolerance, GENERAL_RECURRING_AMOUNT_TOLERANCE);
+  // Charges variables (EDF, Free Mobile…) : libellé seul, montant indicatif.
+  if (!payPalRule && rule.amount_flexible) {
+    // skip amount check
+  } else {
+    const amountTolerance = payPalRule
+      ? rule.amount_tolerance
+      : Math.max(rule.amount_tolerance, GENERAL_RECURRING_AMOUNT_TOLERANCE);
 
-  if (Math.abs(absAmount - rule.amount) > amountTolerance) {
-    return false;
+    if (Math.abs(absAmount - rule.amount) > amountTolerance) {
+      return false;
+    }
   }
 
   const cadence = rule.cadence ?? "monthly";
@@ -531,6 +539,7 @@ export function listUnknownPayPalAmounts(
         descriptionPattern: DEFAULT_PAYPAL_PATTERN,
         descriptionPreview: "PayPal",
         source: "paypal",
+        amountFlexible: false,
       });
     }
   }
@@ -547,7 +556,7 @@ export function clusterDismissalKey(suggestion: RecurringClusterSuggestion): str
   return [
     suggestion.source,
     suggestion.cadence,
-    suggestion.amount.toFixed(2),
+    suggestion.amountFlexible ? "flex" : suggestion.amount.toFixed(2),
     String(suggestion.billingDay),
     suggestion.billingMonth === null ? "x" : String(suggestion.billingMonth),
     suggestion.descriptionPattern.trim().toUpperCase(),

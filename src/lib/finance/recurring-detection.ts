@@ -176,12 +176,16 @@ function buildSuggestionFromGroup(
   groupKey: string,
   txs: RecurringLaneTx[],
   cadence: RecurringCadence,
+  amountFlexible: boolean,
 ): RecurringClusterSuggestion {
   const sorted = [...txs].sort((a, b) =>
     a.booking_date.localeCompare(b.booking_date),
   );
   const latest = sorted[sorted.length - 1];
-  const amount = roundDebitAmount(latest.amount);
+  const amounts = sorted.map((tx) => roundDebitAmount(tx.amount));
+  const amount = amountFlexible
+    ? medianOf(amounts)
+    : roundDebitAmount(latest.amount);
   const billingDay = medianOf(
     sorted.map((tx) => getBookingDay(tx.booking_date)),
   );
@@ -201,6 +205,7 @@ function buildSuggestionFromGroup(
     descriptionPattern: generalRecurringMatchPattern(groupKey),
     descriptionPreview,
     source: "general",
+    amountFlexible,
   };
 }
 
@@ -220,6 +225,10 @@ function isGroupCoveredByExistingRule(
       return false;
     }
 
+    if (rule.amount_flexible) {
+      return true;
+    }
+
     const tolerance = Math.max(
       rule.amount_tolerance,
       GENERAL_RECURRING_AMOUNT_TOLERANCE,
@@ -231,6 +240,7 @@ function isGroupCoveredByExistingRule(
 function detectMonthlySuggestion(
   groupKey: string,
   txs: RecurringLaneTx[],
+  amountFlexible: boolean,
   referenceDate = new Date(),
 ): RecurringClusterSuggestion | null {
   const monthlyTxs = dedupeOnePerMonth(txs);
@@ -249,12 +259,18 @@ function detectMonthlySuggestion(
     return null;
   }
 
-  return buildSuggestionFromGroup(groupKey, monthlyTxs, "monthly");
+  return buildSuggestionFromGroup(
+    groupKey,
+    monthlyTxs,
+    "monthly",
+    amountFlexible,
+  );
 }
 
 function detectYearlySuggestion(
   groupKey: string,
   txs: RecurringLaneTx[],
+  amountFlexible: boolean,
   referenceDate = new Date(),
 ): RecurringClusterSuggestion | null {
   const yearlyTxs = dedupeOnePerYear(txs);
@@ -273,7 +289,12 @@ function detectYearlySuggestion(
     return null;
   }
 
-  return buildSuggestionFromGroup(groupKey, yearlyTxs, "yearly");
+  return buildSuggestionFromGroup(
+    groupKey,
+    yearlyTxs,
+    "yearly",
+    amountFlexible,
+  );
 }
 
 export function listUnknownGeneralRecurringClusters(
@@ -298,24 +319,32 @@ export function listUnknownGeneralRecurringClusters(
   const suggestions: RecurringClusterSuggestion[] = [];
 
   for (const [groupKey, groupTxs] of groups.entries()) {
-    if (!hasConsistentAmount(groupTxs)) {
-      continue;
-    }
+    const amountFlexible = !hasConsistentAmount(groupTxs);
+    const representativeAmount = amountFlexible
+      ? medianOf(groupTxs.map((tx) => roundDebitAmount(tx.amount)))
+      : roundDebitAmount(groupTxs[groupTxs.length - 1].amount);
 
-    const representativeAmount = roundDebitAmount(
-      groupTxs[groupTxs.length - 1].amount,
-    );
     if (isGroupCoveredByExistingRule(groupKey, representativeAmount, rules)) {
       continue;
     }
 
-    const monthly = detectMonthlySuggestion(groupKey, groupTxs, referenceDate);
+    const monthly = detectMonthlySuggestion(
+      groupKey,
+      groupTxs,
+      amountFlexible,
+      referenceDate,
+    );
     if (monthly) {
       suggestions.push(monthly);
       continue;
     }
 
-    const yearly = detectYearlySuggestion(groupKey, groupTxs, referenceDate);
+    const yearly = detectYearlySuggestion(
+      groupKey,
+      groupTxs,
+      amountFlexible,
+      referenceDate,
+    );
     if (yearly) {
       suggestions.push(yearly);
     }
@@ -332,7 +361,12 @@ export function isGeneralRecurringClusterStillActive(
   rules: RecurringPayment[],
   suggestion: Pick<
     RecurringClusterSuggestion,
-    "amount" | "billingDay" | "billingMonth" | "cadence" | "descriptionPattern"
+    | "amount"
+    | "billingDay"
+    | "billingMonth"
+    | "cadence"
+    | "descriptionPattern"
+    | "amountFlexible"
   >,
   referenceDate = new Date(),
 ): boolean {
@@ -343,7 +377,8 @@ export function isGeneralRecurringClusterStillActive(
   );
   return suggestions.some(
     (candidate) =>
-      candidate.amount === suggestion.amount &&
+      candidate.amountFlexible === suggestion.amountFlexible &&
+      (suggestion.amountFlexible || candidate.amount === suggestion.amount) &&
       candidate.cadence === suggestion.cadence &&
       candidate.billingDay === suggestion.billingDay &&
       candidate.billingMonth === suggestion.billingMonth &&

@@ -5,12 +5,13 @@
 
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 import {
   archiveRecurringPaymentAction,
+  createRecurringPaymentAction,
   deleteRecurringPaymentAction,
   mergeRecurringPaymentsAction,
   updateRecurringPaymentCadenceAction,
@@ -27,6 +28,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   groupRulesByCanonical,
@@ -53,12 +56,22 @@ function subscriptionMeta(
 
   if (subscription.cadence === "yearly") {
     return subscription.billing_month && subscription.billing_day
-      ? t("subscriptionMetaYearly", {
-          amount,
-          month: subscription.billing_month,
-          day: subscription.billing_day,
-        })
-      : t("subscriptionMetaYearlyShort", { amount });
+      ? t(
+          subscription.amount_flexible
+            ? "subscriptionMetaYearlyFlexible"
+            : "subscriptionMetaYearly",
+          {
+            amount,
+            month: subscription.billing_month,
+            day: subscription.billing_day,
+          },
+        )
+      : t(
+          subscription.amount_flexible
+            ? "subscriptionMetaYearlyShortFlexible"
+            : "subscriptionMetaYearlyShort",
+          { amount },
+        );
   }
 
   if (subscription.description_pattern.toUpperCase().includes("PAYPAL")) {
@@ -68,15 +81,25 @@ function subscriptionMeta(
   }
 
   return subscription.billing_day
-    ? t("subscriptionMetaGeneralWithDay", {
-        amount,
-        day: subscription.billing_day,
-        pattern: subscription.description_pattern,
-      })
-    : t("subscriptionMetaGeneral", {
-        amount,
-        pattern: subscription.description_pattern,
-      });
+    ? t(
+        subscription.amount_flexible
+          ? "subscriptionMetaGeneralWithDayFlexible"
+          : "subscriptionMetaGeneralWithDay",
+        {
+          amount,
+          day: subscription.billing_day,
+          pattern: subscription.description_pattern,
+        },
+      )
+    : t(
+        subscription.amount_flexible
+          ? "subscriptionMetaGeneralFlexible"
+          : "subscriptionMetaGeneral",
+        {
+          amount,
+          pattern: subscription.description_pattern,
+        },
+      );
 }
 
 interface SubscriptionRowProps {
@@ -222,6 +245,11 @@ export function SubscriptionsManager({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [manualName, setManualName] = useState("");
+  const [manualPattern, setManualPattern] = useState("");
+  const [manualAmount, setManualAmount] = useState("");
+  const [manualCadence, setManualCadence] = useState<RecurringCadence>("monthly");
+  const [manualFlexible, setManualFlexible] = useState(true);
 
   const groups = useMemo(
     () => groupRulesByCanonical(subscriptions),
@@ -285,6 +313,51 @@ export function SubscriptionsManager({
     runAction(deleteRecurringPaymentAction, formData);
   }
 
+  function handleManualCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    const formData = new FormData();
+    formData.set("name", manualName.trim());
+    formData.set("description_pattern", manualPattern.trim());
+    formData.set("cadence", manualCadence);
+    if (manualAmount.trim()) {
+      formData.set("amount", manualAmount.trim());
+    }
+    if (manualFlexible) {
+      formData.set("amount_flexible", "1");
+    }
+
+    startTransition(async () => {
+      const result = await createRecurringPaymentAction(formData);
+      if (result.error === "demo") {
+        setError(t("demoError"));
+        return;
+      }
+      if (result.error === "schema") {
+        setError(t("schemaError"));
+        return;
+      }
+      if (result.error === "inactive") {
+        setError(t("inactiveError"));
+        return;
+      }
+      if (result.error) {
+        setError(t("saveError"));
+        return;
+      }
+      if ("warning" in result && result.warning === "rematch") {
+        setError(t("rematchWarning"));
+      }
+      setManualName("");
+      setManualPattern("");
+      setManualAmount("");
+      setManualCadence("monthly");
+      setManualFlexible(true);
+      router.refresh();
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -308,6 +381,109 @@ export function SubscriptionsManager({
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </p>
+        ) : null}
+
+        {!isDemo && schemaReady ? (
+          <form
+            onSubmit={handleManualCreate}
+            className="space-y-4 rounded-lg border border-border p-4"
+          >
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">{t("addTitle")}</p>
+              <p className="text-sm text-muted-foreground">{t("manualDescription")}</p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="manual-charge-name">{t("nameLabel")}</Label>
+                <Input
+                  id="manual-charge-name"
+                  value={manualName}
+                  onChange={(event) => setManualName(event.target.value)}
+                  placeholder={t("namePlaceholder")}
+                  required
+                  disabled={isPending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manual-charge-pattern">{t("patternLabel")}</Label>
+                <Input
+                  id="manual-charge-pattern"
+                  value={manualPattern}
+                  onChange={(event) => setManualPattern(event.target.value)}
+                  placeholder={t("patternPlaceholder")}
+                  required
+                  disabled={isPending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manual-charge-amount">{t("amountLabel")}</Label>
+                <Input
+                  id="manual-charge-amount"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={manualAmount}
+                  onChange={(event) => setManualAmount(event.target.value)}
+                  placeholder={t("amountPlaceholder")}
+                  required={!manualFlexible}
+                  disabled={isPending}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("cadenceLabel")}</Label>
+                <div className="flex w-fit rounded-md border border-border p-0.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={manualCadence === "monthly" ? "default" : "ghost"}
+                    className="h-7 cursor-pointer px-2 text-xs"
+                    disabled={isPending}
+                    onClick={() => setManualCadence("monthly")}
+                  >
+                    {t("cadenceMonthly")}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={manualCadence === "yearly" ? "default" : "ghost"}
+                    className="h-7 cursor-pointer px-2 text-xs"
+                    disabled={isPending}
+                    onClick={() => setManualCadence("yearly")}
+                  >
+                    {t("cadenceYearly")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 cursor-pointer"
+                checked={manualFlexible}
+                disabled={isPending}
+                onChange={(event) => setManualFlexible(event.target.checked)}
+              />
+              <span>{t("amountFlexibleLabel")}</span>
+            </label>
+            <p className="text-xs text-muted-foreground">{t("amountFlexibleHint")}</p>
+
+            <Button
+              type="submit"
+              className="cursor-pointer"
+              disabled={
+                isPending ||
+                !manualName.trim() ||
+                !manualPattern.trim() ||
+                (!manualFlexible && !manualAmount.trim())
+              }
+            >
+              <Plus className="size-4" aria-hidden />
+              {t("addButton")}
+            </Button>
+          </form>
         ) : null}
 
         <div className="space-y-3">

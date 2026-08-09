@@ -131,6 +131,11 @@ export interface RecurringPayment {
   name: string;
   amount: number;
   amount_tolerance: number;
+  /**
+   * Si true, le matching ignore le montant (charges variables : EDF, Free Mobile…).
+   * Le champ `amount` reste indicatif (dernier / médian).
+   */
+  amount_flexible: boolean;
   description_pattern: string;
   billing_day: number | null;
   cadence: RecurringCadence;
