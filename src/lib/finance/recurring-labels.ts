@@ -5,6 +5,10 @@
 
 export const GENERAL_RECURRING_AMOUNT_TOLERANCE = 0.15;
 
+/** Réf. contrat / facture : I0000977895043, CONTRAT000…, AX000…, etc. */
+const ALPHANUMERIC_REF =
+  /\b(?:[A-Z]{1,12})?\d{6,}[A-Z0-9]*\b/gi;
+
 function normalizeMerchantFragment(fragment: string): string {
   return fragment
     .replace(/\bFR\d{2}ZZZ[A-Z0-9]+\b/gi, " ")
@@ -12,6 +16,7 @@ function normalizeMerchantFragment(fragment: string): string {
     .replace(/\bF\d{10,}\b/gi, " ")
     .replace(/\b\d{1,2}[/.-]\d{1,2}([/.-]\d{2,4})?\b/g, " ")
     .replace(/\b(20)?\d{6}\b/g, " ")
+    .replace(ALPHANUMERIC_REF, " ")
     .replace(/\b\d{4,}\b/g, " ")
     .replace(/\b\d{1,2}\s*$/g, " ")
     .replace(/[^A-Z0-9\s]/g, " ")
@@ -38,22 +43,27 @@ export function recurringGroupKey(description: string): string {
   return normalizeMerchantFragment(upper);
 }
 
+function isReferenceToken(token: string): boolean {
+  if (/^FR\d{2}ZZZ/.test(token) || token === "EMAC") {
+    return true;
+  }
+  if (/^F?\d{5,}$/.test(token) || /^\d{1,2}$/.test(token)) {
+    return true;
+  }
+  // I0000977895043, CONTRAT000…, AX000… : au moins 6 chiffres dans le token
+  return /(?:[A-Z]{1,12})?\d{6,}[A-Z0-9]*/.test(token) && /\d{6,}/.test(token);
+}
+
 /** Motif court enregistré en base et utilisé pour le matching. */
 export function generalRecurringMatchPattern(groupKey: string): string {
   const tokens = groupKey.trim().toUpperCase().split(/\s+/).filter(Boolean);
   const stable: string[] = [];
 
   for (const token of tokens) {
-    if (/^FR\d{2}ZZZ/.test(token)) {
+    if (/^FR\d{2}ZZZ/.test(token) || token === "EMAC") {
       break;
     }
-    if (token === "EMAC") {
-      break;
-    }
-    if (/^F?\d{5,}$/.test(token)) {
-      continue;
-    }
-    if (/^\d{1,2}$/.test(token)) {
+    if (isReferenceToken(token)) {
       continue;
     }
     if (stable.length > 0 && stable.includes(token)) {
