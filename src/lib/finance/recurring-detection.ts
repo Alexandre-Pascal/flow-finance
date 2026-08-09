@@ -319,10 +319,15 @@ export function listUnknownGeneralRecurringClusters(
   const suggestions: RecurringClusterSuggestion[] = [];
 
   for (const [groupKey, groupTxs] of groups.entries()) {
-    const amountFlexible = !hasConsistentAmount(groupTxs);
-    const representativeAmount = amountFlexible
-      ? medianOf(groupTxs.map((tx) => roundDebitAmount(tx.amount)))
-      : roundDebitAmount(groupTxs[groupTxs.length - 1].amount);
+    // Suggestions auto : montants stables uniquement.
+    // Les charges variables (EDF, Free Mobile…) se créent à la main.
+    if (!hasConsistentAmount(groupTxs)) {
+      continue;
+    }
+
+    const representativeAmount = roundDebitAmount(
+      groupTxs[groupTxs.length - 1].amount,
+    );
 
     if (isGroupCoveredByExistingRule(groupKey, representativeAmount, rules)) {
       continue;
@@ -331,7 +336,7 @@ export function listUnknownGeneralRecurringClusters(
     const monthly = detectMonthlySuggestion(
       groupKey,
       groupTxs,
-      amountFlexible,
+      false,
       referenceDate,
     );
     if (monthly) {
@@ -342,7 +347,7 @@ export function listUnknownGeneralRecurringClusters(
     const yearly = detectYearlySuggestion(
       groupKey,
       groupTxs,
-      amountFlexible,
+      false,
       referenceDate,
     );
     if (yearly) {

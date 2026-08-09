@@ -95,29 +95,24 @@ const EDF_TXS = [
 describe("listUnknownGeneralRecurringClusters with variable amounts", () => {
   const referenceDate = new Date("2026-08-09T12:00:00Z");
 
-  it("suggests Free Mobile despite invoice numbers and varying amounts", () => {
+  it("does not auto-suggest Free Mobile when amounts vary", () => {
     const suggestions = listUnknownGeneralRecurringClusters(
       FREE_MOBILE_TXS,
       [],
       referenceDate,
     );
 
-    expect(suggestions).toHaveLength(1);
-    expect(suggestions[0].amountFlexible).toBe(true);
-    expect(suggestions[0].descriptionPattern).toContain("FREE MOBILE");
-    expect(suggestions[0].count).toBeGreaterThanOrEqual(2);
+    expect(suggestions).toHaveLength(0);
   });
 
-  it("suggests EDF with widely varying amounts", () => {
+  it("does not auto-suggest EDF when amounts vary", () => {
     const suggestions = listUnknownGeneralRecurringClusters(
       EDF_TXS,
       [],
       referenceDate,
     );
 
-    expect(suggestions).toHaveLength(1);
-    expect(suggestions[0].amountFlexible).toBe(true);
-    expect(suggestions[0].descriptionPattern).toContain("ELECTRICITE");
+    expect(suggestions).toHaveLength(0);
   });
 });
 

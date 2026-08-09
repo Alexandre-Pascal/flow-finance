@@ -163,7 +163,7 @@
     "noPaypalSuggestions": "Aucun prélèvement PayPal à identifier.",
     "generalSectionTitle": "Autres prélèvements",
     "generalSectionDescription": "Paiements par carte et prélèvements SEPA : même commerçant sur plusieurs mois (les dates et numéros de facture dans le libellé sont ignorés).",
-    "generalPickClusterHint": "Détecté si le même commerçant apparaît sur au moins 2 mois distincts, avec un prélèvement le mois dernier ou ce mois-ci — même si le montant change. Masquez les faux positifs avec l'icône barrée.",
+    "generalPickClusterHint": "Détecté si le même commerçant apparaît sur au moins 2 mois distincts, avec un montant stable et un prélèvement le mois dernier ou ce mois-ci. Les montants variables (EDF, Free Mobile…) s’ajoutent à la main. Masquez les faux positifs avec l'icône barrée.",
     "noGeneralSuggestions": "Aucun autre prélèvement récurrent détecté.",
     "dismissSuggestion": "Pas récurrent",
     "pickCluster": "Choisir un prélèvement détecté",

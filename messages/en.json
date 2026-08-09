@@ -163,7 +163,7 @@
     "noPaypalSuggestions": "No PayPal debits to identify.",
     "generalSectionTitle": "Other debits",
     "generalSectionDescription": "Card payments and SEPA debits: same merchant across multiple months (dates and invoice numbers in labels are ignored).",
-    "generalPickClusterHint": "Detected when the same merchant appears in at least 2 distinct months with a debit last month or this month — even if the amount changes. Dismiss false positives with the crossed-eye icon.",
+    "generalPickClusterHint": "Detected when the same merchant appears in at least 2 distinct months with a stable amount and a debit last month or this month. Variable amounts (utilities, mobile…) are added manually. Dismiss false positives with the crossed-eye icon.",
     "noGeneralSuggestions": "No other recurring debits detected.",
     "dismissSuggestion": "Not recurring",
     "pickCluster": "Pick a detected debit",
