@@ -66,16 +66,35 @@ const SubscriptionsAnalyticsPanel = dynamic(
   { loading: () => <Skeleton className="h-96 w-full" /> },
 );
 
+const OutgoingTransfersPanel = dynamic(
+  () =>
+    import("@/components/features/outgoing-transfers-panel").then(
+      (mod) => mod.OutgoingTransfersPanel,
+    ),
+  { loading: () => <Skeleton className="h-96 w-full" /> },
+);
+
+interface OutgoingPersonSeries {
+  person: {
+    id: string;
+    label: string;
+    keyword: string;
+  };
+  data: MonthlyTransferOverview[];
+}
+
 interface MonthlyAnalyticsProps {
   data: MonthlyOverview[];
   motherTransferData: MonthlyTransferOverview[];
   payrollTransferData: MonthlyTransferOverview[];
+  outgoingTransferSeries?: OutgoingPersonSeries[];
   subscriptionData: MonthlySubscriptionRow[];
   subscriptions: RecurringPayment[];
   transactions: TransactionWithAccount[];
   locale: string;
   showTrackedPerson?: boolean;
   showPayroll?: boolean;
+  showTrackedOutgoing?: boolean;
   trackedPersonKeyword?: string | null;
   trackedPersonLabel?: string | null;
   payrollKeyword?: string | null;
@@ -113,18 +132,25 @@ function DeltaBadge({
   );
 }
 
-type AnalyticsView = "overview" | "mother" | "payroll" | "subscriptions";
+type AnalyticsView =
+  | "overview"
+  | "mother"
+  | "payroll"
+  | "outgoing"
+  | "subscriptions";
 
 export function MonthlyAnalytics({
   data,
   motherTransferData,
   payrollTransferData,
+  outgoingTransferSeries = [],
   subscriptionData,
   subscriptions,
   transactions,
   locale,
   showTrackedPerson = false,
   showPayroll = false,
+  showTrackedOutgoing = false,
   trackedPersonKeyword = null,
   trackedPersonLabel = null,
   payrollKeyword = null,
@@ -186,6 +212,11 @@ export function MonthlyAnalytics({
             {showPayroll && payrollKeyword ? (
               <TabsTrigger value="payroll" className="cursor-pointer px-4 py-2">
                 {t("viewPayroll")}
+              </TabsTrigger>
+            ) : null}
+            {showTrackedOutgoing && outgoingTransferSeries.length > 0 ? (
+              <TabsTrigger value="outgoing" className="cursor-pointer px-4 py-2">
+                {t("viewOutgoingTransfers")}
               </TabsTrigger>
             ) : null}
             <TabsTrigger value="subscriptions" className="cursor-pointer px-4 py-2">
@@ -422,6 +453,17 @@ export function MonthlyAnalytics({
               period={period}
               keyword={payrollKeyword}
               budgetShiftMonths={payrollBudgetShiftMonths}
+            />
+          </TabsContent>
+        ) : null}
+
+        {showTrackedOutgoing && outgoingTransferSeries.length > 0 ? (
+          <TabsContent value="outgoing" className="mt-0">
+            <OutgoingTransfersPanel
+              series={outgoingTransferSeries}
+              transactions={transactions}
+              locale={locale}
+              period={period}
             />
           </TabsContent>
         ) : null}

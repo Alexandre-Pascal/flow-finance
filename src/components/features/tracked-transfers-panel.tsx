@@ -37,7 +37,10 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { TransactionWithAccount } from "@/types/database";
 
-type TransferTranslationPrefix = "motherTransfer" | "payrollTransfer";
+type TransferTranslationPrefix =
+  | "motherTransfer"
+  | "payrollTransfer"
+  | "outgoingTransfer";
 
 interface TrackedTransfersPanelProps {
   data: MonthlyTransferOverview[];

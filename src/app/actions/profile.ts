@@ -40,12 +40,23 @@ function isSchemaError(message: string, code?: string): boolean {
 }
 
 function parseSettingsFromFormData(formData: FormData): ProfileSettings {
+  let trackedOutgoingPeople: unknown = [];
+  const rawPeople = String(formData.get("tracked_outgoing_people") ?? "").trim();
+  if (rawPeople) {
+    try {
+      trackedOutgoingPeople = JSON.parse(rawPeople);
+    } catch {
+      trackedOutgoingPeople = [];
+    }
+  }
+
   return normalizeProfileSettings({
     modules: {
       savings: formData.get("module_savings") === "1",
       investments: formData.get("module_investments") === "1",
       payroll: formData.get("module_payroll") === "1",
       trackedPerson: formData.get("module_tracked_person") === "1",
+      trackedOutgoing: formData.get("module_tracked_outgoing") === "1",
     },
     payroll: {
       keyword: String(formData.get("payroll_keyword") ?? ""),
@@ -55,6 +66,7 @@ function parseSettingsFromFormData(formData: FormData): ProfileSettings {
       keyword: String(formData.get("tracked_person_keyword") ?? ""),
       label: String(formData.get("tracked_person_label") ?? ""),
     },
+    trackedOutgoingPeople,
   });
 }
 

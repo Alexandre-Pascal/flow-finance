@@ -1,10 +1,11 @@
 /**
  * @file profile-settings-form.tsx
- * @description Modules visibles + mots-clés salaire / personne suivie.
+ * @description Modules visibles + mots-clés salaire / personnes suivies.
  */
 
 "use client";
 
+import { Plus, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
@@ -12,11 +13,22 @@ import { updateProfileSettingsAction } from "@/app/actions/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { ProfileSettings } from "@/lib/profile-settings";
+import type {
+  ProfileSettings,
+  ProfileTrackedOutgoingPerson,
+} from "@/lib/profile-settings";
 
 interface ProfileSettingsFormProps {
   settings: ProfileSettings;
   isDemo: boolean;
+}
+
+function newOutgoingPerson(): ProfileTrackedOutgoingPerson {
+  return {
+    id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: "",
+    keyword: "",
+  };
 }
 
 export function ProfileSettingsForm({
@@ -40,9 +52,27 @@ export function ProfileSettingsForm({
   const [trackedLabel, setTrackedLabel] = useState(
     settings.trackedPerson.label ?? "",
   );
+  const [outgoingPeople, setOutgoingPeople] = useState<
+    ProfileTrackedOutgoingPerson[]
+  >(
+    settings.trackedOutgoingPeople.length > 0
+      ? settings.trackedOutgoingPeople
+      : [],
+  );
 
   function toggleModule(key: keyof ProfileSettings["modules"]) {
     setModules((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function updateOutgoingPerson(
+    id: string,
+    patch: Partial<Pick<ProfileTrackedOutgoingPerson, "label" | "keyword">>,
+  ) {
+    setOutgoingPeople((prev) =>
+      prev.map((person) =>
+        person.id === id ? { ...person, ...patch } : person,
+      ),
+    );
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -58,10 +88,19 @@ export function ProfileSettingsForm({
     formData.set("module_investments", modules.investments ? "1" : "0");
     formData.set("module_payroll", modules.payroll ? "1" : "0");
     formData.set("module_tracked_person", modules.trackedPerson ? "1" : "0");
+    formData.set("module_tracked_outgoing", modules.trackedOutgoing ? "1" : "0");
     formData.set("payroll_keyword", payrollKeyword);
     formData.set("payroll_shift", String(payrollShift));
     formData.set("tracked_person_keyword", trackedKeyword);
     formData.set("tracked_person_label", trackedLabel);
+    formData.set(
+      "tracked_outgoing_people",
+      JSON.stringify(
+        outgoingPeople.filter(
+          (person) => person.keyword.trim().length > 0,
+        ),
+      ),
+    );
 
     startTransition(async () => {
       const result = await updateProfileSettingsAction(formData);
@@ -89,6 +128,7 @@ export function ProfileSettingsForm({
               ["investments", modules.investments],
               ["payroll", modules.payroll],
               ["trackedPerson", modules.trackedPerson],
+              ["trackedOutgoing", modules.trackedOutgoing],
             ] as const
           ).map(([key, enabled]) => (
             <label
@@ -175,6 +215,96 @@ export function ProfileSettingsForm({
             disabled={isDemo || isPending}
           />
         </div>
+      </div>
+
+      <div className="space-y-3 border-t border-border pt-4">
+        <p className="text-sm font-medium text-foreground">
+          {t("trackedOutgoingTitle")}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          {t("trackedOutgoingDescription")}
+        </p>
+
+        {outgoingPeople.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t("trackedOutgoingEmpty")}</p>
+        ) : (
+          <ul className="space-y-3">
+            {outgoingPeople.map((person, index) => (
+              <li
+                key={person.id}
+                className="space-y-3 rounded-lg border border-border p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">
+                    {t("trackedOutgoingPersonTitle", { index: index + 1 })}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 cursor-pointer text-muted-foreground hover:text-destructive"
+                    disabled={isDemo || isPending}
+                    onClick={() =>
+                      setOutgoingPeople((prev) =>
+                        prev.filter((row) => row.id !== person.id),
+                      )
+                    }
+                    aria-label={t("trackedOutgoingRemove")}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor={`outgoing-label-${person.id}`}>
+                      {t("trackedOutgoingLabelLabel")}
+                    </Label>
+                    <Input
+                      id={`outgoing-label-${person.id}`}
+                      value={person.label}
+                      onChange={(event) =>
+                        updateOutgoingPerson(person.id, {
+                          label: event.target.value,
+                        })
+                      }
+                      placeholder={t("trackedOutgoingLabelPlaceholder")}
+                      disabled={isDemo || isPending}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`outgoing-keyword-${person.id}`}>
+                      {t("trackedOutgoingKeywordLabel")}
+                    </Label>
+                    <Input
+                      id={`outgoing-keyword-${person.id}`}
+                      value={person.keyword}
+                      onChange={(event) =>
+                        updateOutgoingPerson(person.id, {
+                          keyword: event.target.value,
+                        })
+                      }
+                      placeholder={t("trackedOutgoingKeywordPlaceholder")}
+                      disabled={isDemo || isPending}
+                    />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <Button
+          type="button"
+          variant="outline"
+          className="cursor-pointer"
+          disabled={isDemo || isPending}
+          onClick={() =>
+            setOutgoingPeople((prev) => [...prev, newOutgoingPerson()])
+          }
+        >
+          <Plus className="size-4" aria-hidden />
+          {t("trackedOutgoingAdd")}
+        </Button>
       </div>
 
       {error ? (

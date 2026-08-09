@@ -42,6 +42,13 @@ function descriptionLooksLikeIncomingTransfer(description: string): boolean {
   );
 }
 
+function descriptionLooksLikeOutgoingTransfer(description: string): boolean {
+  return (
+    description.includes("VIREMENT EMIS") ||
+    description.includes("VIR EMIS")
+  );
+}
+
 /**
  * Virement entrant dont le libellé contient le mot-clé configuré (ex. un proche).
  */
@@ -61,6 +68,28 @@ export function isTrackedPersonTransfer(
 
   return (
     description.includes(needle) && descriptionLooksLikeIncomingTransfer(description)
+  );
+}
+
+/**
+ * Virement émis (débit) dont le libellé contient le mot-clé du destinataire.
+ */
+export function isTrackedOutgoingTransfer(
+  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  keyword: string | null | undefined,
+): boolean {
+  if (!keyword || tx.amount >= 0) {
+    return false;
+  }
+
+  const description = tx.description.toUpperCase();
+  const needle = keyword.trim().toUpperCase();
+  if (!needle) {
+    return false;
+  }
+
+  return (
+    description.includes(needle) && descriptionLooksLikeOutgoingTransfer(description)
   );
 }
 
@@ -98,7 +127,7 @@ export function buildMonthlyTransferOverview(
   transactions: TransactionWithAccount[],
   locale: string,
   predicate: (tx: TransactionWithAccount) => boolean,
-  options?: { budgetMonthShift?: number },
+  options?: { budgetMonthShift?: number; absoluteAmounts?: boolean },
 ): MonthlyTransferOverview[] {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
   const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
@@ -113,6 +142,7 @@ export function buildMonthlyTransferOverview(
   }
 
   const shiftMonths = options?.budgetMonthShift ?? 0;
+  const absoluteAmounts = options?.absoluteAmounts ?? false;
   const buckets = new Map<string, { amount: number; transferCount: number }>();
 
   for (const tx of matched) {
@@ -122,7 +152,8 @@ export function buildMonthlyTransferOverview(
         ? shiftMonthKey(bookingMonth, shiftMonths)
         : bookingMonth;
     const bucket = buckets.get(key) ?? { amount: 0, transferCount: 0 };
-    bucket.amount += tx.amount;
+    const signed = absoluteAmounts ? Math.abs(tx.amount) : tx.amount;
+    bucket.amount += signed;
     bucket.transferCount += 1;
     buckets.set(key, bucket);
   }

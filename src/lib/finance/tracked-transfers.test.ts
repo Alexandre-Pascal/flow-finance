@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isPayrollTransfer,
+  isTrackedOutgoingTransfer,
   isTrackedPersonTransfer,
 } from "./tracked-transfers";
 import type { TransactionWithAccount } from "@/types/database";
@@ -89,5 +90,55 @@ describe("isTrackedPersonTransfer", () => {
         "PASCAL SOPHIE",
       ),
     ).toBe(true);
+  });
+});
+
+describe("isTrackedOutgoingTransfer", () => {
+  it("matches keyword on outgoing transfer debit", () => {
+    expect(
+      isTrackedOutgoingTransfer(
+        tx({
+          amount: -150,
+          description: "VIREMENT EMIS VERS PASCAL ALEXANDRE",
+        }),
+        "PASCAL ALEXANDRE",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches VIR EMIS shorthand", () => {
+    expect(
+      isTrackedOutgoingTransfer(
+        tx({
+          amount: -80,
+          description: "VIR EMIS de COMPTE VERS PASCAL JULIE",
+        }),
+        "PASCAL JULIE",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects credit amounts", () => {
+    expect(
+      isTrackedOutgoingTransfer(
+        tx({
+          amount: 150,
+          description: "VIREMENT EMIS VERS PASCAL ALEXANDRE",
+        }),
+        "PASCAL ALEXANDRE",
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects incoming transfer wording", () => {
+    expect(
+      isTrackedOutgoingTransfer(
+        tx({
+          amount: -150,
+          description: "VIREMENT EN VOTRE FAVEUR de PASCAL ALEXANDRE",
+        }),
+        "PASCAL ALEXANDRE",
+      ),
+    ).toBe(false);
   });
 });

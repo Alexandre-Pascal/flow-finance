@@ -9,10 +9,13 @@ import {
 import {
   buildMonthlyTransferOverview,
   isPayrollTransfer,
+  isTrackedOutgoingTransfer,
   isTrackedPersonTransfer,
 } from "@/lib/finance/tracked-transfers";
 import {
+  getConfiguredOutgoingPeople,
   isPayrollConfigured,
+  isTrackedOutgoingConfigured,
   isTrackedPersonConfigured,
 } from "@/lib/profile-settings";
 
@@ -48,6 +51,8 @@ export default async function AnalyticsPage({
 
   const showTrackedPerson = isTrackedPersonConfigured(profileSettings);
   const showPayroll = isPayrollConfigured(profileSettings);
+  const showTrackedOutgoing = isTrackedOutgoingConfigured(profileSettings);
+  const outgoingPeople = getConfiguredOutgoingPeople(profileSettings);
 
   const motherTransferData = showTrackedPerson
     ? buildMonthlyTransferOverview(transactions, locale, (tx) =>
@@ -63,6 +68,16 @@ export default async function AnalyticsPage({
         { budgetMonthShift: profileSettings.payroll.budgetShiftMonths },
       )
     : [];
+
+  const outgoingTransferSeries = outgoingPeople.map((person) => ({
+    person,
+    data: buildMonthlyTransferOverview(
+      transactions,
+      locale,
+      (tx) => isTrackedOutgoingTransfer(tx, person.keyword),
+      { absoluteAmounts: true },
+    ),
+  }));
 
   const subscriptionData = buildMonthlySubscriptionOverview(
     transactions,
@@ -81,12 +96,14 @@ export default async function AnalyticsPage({
         data={monthlyOverview}
         motherTransferData={motherTransferData}
         payrollTransferData={payrollTransferData}
+        outgoingTransferSeries={outgoingTransferSeries}
         subscriptionData={subscriptionData}
         subscriptions={recurringPayments}
         transactions={transactions}
         locale={locale}
         showTrackedPerson={showTrackedPerson}
         showPayroll={showPayroll}
+        showTrackedOutgoing={showTrackedOutgoing}
         trackedPersonKeyword={profileSettings.trackedPerson.keyword}
         trackedPersonLabel={profileSettings.trackedPerson.label}
         payrollKeyword={profileSettings.payroll.keyword}

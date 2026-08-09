@@ -23,4 +23,25 @@ describe("normalizeProfileSettings", () => {
     expect(settings.payroll.budgetShiftMonths).toBe(0);
     expect(settings.trackedPerson.label).toBe("Sophie");
   });
+
+  it("normalizes multiple outgoing recipients in parallel", () => {
+    const settings = normalizeProfileSettings({
+      modules: { trackedOutgoing: true },
+      trackedOutgoingPeople: [
+        { label: " Alexandre ", keyword: " PASCAL ALEXANDRE " },
+        { id: "julie", label: "Julie", keyword: "PASCAL JULIE" },
+        { label: "Skip", keyword: "   " },
+      ],
+    });
+
+    expect(settings.modules.trackedOutgoing).toBe(true);
+    expect(settings.trackedOutgoingPeople).toEqual([
+      {
+        id: "alexandre-pascal-alexandre-0",
+        label: "Alexandre",
+        keyword: "PASCAL ALEXANDRE",
+      },
+      { id: "julie", label: "Julie", keyword: "PASCAL JULIE" },
+    ]);
+  });
 });
