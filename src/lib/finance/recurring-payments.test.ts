@@ -306,4 +306,45 @@ describe("listActiveSubscriptions with merged rules", () => {
     expect(active.map((row) => row.id)).toEqual(["netflix"]);
     expect(active[0].billingAmount).toBe(13.49);
   });
+
+  it("exposes min–max monthly amounts for flexible subscriptions", () => {
+    const edf = rule({
+      id: "edf",
+      name: "Electricite De France Pascal Jerome",
+      amount: 96.91,
+      amount_flexible: true,
+      description_pattern: "ELECTRICITE DE FRANCE",
+    });
+    const transactions = [
+      tx({
+        id: "tx-edf-1",
+        amount: -96.91,
+        description: "PRLV SEPA ELECTRICITE DE FRANCE",
+        booking_date: "2026-06-10",
+        recurring_payment_id: "edf",
+      }),
+      tx({
+        id: "tx-edf-2",
+        amount: -150,
+        description: "PRLV SEPA ELECTRICITE DE FRANCE",
+        booking_date: "2026-07-10",
+        recurring_payment_id: "edf",
+      }),
+      tx({
+        id: "tx-edf-3",
+        amount: -120.5,
+        description: "PRLV SEPA ELECTRICITE DE FRANCE",
+        booking_date: "2026-08-10",
+        recurring_payment_id: "edf",
+      }),
+    ];
+
+    const active = listActiveSubscriptions(transactions, [edf], "fr", reference);
+
+    expect(active).toHaveLength(1);
+    expect(active[0].amountFlexible).toBe(true);
+    expect(active[0].monthlyAmountMin).toBe(96.91);
+    expect(active[0].monthlyAmountMax).toBe(150);
+    expect(active[0].monthlyAmount).toBe(120.5);
+  });
 });

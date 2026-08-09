@@ -32,7 +32,7 @@ import {
   sliceMonthlySubscriptionOverview,
   type MonthlySubscriptionRow,
 } from "@/lib/finance/recurring-payments";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatCurrencyRange } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { RecurringPayment, TransactionWithAccount } from "@/types/database";
 
@@ -231,7 +231,13 @@ export function SubscriptionsAnalyticsPanel({
                       ) : null}
                     </TableCell>
                     <TableCell className="text-right text-destructive">
-                      {formatCurrency(subscription.monthlyAmount, locale)}
+                      {subscription.amountFlexible
+                        ? formatCurrencyRange(
+                            subscription.monthlyAmountMin,
+                            subscription.monthlyAmountMax,
+                            locale,
+                          )
+                        : formatCurrency(subscription.monthlyAmount, locale)}
                     </TableCell>
                   </TableRow>
                 ))}

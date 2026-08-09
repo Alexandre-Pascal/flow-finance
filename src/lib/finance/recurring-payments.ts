@@ -54,7 +54,12 @@ export interface ActiveSubscriptionRow {
   name: string;
   cadence: RecurringCadence;
   monthlyAmount: number;
+  /** Plus petit montant mensuel observé (charges variables). */
+  monthlyAmountMin: number;
+  /** Plus grand montant mensuel observé (charges variables). */
+  monthlyAmountMax: number;
   billingAmount: number;
+  amountFlexible: boolean;
 }
 
 function monthKeyFromDate(date: Date): string {
@@ -774,10 +779,11 @@ export function listActiveSubscriptions(
   const canonicalByRuleId = resolveCanonicalRules(rules);
   const ruleById = new Map(rules.map((rule) => [rule.id, rule]));
   const paymentDatesByRule = new Map<string, string[]>();
-  /** Le montant affiché suit la règle du paiement le plus récent du groupe. */
+  const paymentAmountsByRule = new Map<string, number[]>();
+  /** Le montant affiché suit le paiement le plus récent du groupe. */
   const lastPaymentByRule = new Map<
     string,
-    { date: string; rule: RecurringPayment }
+    { date: string; rule: RecurringPayment; amount: number }
   >();
 
   for (const tx of transactions) {
@@ -795,11 +801,17 @@ export function listActiveSubscriptions(
     dates.push(tx.booking_date);
     paymentDatesByRule.set(canonical.id, dates);
 
+    const absAmount = Math.abs(tx.amount);
+    const amounts = paymentAmountsByRule.get(canonical.id) ?? [];
+    amounts.push(absAmount);
+    paymentAmountsByRule.set(canonical.id, amounts);
+
     const existing = lastPaymentByRule.get(canonical.id);
     if (!existing || tx.booking_date > existing.date) {
       lastPaymentByRule.set(canonical.id, {
         date: tx.booking_date,
         rule: variant,
+        amount: absAmount,
       });
     }
   }
@@ -832,17 +844,33 @@ export function listActiveSubscriptions(
       continue;
     }
 
-    const billingAmount = lastPayment.rule.amount;
+    const amountFlexible =
+      Boolean(rule.amount_flexible) || Boolean(lastPayment.rule.amount_flexible);
+    const billingAmount = amountFlexible
+      ? lastPayment.amount
+      : lastPayment.rule.amount;
+    const observedAmounts = paymentAmountsByRule.get(rule.id) ?? [
+      Math.abs(billingAmount),
+    ];
+    const roundedObserved = observedAmounts.map(
+      (amount) => Math.round(amount * 100) / 100,
+    );
+    const observedMin = Math.min(...roundedObserved);
+    const observedMax = Math.max(...roundedObserved);
+    const toMonthly = (amount: number) =>
+      cadence === "yearly"
+        ? Math.round((amount / 12) * 100) / 100
+        : amount;
 
     active.push({
       id: rule.id,
       name: rule.name,
       cadence,
       billingAmount,
-      monthlyAmount:
-        cadence === "yearly"
-          ? Math.round((billingAmount / 12) * 100) / 100
-          : billingAmount,
+      amountFlexible,
+      monthlyAmount: toMonthly(billingAmount),
+      monthlyAmountMin: toMonthly(observedMin),
+      monthlyAmountMax: toMonthly(observedMax),
     });
   }
 

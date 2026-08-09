@@ -18,6 +18,39 @@ export function formatCurrency(
 }
 
 /**
+ * Formate une fourchette de montants (ex. « 96,91–150,00 € »).
+ * Si min === max, revient à un montant unique.
+ */
+export function formatCurrencyRange(
+  minAmount: number,
+  maxAmount: number,
+  locale: string,
+  currency = "EUR",
+): string {
+  const min = Math.round(Math.min(minAmount, maxAmount) * 100) / 100;
+  const max = Math.round(Math.max(minAmount, maxAmount) * 100) / 100;
+  if (min === max) {
+    return formatCurrency(min, locale, currency);
+  }
+
+  const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
+  const numberFormatter = new Intl.NumberFormat(intlLocale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const currencyFormatter = new Intl.NumberFormat(intlLocale, {
+    style: "currency",
+    currency,
+  });
+  const currencySuffix = currencyFormatter
+    .format(0)
+    .replace(/[\d\s.,\u00a0\u202f]/g, "")
+    .trim();
+
+  return `${numberFormatter.format(min)}–${numberFormatter.format(max)}\u00a0${currencySuffix}`;
+}
+
+/**
  * Formate un montant en notation compacte (ex. « 12,3 k€ »), pour les axes de
  * graphique et les libellés courts.
  */
