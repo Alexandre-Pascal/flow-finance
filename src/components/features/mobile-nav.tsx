@@ -24,6 +24,7 @@ const navItems = [
   { href: "/analytics", labelKey: "analytics" as const },
   { href: "/categories", labelKey: "categories" as const },
   { href: "/savings", labelKey: "savings" as const, module: "savings" as const },
+  { href: "/goals", labelKey: "goals" as const, module: "savings" as const },
   {
     href: "/investments",
     labelKey: "investments" as const,

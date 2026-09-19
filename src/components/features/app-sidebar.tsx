@@ -14,6 +14,7 @@ import {
   PieChart,
   PiggyBank,
   LineChart,
+  Target,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
@@ -27,6 +28,12 @@ const navItems = [
     href: "/savings",
     icon: PiggyBank,
     labelKey: "savings" as const,
+    module: "savings" as const,
+  },
+  {
+    href: "/goals",
+    icon: Target,
+    labelKey: "goals" as const,
     module: "savings" as const,
   },
   {

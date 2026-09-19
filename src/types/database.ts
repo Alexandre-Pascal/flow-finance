@@ -110,6 +110,31 @@ export interface SavingsAdjustment {
   updated_at: string;
 }
 
+/** Objectif d'épargne : une cible financée par des parts de livrets. */
+export interface SavingsGoal {
+  id: string;
+  user_id: string;
+  name: string;
+  target_amount: number;
+  target_date: string | null;
+  color: string;
+  note: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Part d'un livret affectée à un objectif (montant fixe). */
+export interface SavingsGoalAllocation {
+  id: string;
+  user_id: string;
+  goal_id: string;
+  savings_account_id: string;
+  amount: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type RecurringCadence = "monthly" | "semiannual" | "yearly";
 
 export interface RecurringSuggestionDismissal {

@@ -47,6 +47,31 @@ Comptes bancaires synchronisés ou saisis.
 
 Catégories personnalisées avec règles mot-clé (`keyword_rules text[]`).
 
+### `savings_goals`
+
+Objectifs d'épargne (page Objectifs).
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| name | text | Nom de l'objectif |
+| target_amount | numeric | Montant à atteindre (> 0) |
+| target_date | date | Échéance optionnelle |
+| color | text | Couleur hex de la barre d'avancement |
+| position | integer | Ordre d'affichage |
+
+### `savings_goal_allocations`
+
+Part d'un livret affectée à un objectif : un livret peut financer plusieurs
+objectifs, et le solde non affecté reste disponible.
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| goal_id | uuid | → `savings_goals` |
+| savings_account_id | uuid | → `savings_accounts` |
+| amount | numeric | Montant fixe affecté (> 0) |
+
+**Contrainte unique** : `(goal_id, savings_account_id)`
+
 ## RLS
 
 Toutes les tables sont protégées : un utilisateur ne voit que ses lignes (`auth.uid() = user_id` ou jointure via `accounts`).
