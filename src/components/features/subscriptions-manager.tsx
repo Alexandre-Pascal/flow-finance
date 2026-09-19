@@ -5,7 +5,7 @@
 
 "use client";
 
-import { MoreHorizontal, Plus } from "lucide-react";
+import { Check, MoreHorizontal, Pencil, Plus, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -15,6 +15,7 @@ import {
   deleteRecurringPaymentAction,
   mergeRecurringPaymentsAction,
   updateRecurringPaymentCadenceAction,
+  updateRecurringPaymentPatternAction,
 } from "@/app/actions/recurring-payments";
 import { SubscriptionSuggestionSection } from "@/components/features/subscription-suggestion-section";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { isPayPalPattern } from "@/lib/finance/recurring-detection";
 import {
   groupRulesByCanonical,
   type RecurringClusterSuggestion,
@@ -124,6 +126,7 @@ interface SubscriptionRowProps {
   isPending: boolean;
   locale: string;
   onCadenceChange: (id: string, cadence: RecurringCadence) => void;
+  onPatternChange: (id: string, pattern: string) => void;
   onMerge: (id: string, targetId: string) => void;
   onArchive: (id: string, restore: boolean) => void;
   onDelete: (id: string) => void;
@@ -137,12 +140,48 @@ function SubscriptionRow({
   isPending,
   locale,
   onCadenceChange,
+  onPatternChange,
   onMerge,
   onArchive,
   onDelete,
 }: SubscriptionRowProps) {
   const t = useTranslations("subscriptions");
   const isArchived = Boolean(subscription.active_to);
+  // Les règles PayPal se rattachent par montant : leur motif n'est pas modifiable.
+  const isPayPal = isPayPalPattern(subscription.description_pattern);
+  const [isEditingPattern, setEditingPattern] = useState(false);
+  const [patternDraft, setPatternDraft] = useState(
+    subscription.description_pattern,
+  );
+
+  function startEditingPattern() {
+    setPatternDraft(subscription.description_pattern);
+    setEditingPattern(true);
+  }
+
+  function savePattern() {
+    const next = patternDraft.trim();
+    setEditingPattern(false);
+    if (
+      next.length < 2 ||
+      next.toUpperCase() === subscription.description_pattern.toUpperCase()
+    ) {
+      return;
+    }
+    onPatternChange(subscription.id, next);
+  }
+
+  function handlePatternKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      savePattern();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setEditingPattern(false);
+    }
+  }
 
   return (
     <li
@@ -151,13 +190,51 @@ function SubscriptionRow({
         isVariant && "border-dashed bg-muted/30",
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         {isVariant ? null : (
           <p className="font-medium text-foreground">{subscription.name}</p>
         )}
-        <p className="truncate text-sm text-muted-foreground">
-          {subscriptionMeta(subscription, t, locale)}
-        </p>
+        {isEditingPattern ? (
+          <div className="mt-1 flex items-center gap-1">
+            <Input
+              value={patternDraft}
+              onChange={(event) => setPatternDraft(event.target.value)}
+              onKeyDown={handlePatternKeyDown}
+              aria-label={t("editPattern")}
+              className="h-8 font-mono text-xs"
+              disabled={isPending}
+              autoFocus
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 cursor-pointer"
+              disabled={isPending || patternDraft.trim().length < 2}
+              aria-label={t("editPatternSave")}
+              title={t("editPatternSave")}
+              onClick={savePattern}
+            >
+              <Check className="size-4" aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0 cursor-pointer"
+              disabled={isPending}
+              aria-label={t("editPatternCancel")}
+              title={t("editPatternCancel")}
+              onClick={() => setEditingPattern(false)}
+            >
+              <X className="size-4" aria-hidden />
+            </Button>
+          </div>
+        ) : (
+          <p className="truncate text-sm text-muted-foreground">
+            {subscriptionMeta(subscription, t, locale)}
+          </p>
+        )}
         {isArchived ? (
           <p className="text-xs text-muted-foreground">
             {t("archivedHint", {
@@ -191,6 +268,21 @@ function SubscriptionRow({
             ))}
           </div>
 
+          {isPayPal || isEditingPattern ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="cursor-pointer"
+              disabled={isPending}
+              aria-label={t("editPattern")}
+              title={t("editPattern")}
+              onClick={startEditingPattern}
+            >
+              <Pencil className="size-4" aria-hidden />
+            </Button>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -199,7 +291,7 @@ function SubscriptionRow({
                 size="icon"
                 className="cursor-pointer"
                 disabled={isPending}
-                aria-label={t("mergeWith")}
+                aria-label={t("actions")}
               >
                 <MoreHorizontal className="size-4" />
               </Button>
@@ -302,6 +394,13 @@ export function SubscriptionsManager({
     formData.set("id", id);
     formData.set("cadence", cadence);
     runAction(updateRecurringPaymentCadenceAction, formData);
+  }
+
+  function handlePatternChange(id: string, pattern: string) {
+    const formData = new FormData();
+    formData.set("id", id);
+    formData.set("description_pattern", pattern);
+    runAction(updateRecurringPaymentPatternAction, formData);
   }
 
   function handleMerge(id: string, targetId: string) {
@@ -515,6 +614,7 @@ export function SubscriptionsManager({
                       isPending={isPending}
                       locale={locale}
                       onCadenceChange={handleCadenceChange}
+                      onPatternChange={handlePatternChange}
                       onMerge={handleMerge}
                       onArchive={handleArchive}
                       onDelete={handleDelete}
@@ -539,6 +639,7 @@ export function SubscriptionsManager({
                             isPending={isPending}
                             locale={locale}
                             onCadenceChange={handleCadenceChange}
+                            onPatternChange={handlePatternChange}
                             onMerge={handleMerge}
                             onArchive={handleArchive}
                             onDelete={handleDelete}

@@ -3,6 +3,7 @@ import {
   descriptionMatchesGeneralPattern,
   generalRecurringMatchPattern,
   recurringGroupKey,
+  resolveGeneralStoredPattern,
 } from "./recurring-labels";
 
 describe("recurring label normalization", () => {
@@ -47,5 +48,32 @@ describe("recurring label normalization", () => {
     expect(pattern).toBe("EAU ASSMT CACG CA");
     expect(descriptionMatchesGeneralPattern(may, pattern)).toBe(true);
     expect(descriptionMatchesGeneralPattern(november, pattern)).toBe(true);
+  });
+
+  it("lets a manual override shorten an overly broad detected pattern", () => {
+    const description =
+      "VIREMENT EMIS WEB Anais Lacombe participation basic fit";
+
+    expect(resolveGeneralStoredPattern(description)).toBe(
+      "VIREMENT EMIS WEB ANAIS LACOMBE",
+    );
+    expect(resolveGeneralStoredPattern(description, "ANAIS LACOMBE")).toBe(
+      "ANAIS LACOMBE",
+    );
+    expect(
+      descriptionMatchesGeneralPattern(description, "ANAIS LACOMBE"),
+    ).toBe(true);
+  });
+
+  it("normalizes a hand-typed pattern and still matches the bank label", () => {
+    const pattern = generalRecurringMatchPattern("basic fit 000123456");
+
+    expect(pattern).toBe("BASIC FIT");
+    expect(
+      descriptionMatchesGeneralPattern(
+        "PAIEMENT PAR CARTE X1234 BASIC FIT 000123456",
+        pattern,
+      ),
+    ).toBe(true);
   });
 });

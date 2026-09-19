@@ -9,7 +9,7 @@ import {
 import {
   GENERAL_RECURRING_AMOUNT_TOLERANCE,
   generalRecurringMatchPattern,
-  recurringGroupKey,
+  resolveGeneralStoredPattern,
 } from "@/lib/finance/recurring-labels";
 import {
   clusterDismissalKey,
@@ -353,6 +353,82 @@ export async function updateRecurringPaymentCadenceAction(formData: FormData) {
   return { success: true as const };
 }
 
+export async function updateRecurringPaymentPatternAction(formData: FormData) {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" as const satisfies RecurringPaymentActionError };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  const descriptionPatternRaw = String(
+    formData.get("description_pattern") ?? "",
+  ).trim();
+
+  if (!id || descriptionPatternRaw.length < 2) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" as const satisfies RecurringPaymentActionError };
+  }
+
+  const { data: existing, error: loadError } = await supabase
+    .from("recurring_payments")
+    .select("id, description_pattern")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (loadError) {
+    console.error("[updateRecurringPaymentPattern] load failed:", loadError);
+    if (isSchemaError(loadError.message, loadError.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  if (!existing) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  if (isPayPalPattern(String(existing.description_pattern))) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  // Saisie manuelle : on normalise sans repasser par le libellé bancaire d'origine.
+  const descriptionPattern = generalRecurringMatchPattern(descriptionPatternRaw);
+
+  if (!descriptionPattern || descriptionPattern.length < 2) {
+    return { error: "invalid" as const satisfies RecurringPaymentActionError };
+  }
+
+  const { error } = await supabase
+    .from("recurring_payments")
+    .update({ description_pattern: descriptionPattern })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[updateRecurringPaymentPattern] update failed:", error);
+    if (isSchemaError(error.message, error.code)) {
+      return { error: "schema" as const satisfies RecurringPaymentActionError };
+    }
+    return { error: "save" as const satisfies RecurringPaymentActionError };
+  }
+
+  try {
+    await rematchRecurringPaymentsForUser(user.id, supabase);
+  } catch (rematchError) {
+    console.error("[updateRecurringPaymentPattern] rematch failed:", rematchError);
+    revalidateFinancePages();
+    return { success: true as const, warning: "rematch" as const };
+  }
+
+  revalidateFinancePages();
+  return { success: true as const };
+}
+
 async function loadOwnedTransaction(
   supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
   transactionId: string,
@@ -441,7 +517,10 @@ export async function createSubscriptionFromTransactionAction(formData: FormData
   const amountFlexible = !payPal && amountFlexibleRequested;
   const descriptionPattern = payPal
     ? DEFAULT_PAYPAL_PATTERN
-    : generalRecurringMatchPattern(recurringGroupKey(tx.description));
+    : resolveGeneralStoredPattern(
+        tx.description,
+        String(formData.get("description_pattern") ?? ""),
+      );
 
   if (!descriptionPattern) {
     return { error: "invalid" as const satisfies RecurringPaymentActionError };

@@ -54,6 +54,21 @@ function isReferenceToken(token: string): boolean {
   return /(?:[A-Z]{1,12})?\d{6,}[A-Z0-9]*/.test(token) && /\d{6,}/.test(token);
 }
 
+/**
+ * Motif à enregistrer : override saisi à la main, sinon détection depuis le libellé bancaire.
+ * L'override n'est pas repassé dans recurringGroupKey, pour pouvoir raccourcir un motif trop large.
+ */
+export function resolveGeneralStoredPattern(
+  description: string,
+  override?: string | null,
+): string {
+  const raw = override?.trim() ?? "";
+  if (raw.length >= 2) {
+    return generalRecurringMatchPattern(raw);
+  }
+  return generalRecurringMatchPattern(recurringGroupKey(description));
+}
+
 /** Motif court enregistré en base et utilisé pour le matching. */
 export function generalRecurringMatchPattern(groupKey: string): string {
   const tokens = groupKey.trim().toUpperCase().split(/\s+/).filter(Boolean);

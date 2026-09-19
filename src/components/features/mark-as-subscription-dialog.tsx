@@ -6,7 +6,7 @@
 
 "use client";
 
-import { Repeat } from "lucide-react";
+import { Pencil, Repeat } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -32,10 +32,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  generalRecurringMatchPattern,
-  GENERAL_RECURRING_AMOUNT_TOLERANCE,
   descriptionMatchesGeneralPattern,
+  GENERAL_RECURRING_AMOUNT_TOLERANCE,
+  generalRecurringMatchPattern,
   recurringGroupKey,
+  resolveGeneralStoredPattern,
 } from "@/lib/finance/recurring-labels";
 import {
   DEFAULT_PAYPAL_PATTERN,
@@ -98,6 +99,8 @@ export function MarkAsSubscriptionDialog({
   const [cadence, setCadence] = useState<RecurringCadence>("monthly");
   const [target, setTarget] = useState<string>(CREATE_MODE);
   const [name, setName] = useState("");
+  const [patternDraft, setPatternDraft] = useState("");
+  const [editingPattern, setEditingPattern] = useState(false);
   const [amountFlexible, setAmountFlexible] = useState(false);
 
   const canonicalSubscriptions = useMemo(
@@ -108,19 +111,22 @@ export function MarkAsSubscriptionDialog({
   const isPayPal = tx.description
     .toUpperCase()
     .includes(DEFAULT_PAYPAL_PATTERN);
-  const pattern = isPayPal
+  const detectedPattern = isPayPal
     ? DEFAULT_PAYPAL_PATTERN
     : generalRecurringMatchPattern(recurringGroupKey(tx.description));
+  const pattern = isPayPal
+    ? DEFAULT_PAYPAL_PATTERN
+    : resolveGeneralStoredPattern(tx.description, patternDraft);
 
   const inferredSetup = useMemo(() => {
-    if (!pattern || isPayPal) {
+    if (!detectedPattern || isPayPal) {
       return { cadence: "monthly" as RecurringCadence, amountFlexible: false };
     }
 
     const related = transactions.filter(
       (candidateTx) =>
         candidateTx.amount < 0 &&
-        descriptionMatchesGeneralPattern(candidateTx.description, pattern),
+        descriptionMatchesGeneralPattern(candidateTx.description, detectedPattern),
     );
     const dates = related.map((row) => row.booking_date);
     const amounts = new Set(
@@ -130,7 +136,7 @@ export function MarkAsSubscriptionDialog({
       cadence: inferCadenceFromPaymentDates(dates) ?? "monthly",
       amountFlexible: amounts.size > 1,
     };
-  }, [isPayPal, pattern, transactions]);
+  }, [detectedPattern, isPayPal, transactions]);
 
   // L'aperçu utilise exactement la règle que l'action serveur va créer, pour que
   // le nombre annoncé corresponde au rattachement réel.
@@ -177,7 +183,9 @@ export function MarkAsSubscriptionDialog({
 
   function handleOpenChange(next: boolean) {
     if (next) {
-      setName(toDisplayName(pattern));
+      setName(toDisplayName(detectedPattern));
+      setPatternDraft(detectedPattern);
+      setEditingPattern(false);
       setTarget(CREATE_MODE);
       setCadence(inferredSetup.cadence);
       setAmountFlexible(inferredSetup.amountFlexible);
@@ -201,6 +209,9 @@ export function MarkAsSubscriptionDialog({
       formData.set("name", name.trim());
     } else {
       formData.set("attachToId", target);
+    }
+    if (!isPayPal) {
+      formData.set("description_pattern", pattern);
     }
 
     startTransition(async () => {
@@ -259,9 +270,37 @@ export function MarkAsSubscriptionDialog({
               {formatCurrency(tx.amount, locale, tx.currency)} ·{" "}
               {formatDate(tx.booking_date, locale)}
             </p>
-            <p className="break-all text-xs text-muted-foreground">
-              {t("subscriptionPatternLabel")} : <code>{pattern}</code>
-            </p>
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">
+                  {t("subscriptionPatternLabel")}
+                </p>
+                {editingPattern && !isPayPal ? (
+                  <Input
+                    value={patternDraft}
+                    onChange={(event) => setPatternDraft(event.target.value)}
+                    className="mt-1 font-mono text-xs"
+                    aria-label={t("subscriptionPatternLabel")}
+                    autoFocus
+                  />
+                ) : (
+                  <p className="break-all text-xs text-muted-foreground">
+                    <code>{pattern}</code>
+                  </p>
+                )}
+              </div>
+              {isPayPal ? null : (
+                <button
+                  type="button"
+                  aria-label={t("subscriptionPatternEdit")}
+                  title={t("subscriptionPatternEdit")}
+                  className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={() => setEditingPattern((open) => !open)}
+                >
+                  <Pencil className="size-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="space-y-1">
