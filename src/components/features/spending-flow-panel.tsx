@@ -9,7 +9,7 @@
 
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -63,6 +63,8 @@ interface SpendingFlowPanelProps {
 
 const PERIODS: MonthlyPeriod[] = [1, 3, 6, 12];
 const OTHER_INCOME_COLOR = "#64748B";
+/** En dessous, les couloirs de libellés ne tiennent plus : on défile. */
+const MIN_CHART_WIDTH = 880;
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
@@ -78,6 +80,23 @@ export function SpendingFlowPanel({
 }: SpendingFlowPanelProps) {
   const t = useTranslations("spendingFlow");
   const [period, setPeriod] = useState<MonthlyPeriod>(1);
+  // recharts ne transmet pas la largeur du conteneur aux formes
+  // personnalisées : on la mesure ici et on la passe au graphique.
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(0);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) {
+      return;
+    }
+
+    const observer = new ResizeObserver(([entry]) => {
+      setChartWidth(entry.contentRect.width);
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
 
   const monthKeys = useMemo(() => {
     const months = monthlyOverview.length
@@ -196,13 +215,19 @@ export function SpendingFlowPanel({
   ]);
 
   // La hauteur suit la colonne la plus chargée : en dessous d'une quarantaine
-  // de pixels par nœud, les libellés se chevauchent.
+  // de pixels par nœud, les libellés se chevauchent. Les nœuds terminaux sont
+  // tous dessinés dans la dernière colonne, c'est elle qui se remplit.
   const height = useMemo(() => {
+    const maxDepth = flow.nodes.reduce(
+      (deepest, node) => Math.max(deepest, node.depth),
+      0,
+    );
     const perColumn = new Map<number, number>();
     for (const node of flow.nodes) {
-      perColumn.set(node.depth, (perColumn.get(node.depth) ?? 0) + 1);
+      const column = node.isLeaf ? maxDepth : node.depth;
+      perColumn.set(column, (perColumn.get(column) ?? 0) + 1);
     }
-    return Math.max(360, Math.max(...perColumn.values(), 1) * 48);
+    return Math.max(360, Math.max(...perColumn.values(), 1) * 46);
   }, [flow.nodes]);
 
   return (
@@ -233,14 +258,17 @@ export function SpendingFlowPanel({
       <CardContent className="space-y-3">
         {flow.hasData ? (
           <>
-            <div className="w-full overflow-x-auto">
-              <div className="min-w-[720px]">
+            <div ref={frameRef} className="w-full overflow-x-auto">
+              {chartWidth > 0 ? (
                 <SpendingFlowGraph
                   flow={flow}
                   locale={locale}
+                  width={Math.max(MIN_CHART_WIDTH, chartWidth)}
                   height={height}
                 />
-              </div>
+              ) : (
+                <Skeleton style={{ height }} className="w-full" />
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               {flow.deficit > 0

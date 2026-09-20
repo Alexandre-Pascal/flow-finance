@@ -38,6 +38,8 @@ export interface SpendingFlowNode {
    * uniquement quand elles expliquent tout son montant.
    */
   items?: FlowEntry[];
+  /** Aucun lien ne part de ce nœud : il termine le flux, à droite. */
+  isLeaf: boolean;
 }
 
 export interface SpendingFlowLink {
@@ -250,7 +252,7 @@ export function buildSpendingFlow({
   }
 
   for (const source of sources) {
-    addNode({ ...source, value: source.amount, depth: 0 });
+    addNode({ ...source, value: source.amount, depth: 0, isLeaf: true });
   }
 
   // Le budget vaut ce qui entre : c'est lui qui se redistribue ensuite.
@@ -260,6 +262,7 @@ export function buildSpendingFlow({
     color: BUDGET_COLOR,
     value: Math.max(income, allocated),
     depth: 1,
+    isLeaf: true,
   });
 
   for (const source of sources) {
@@ -286,6 +289,7 @@ export function buildSpendingFlow({
       ...poste,
       value: poste.amount,
       depth: 2,
+      isLeaf: true,
     });
     links.push({
       source: budgetIndex,
@@ -302,7 +306,12 @@ export function buildSpendingFlow({
       labels.other,
       formatOtherLines,
     )) {
-      const childIndex = addNode({ ...child, value: child.amount, depth: 3 });
+      const childIndex = addNode({
+        ...child,
+        value: child.amount,
+        depth: 3,
+        isLeaf: true,
+      });
       links.push({
         source: posteIndex,
         target: childIndex,
@@ -310,6 +319,13 @@ export function buildSpendingFlow({
         color: child.color,
       });
     }
+  }
+
+  // Les nœuds sans suite terminent à droite du graphique : c'est ce qui décide
+  // de la colonne où ils sont dessinés, donc de la place à leur réserver.
+  const parents = new Set(links.map((link) => link.source));
+  for (const [index, node] of nodes.entries()) {
+    node.isLeaf = !parents.has(index);
   }
 
   return {
