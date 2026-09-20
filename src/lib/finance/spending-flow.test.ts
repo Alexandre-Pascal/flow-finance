@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   BUDGET_KEY,
   buildSpendingFlow,
+  OTHER_CATEGORIES_KEY,
   REST_KEY,
   type FlowEntry,
 } from "./spending-flow";
 
-const labels = { budget: "Budget", rest: "Reste", other: "Autres" };
+const labels = {
+  budget: "Budget",
+  rest: "Reste",
+  other: "Autres",
+  otherCategories: "Autres postes",
+};
 
 function entry(key: string, amount: number, name = key): FlowEntry {
   return { key, name, color: "#000000", amount };
@@ -124,6 +130,129 @@ describe("spending flow", () => {
     expect(linkValue(flow, "subs", "a")).toBe(30);
     expect(linkValue(flow, "subs", "b")).toBe(25);
     expect(linkValue(flow, "subs", "subs::other")).toBe(45);
+  });
+
+  it("folds the crumbs of a bucket into its « other » line", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [entry("subs", 340)],
+      details: {
+        subs: [
+          entry("rent", 300),
+          entry("foodvisor", 24),
+          entry("youtube", 13),
+          entry("gym", 3),
+        ],
+      },
+      labels,
+    });
+
+    // 13 € et 3 € pèsent moins de 5 % des 340 € du poste.
+    expect(nodeByKey(flow, "youtube")).toBeUndefined();
+    expect(linkValue(flow, "subs", "foodvisor")).toBe(24);
+    expect(linkValue(flow, "subs", "subs::other")).toBe(16);
+  });
+
+  it("keeps a lone small line rather than hiding it behind « other »", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 2000)],
+      categories: [entry("savings", 1245)],
+      details: {
+        savings: [entry("ldd", 1000), entry("pea", 200), entry("pel", 45)],
+      },
+      labels,
+    });
+
+    // 45 € pèse moins de 5 % du poste, mais le regrouper seul n'apprendrait rien.
+    expect(linkValue(flow, "savings", "pel")).toBe(45);
+    expect(nodeByKey(flow, "savings::other")).toBeUndefined();
+  });
+
+  it("names a group after the number of lines it swallows", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [
+        entry("housing", 600),
+        entry("food", 200),
+        entry("fuel", 15),
+        entry("bar", 12),
+        entry("transport", 3),
+      ],
+      details: {
+        housing: [
+          entry("rent", 500),
+          entry("power", 40),
+          entry("water", 30),
+          entry("wifi", 30),
+        ],
+      },
+      labels,
+      maxChildren: 2,
+      formatOtherCategories: (count) => `${count} autres postes`,
+      formatOtherLines: (count) => `${count} autres lignes`,
+    });
+
+    expect(nodeByKey(flow, OTHER_CATEGORIES_KEY)?.name).toBe("3 autres postes");
+    expect(nodeByKey(flow, "housing::other")?.name).toBe("2 autres lignes");
+  });
+
+  it("folds the small buckets into one, without losing a cent", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [
+        entry("housing", 600),
+        entry("food", 200),
+        entry("fuel", 15),
+        entry("bar", 12),
+        entry("transport", 3),
+      ],
+      labels,
+    });
+
+    expect(flow.nodes.map((node) => node.key)).toContain(OTHER_CATEGORIES_KEY);
+    expect(linkValue(flow, BUDGET_KEY, OTHER_CATEGORIES_KEY)).toBe(30);
+    expect(nodeByKey(flow, "fuel")).toBeUndefined();
+    expect(flow.allocated).toBe(830);
+    expect(flow.rest).toBe(170);
+  });
+
+  it("leaves a lone small bucket alone rather than naming it « other »", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [entry("housing", 600), entry("transport", 3)],
+      labels,
+    });
+
+    expect(nodeByKey(flow, "transport")?.value).toBe(3);
+    expect(nodeByKey(flow, OTHER_CATEGORIES_KEY)).toBeUndefined();
+  });
+
+  it("caps how many buckets get their own branch", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [
+        entry("a", 200),
+        entry("b", 150),
+        entry("c", 100),
+        entry("d", 90),
+      ],
+      labels,
+      maxCategories: 2,
+    });
+
+    expect(linkValue(flow, BUDGET_KEY, OTHER_CATEGORIES_KEY)).toBe(190);
+  });
+
+  it("reports the overspend when buckets exceed the income", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [entry("housing", 1200)],
+      labels,
+    });
+
+    expect(flow.deficit).toBe(200);
+    expect(flow.rest).toBe(0);
+    expect(nodeByKey(flow, BUDGET_KEY)?.value).toBe(1200);
   });
 
   it("reports no data when an end of the flow is missing", () => {

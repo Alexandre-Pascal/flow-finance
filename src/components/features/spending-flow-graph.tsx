@@ -124,6 +124,9 @@ export default function SpendingFlowGraph({
         data={{ nodes: flow.nodes, links: flow.links }}
         nodeWidth={10}
         nodePadding={22}
+        // « justify » collait les postes sans détail dans la dernière colonne,
+        // à côté des lignes d'abonnement : une colonne = un niveau, désormais.
+        align="left"
         // De la marge à droite pour les libellés de la dernière colonne.
         margin={{ top: 8, right: 24, bottom: 8, left: 8 }}
         node={

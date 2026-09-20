@@ -180,7 +180,10 @@ export function SpendingFlowPanel({
         budget: t("budget"),
         rest: t("rest"),
         other: t("other"),
+        otherCategories: t("other"),
       },
+      formatOtherCategories: (count) => t("otherCategories", { count }),
+      formatOtherLines: (count) => t("otherLines", { count }),
     });
   }, [
     breakdown,
@@ -192,11 +195,15 @@ export function SpendingFlowPanel({
     t,
   ]);
 
-  // Une colonne de nœuds ne se lit plus en dessous d'une trentaine de pixels.
-  const height = Math.max(
-    360,
-    flow.nodes.filter((node) => node.depth >= 2).length * 34,
-  );
+  // La hauteur suit la colonne la plus chargée : en dessous d'une quarantaine
+  // de pixels par nœud, les libellés se chevauchent.
+  const height = useMemo(() => {
+    const perColumn = new Map<number, number>();
+    for (const node of flow.nodes) {
+      perColumn.set(node.depth, (perColumn.get(node.depth) ?? 0) + 1);
+    }
+    return Math.max(360, Math.max(...perColumn.values(), 1) * 48);
+  }, [flow.nodes]);
 
   return (
     <Card>
@@ -236,11 +243,17 @@ export function SpendingFlowPanel({
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {t("summary", {
-                income: formatCurrency(flow.income, locale),
-                allocated: formatCurrency(flow.allocated, locale),
-                rest: formatCurrency(flow.rest, locale),
-              })}
+              {flow.deficit > 0
+                ? t("summaryDeficit", {
+                    income: formatCurrency(flow.income, locale),
+                    allocated: formatCurrency(flow.allocated, locale),
+                    deficit: formatCurrency(flow.deficit, locale),
+                  })
+                : t("summary", {
+                    income: formatCurrency(flow.income, locale),
+                    allocated: formatCurrency(flow.allocated, locale),
+                    rest: formatCurrency(flow.rest, locale),
+                  })}
             </p>
           </>
         ) : (

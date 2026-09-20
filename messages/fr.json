@@ -174,7 +174,10 @@
     "savings": "Épargne",
     "rest": "Reste disponible",
     "other": "Autres",
+    "otherCategories": "{count, plural, one {# autre poste} other {# autres postes}}",
+    "otherLines": "{count, plural, one {# autre ligne} other {# autres lignes}}",
     "summary": "{income} d'entrées · {allocated} répartis · {rest} non dépensés. Les virements vers vos livrets et votre PEA comptent comme épargne, pas comme dépense.",
+    "summaryDeficit": "{income} d'entrées · {allocated} répartis, soit {deficit} de plus que ce qui est entré. Les virements vers vos livrets et votre PEA comptent comme épargne, pas comme dépense.",
     "empty": "Pas encore assez de données pour tracer la répartition."
   },
   "subscriptions": {

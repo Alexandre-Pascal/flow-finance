@@ -17,10 +17,12 @@ export interface FlowEntry {
 export const BUDGET_KEY = "__budget__";
 export const REST_KEY = "__rest__";
 export const SAVINGS_KEY = "__savings__";
+export const OTHER_CATEGORIES_KEY = "__other_categories__";
 
 export const BUDGET_COLOR = "#CA8A04";
 export const REST_COLOR = "#94A3B8";
 export const SAVINGS_COLOR = "#0F766E";
+export const OTHER_CATEGORIES_COLOR = "#64748B";
 
 export interface SpendingFlowNode {
   key: string;
@@ -47,14 +49,22 @@ export interface SpendingFlow {
   allocated: number;
   /** Ce qui n'est ni dépensé ni mis de côté. */
   rest: number;
+  /** Dépassement quand les postes excèdent les entrées. */
+  deficit: number;
   hasData: boolean;
 }
 
 export interface SpendingFlowLabels {
   budget: string;
   rest: string;
+  /** Part d'une catégorie que le détail n'explique pas. */
   other: string;
+  /** Regroupement des petits postes, quand on ne sait pas les compter. */
+  otherCategories: string;
 }
+
+/** Nomme un regroupement d'après le nombre de lignes qu'il absorbe. */
+export type GroupLabeller = (count: number) => string;
 
 export interface SpendingFlowInput {
   /** Salaire, rentrées suivies, autres crédits. */
@@ -66,6 +76,16 @@ export interface SpendingFlowInput {
   labels: SpendingFlowLabels;
   /** Lignes de détail affichées par catégorie avant regroupement. */
   maxChildren?: number;
+  /** Sous cette part de sa catégorie, une ligne rejoint « Autres ». */
+  minChildShare?: number;
+  /** Postes affichés séparément avant regroupement. */
+  maxCategories?: number;
+  /** Sous cette part des entrées, un poste rejoint « Autres postes ». */
+  minCategoryShare?: number;
+  /** Libellé du regroupement de postes, selon le nombre regroupé. */
+  formatOtherCategories?: GroupLabeller;
+  /** Libellé du regroupement de lignes de détail. */
+  formatOtherLines?: GroupLabeller;
 }
 
 /** En dessous, un poste ne vaut pas un nœud (arrondis de centimes). */
@@ -93,12 +113,27 @@ function fitChildren(
   children: FlowEntry[],
   parent: FlowEntry,
   maxChildren: number,
+  minChildShare: number,
   otherLabel: string,
+  formatOtherLines?: GroupLabeller,
 ): FlowEntry[] {
+  const sorted = keep(children);
+  const floor = parent.amount * minChildShare;
+  const shown = sorted
+    .filter((child) => child.amount >= floor)
+    .slice(0, maxChildren);
+  const hidden = sorted.filter((child) => !shown.includes(child));
+
+  // Regrouper une ligne unique la renommerait sans rien simplifier.
+  if (hidden.length === 1) {
+    shown.push(hidden[0]);
+    hidden.length = 0;
+  }
+
   const fitted: FlowEntry[] = [];
   let used = 0;
 
-  for (const child of keep(children).slice(0, maxChildren)) {
+  for (const child of shown) {
     const amount = round(Math.min(child.amount, parent.amount - used));
     if (amount <= MIN_VALUE) {
       break;
@@ -115,7 +150,10 @@ function fitChildren(
   if (left > MIN_VALUE) {
     fitted.push({
       key: `${parent.key}::other`,
-      name: otherLabel,
+      name:
+        hidden.length > 0
+          ? (formatOtherLines?.(hidden.length) ?? otherLabel)
+          : otherLabel,
       color: parent.color,
       amount: left,
     });
@@ -124,16 +162,67 @@ function fitChildren(
   return fitted;
 }
 
+/**
+ * Un poste minuscule occupe autant de place qu'un gros dans un Sankey : sous le
+ * seuil, ou au-delà du nombre affiché, il rejoint « Autres postes ». Un poste
+ * isolé n'est jamais regroupé — « Autres » à une seule ligne n'apprend rien.
+ */
+function groupSmallCategories(
+  categories: FlowEntry[],
+  income: number,
+  maxCategories: number,
+  minCategoryShare: number,
+  label: string,
+  formatOtherCategories?: GroupLabeller,
+): FlowEntry[] {
+  const threshold = income * minCategoryShare;
+  const kept: FlowEntry[] = [];
+  const folded: FlowEntry[] = [];
+
+  categories.forEach((entry, index) => {
+    if (index < maxCategories && entry.amount >= threshold) {
+      kept.push(entry);
+    } else {
+      folded.push(entry);
+    }
+  });
+
+  if (folded.length === 1) {
+    kept.push(folded[0]);
+  } else if (folded.length > 1) {
+    kept.push({
+      key: OTHER_CATEGORIES_KEY,
+      name: formatOtherCategories?.(folded.length) ?? label,
+      color: OTHER_CATEGORIES_COLOR,
+      amount: sum(folded),
+    });
+  }
+
+  return kept;
+}
+
 export function buildSpendingFlow({
   incomes,
   categories,
   details = {},
   labels,
   maxChildren = 6,
+  minChildShare = 0.05,
+  maxCategories = 8,
+  minCategoryShare = 0.02,
+  formatOtherCategories,
+  formatOtherLines,
 }: SpendingFlowInput): SpendingFlow {
   const sources = keep(incomes);
-  const postes = keep(categories);
   const income = sum(sources);
+  const postes = groupSmallCategories(
+    keep(categories),
+    income,
+    maxCategories,
+    minCategoryShare,
+    labels.otherCategories,
+    formatOtherCategories,
+  );
   const allocated = sum(postes);
   const rest = round(income - allocated);
 
@@ -197,7 +286,9 @@ export function buildSpendingFlow({
       details[poste.key] ?? [],
       poste,
       maxChildren,
+      minChildShare,
       labels.other,
+      formatOtherLines,
     )) {
       const childIndex = addNode({ ...child, value: child.amount, depth: 3 });
       links.push({
@@ -215,6 +306,7 @@ export function buildSpendingFlow({
     income,
     allocated,
     rest: Math.max(0, rest),
+    deficit: Math.max(0, round(allocated - income)),
     hasData: sources.length > 0 && postes.length > 0,
   };
 }

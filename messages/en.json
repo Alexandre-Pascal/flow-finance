@@ -174,7 +174,10 @@
     "savings": "Savings",
     "rest": "Left over",
     "other": "Other",
+    "otherCategories": "{count, plural, one {# other bucket} other {# other buckets}}",
+    "otherLines": "{count, plural, one {# other line} other {# other lines}}",
     "summary": "{income} in · {allocated} allocated · {rest} unspent. Transfers to your savings accounts and PEA count as savings, not spending.",
+    "summaryDeficit": "{income} in · {allocated} allocated, i.e. {deficit} more than came in. Transfers to your savings accounts and PEA count as savings, not spending.",
     "empty": "Not enough data yet to draw the breakdown."
   },
   "subscriptions": {
