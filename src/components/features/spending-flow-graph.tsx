@@ -12,7 +12,21 @@
 
 import { ResponsiveContainer, Sankey, Tooltip } from "recharts";
 import { formatCurrency } from "@/lib/format";
-import type { SpendingFlow, SpendingFlowNode } from "@/lib/finance/spending-flow";
+import type {
+  FlowEntry,
+  SpendingFlow,
+  SpendingFlowNode,
+} from "@/lib/finance/spending-flow";
+
+/** Ce que recharts passe au tooltip : un nœud, ou un lien et ses deux bouts. */
+interface TooltipDatum {
+  name?: string;
+  value?: number;
+  items?: FlowEntry[];
+  source?: { name?: string };
+  target?: { name?: string };
+  payload?: TooltipDatum;
+}
 
 export interface SpendingFlowGraphProps {
   flow: SpendingFlow;
@@ -145,20 +159,7 @@ export default function SpendingFlowGraph({
             }
 
             // Le Sankey passe soit un nœud, soit un lien (avec ses deux bouts).
-            const item = payload[0]?.payload as
-              | {
-                  name?: string;
-                  value?: number;
-                  source?: { name?: string };
-                  target?: { name?: string };
-                  payload?: {
-                    name?: string;
-                    value?: number;
-                    source?: { name?: string };
-                    target?: { name?: string };
-                  };
-                }
-              | undefined;
+            const item = payload[0]?.payload as TooltipDatum | undefined;
             const data = item?.payload ?? item;
             const value =
               typeof data?.value === "number"
@@ -178,12 +179,31 @@ export default function SpendingFlowGraph({
               return null;
             }
 
+            const items = data?.items ?? [];
+
             return (
-              <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-sm">
+              <div className="max-w-64 rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-sm">
                 <p className="font-medium text-popover-foreground">{label}</p>
                 <p className="tabular-nums text-muted-foreground">
                   {formatCurrency(value, locale)}
                 </p>
+                {items.length > 0 ? (
+                  <ul className="mt-1.5 space-y-0.5 border-t border-border pt-1.5">
+                    {items.map((line) => (
+                      <li
+                        key={line.key}
+                        className="flex items-baseline justify-between gap-3"
+                      >
+                        <span className="truncate text-popover-foreground">
+                          {line.name}
+                        </span>
+                        <span className="shrink-0 tabular-nums text-muted-foreground">
+                          {formatCurrency(line.amount, locale)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             );
           }}

@@ -255,6 +255,65 @@ describe("spending flow", () => {
     expect(nodeByKey(flow, BUDGET_KEY)?.value).toBe(1200);
   });
 
+  it("carries what each group swallowed, for the hover detail", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [
+        entry("housing", 600),
+        entry("fuel", 15),
+        entry("bar", 12),
+        entry("transport", 3),
+      ],
+      details: {
+        housing: [
+          entry("rent", 500),
+          entry("power", 40),
+          entry("water", 30),
+          entry("wifi", 30),
+        ],
+      },
+      labels,
+      maxChildren: 2,
+    });
+
+    expect(
+      nodeByKey(flow, OTHER_CATEGORIES_KEY)?.items?.map((line) => [
+        line.name,
+        line.amount,
+      ]),
+    ).toEqual([
+      ["fuel", 15],
+      ["bar", 12],
+      ["transport", 3],
+    ]);
+
+    // Les deux lignes repliées expliquent exactement le solde affiché.
+    const other = nodeByKey(flow, "housing::other");
+    expect(other?.value).toBe(60);
+    expect(other?.items?.map((line) => line.name)).toEqual(["water", "wifi"]);
+  });
+
+  it("promises no hover detail when the group also covers an unexplained gap", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      // Le détail connu ne couvre que 323 des 400 € du poste.
+      categories: [entry("subs", 400)],
+      details: {
+        subs: [
+          entry("rent", 300),
+          entry("gym", 10),
+          entry("music", 8),
+          entry("news", 5),
+        ],
+      },
+      labels,
+    });
+
+    const other = nodeByKey(flow, "subs::other");
+    expect(other?.value).toBe(100);
+    expect(other?.items).toBeUndefined();
+  });
+
   it("reports no data when an end of the flow is missing", () => {
     expect(
       buildSpendingFlow({ incomes: [], categories: [entry("a", 10)], labels })

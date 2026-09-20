@@ -12,6 +12,8 @@ export interface FlowEntry {
   name: string;
   color: string;
   amount: number;
+  /** Lignes repliées quand l'entrée est un regroupement. */
+  items?: FlowEntry[];
 }
 
 export const BUDGET_KEY = "__budget__";
@@ -31,6 +33,11 @@ export interface SpendingFlowNode {
   value: number;
   /** 0 entrées · 1 budget · 2 postes · 3 détail d'un poste. */
   depth: 0 | 1 | 2 | 3;
+  /**
+   * Lignes repliées dans ce nœud, pour les montrer au survol. Présent
+   * uniquement quand elles expliquent tout son montant.
+   */
+  items?: FlowEntry[];
 }
 
 export interface SpendingFlowLink {
@@ -148,6 +155,9 @@ function fitChildren(
 
   const left = round(parent.amount - used);
   if (left > MIN_VALUE) {
+    // Le solde peut aussi contenir ce que le détail n'explique pas : on ne
+    // promet la liste au survol que si elle en rend compte au centime près.
+    const explained = Math.abs(round(sum(hidden) - left)) <= MIN_VALUE;
     fitted.push({
       key: `${parent.key}::other`,
       name:
@@ -156,6 +166,7 @@ function fitChildren(
           : otherLabel,
       color: parent.color,
       amount: left,
+      items: hidden.length > 0 && explained ? hidden : undefined,
     });
   }
 
@@ -195,6 +206,7 @@ function groupSmallCategories(
       name: formatOtherCategories?.(folded.length) ?? label,
       color: OTHER_CATEGORIES_COLOR,
       amount: sum(folded),
+      items: folded,
     });
   }
 
