@@ -627,12 +627,9 @@ function AccountsRecap({
       <p className="text-sm font-medium text-foreground">{t("accountsTitle")}</p>
       <ul className="space-y-2">
         {accounts.map((view) => {
-          const ratio =
-            view.balance > 0
-              ? Math.min(1, view.allocated / view.balance)
-              : view.allocated > 0
-                ? 1
-                : 0;
+          // Le sur-affecté sature la barre : les parts se répartissent alors
+          // sur ce qui est réclamé, et l'anneau rouge signale le dépassement.
+          const base = Math.max(view.balance, view.allocated, 0.01);
 
           return (
             <li
@@ -665,17 +662,46 @@ function AccountsRecap({
                 </span>
               </div>
 
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full transition-all duration-200"
-                  style={{
-                    width: `${Math.round(ratio * 100)}%`,
-                    backgroundColor: view.isOverAllocated
-                      ? "var(--destructive)"
-                      : view.account.color,
-                  }}
-                />
+              <div
+                className={cn(
+                  "flex h-2 w-full overflow-hidden rounded-full bg-muted",
+                  view.isOverAllocated && "ring-1 ring-destructive/60",
+                )}
+                aria-hidden
+              >
+                {view.goals.map((share) => (
+                  <div
+                    key={share.goalId}
+                    className="h-full transition-all duration-200"
+                    style={{
+                      width: `${(share.amount / base) * 100}%`,
+                      backgroundColor: share.color,
+                    }}
+                    title={`${share.goalName} · ${formatCurrency(share.amount, locale)}`}
+                  />
+                ))}
               </div>
+
+              {view.goals.length > 0 ? (
+                <ul className="flex flex-wrap gap-x-3 gap-y-1">
+                  {view.goals.map((share) => (
+                    <li
+                      key={share.goalId}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                    >
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: share.color }}
+                        aria-hidden
+                      />
+                      <span className="text-foreground">{share.goalName}</span>
+                      <span className="tabular-nums">
+                        {formatCurrency(share.amount, locale)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
 
               <p
                 className={cn(
