@@ -164,6 +164,19 @@
     "uncategorized": "Non classé",
     "empty": "Aucune dépense à analyser. Connectez votre banque pour commencer."
   },
+  "spendingFlow": {
+    "title": "Répartition du budget",
+    "description": "Des entrées jusqu'aux postes de dépense, sur la période choisie.",
+    "period": "{count, plural, one {# mois} other {# mois}}",
+    "salary": "Salaire",
+    "otherIncome": "Autres entrées",
+    "budget": "Budget",
+    "savings": "Épargne",
+    "rest": "Reste disponible",
+    "other": "Autres",
+    "summary": "{income} d'entrées · {allocated} répartis · {rest} non dépensés. Les virements vers vos livrets et votre PEA comptent comme épargne, pas comme dépense.",
+    "empty": "Pas encore assez de données pour tracer la répartition."
+  },
   "subscriptions": {
     "title": "Charges fixes & abonnements",
     "description": "Loyer, EDF, assurances, Free Mobile, Netflix… Identifiez vos dépenses récurrentes, même si le montant varie.",

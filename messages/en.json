@@ -164,6 +164,19 @@
     "uncategorized": "Uncategorized",
     "empty": "No spending to analyze yet. Connect your bank to get started."
   },
+  "spendingFlow": {
+    "title": "Budget breakdown",
+    "description": "From income to every bucket, over the chosen period.",
+    "period": "{count, plural, one {# month} other {# months}}",
+    "salary": "Salary",
+    "otherIncome": "Other income",
+    "budget": "Budget",
+    "savings": "Savings",
+    "rest": "Left over",
+    "other": "Other",
+    "summary": "{income} in · {allocated} allocated · {rest} unspent. Transfers to your savings accounts and PEA count as savings, not spending.",
+    "empty": "Not enough data yet to draw the breakdown."
+  },
   "subscriptions": {
     "title": "Fixed costs & subscriptions",
     "description": "Rent, utilities, insurance, mobile… Track recurring spending even when the amount varies.",
