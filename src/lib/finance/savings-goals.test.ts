@@ -70,6 +70,11 @@ function fullAllocation(goalId: string, accountId: string) {
   return allocation(goalId, accountId, 0, "full");
 }
 
+/** Livret pris pour ce qui reste après les autres objectifs. */
+function remainderAllocation(goalId: string, accountId: string) {
+  return allocation(goalId, accountId, 0, "remainder");
+}
+
 const livretA = account("sav-1", "Livret A");
 const lep = account("sav-2", "LEP");
 
@@ -204,6 +209,76 @@ describe("savings goals overview", () => {
     expect(overview.accounts[0].allocated).toBe(10200);
     expect(overview.accounts[0].isOverAllocated).toBe(true);
     expect(overview.hasOverAllocation).toBe(true);
+  });
+
+  it("gives the rest of an account to a goal, next to a fixed share", () => {
+    const overview = buildSavingsGoalsOverview(
+      [goal("g1", "Matelas de sécu", 10000), goal("g2", "Apport", 40000, null, 1)],
+      [allocation("g1", livretA.id, 10000), remainderAllocation("g2", livretA.id)],
+      [{ account: livretA, balance: 19000 }],
+    );
+
+    const [matelas, apport] = overview.goals;
+    expect(matelas.allocated).toBe(10000);
+    expect(apport.allocated).toBe(9000);
+    expect(apport.allocations[0].mode).toBe("remainder");
+
+    const [view] = overview.accounts;
+    expect(view.allocated).toBe(19000);
+    expect(view.unallocated).toBe(0);
+    expect(view.hasRemainderClaim).toBe(true);
+    expect(view.isOverAllocated).toBe(false);
+    expect(overview.hasOverAllocation).toBe(false);
+  });
+
+  it("lets the rest grow with the balance", () => {
+    const goals = [
+      goal("g1", "Matelas de sécu", 10000),
+      goal("g2", "Apport", 40000, null, 1),
+    ];
+    const allocations = [
+      allocation("g1", livretA.id, 10000),
+      remainderAllocation("g2", livretA.id),
+    ];
+
+    expect(
+      buildSavingsGoalsOverview(goals, allocations, [
+        { account: livretA, balance: 20000 },
+      ]).goals[1].allocated,
+    ).toBe(10000);
+  });
+
+  it("splits the rest between goals that both claim it", () => {
+    const overview = buildSavingsGoalsOverview(
+      [
+        goal("g1", "Matelas de sécu", 10000),
+        goal("g2", "Apport", 40000, null, 1),
+        goal("g3", "Voyage", 5000, null, 2),
+      ],
+      [
+        allocation("g1", livretA.id, 10000),
+        remainderAllocation("g2", livretA.id),
+        remainderAllocation("g3", livretA.id),
+      ],
+      [{ account: livretA, balance: 19000 }],
+    );
+
+    const [, apport, voyage] = overview.goals;
+    expect(apport.allocated + voyage.allocated).toBe(9000);
+    expect(apport.allocated).toBe(4500);
+    expect(overview.accounts[0].unallocated).toBe(0);
+    expect(overview.hasOverAllocation).toBe(false);
+  });
+
+  it("leaves nothing to the rest when fixed shares already exceed the balance", () => {
+    const overview = buildSavingsGoalsOverview(
+      [goal("g1", "Matelas de sécu", 20000), goal("g2", "Apport", 40000, null, 1)],
+      [allocation("g1", livretA.id, 20000), remainderAllocation("g2", livretA.id)],
+      [{ account: livretA, balance: 19000 }],
+    );
+
+    expect(overview.goals[1].allocated).toBe(0);
+    expect(overview.accounts[0].isOverAllocated).toBe(true);
   });
 
   it("counts no month left once the deadline has passed", () => {

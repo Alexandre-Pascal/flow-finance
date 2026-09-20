@@ -196,8 +196,9 @@ export async function deleteSavingsGoalAction(
 }
 
 /**
- * Fixe la part d'un livret affectée à un objectif : un montant fixe, ou la
- * totalité du livret (« full », qui suit ensuite le solde réel).
+ * Fixe la part d'un livret affectée à un objectif : un montant fixe, ce qui
+ * reste du livret (« remainder ») ou sa totalité (« full ») — ces deux modes
+ * suivent ensuite le solde réel.
  * Un montant nul (ou négatif) en mode « fixed » supprime l'affectation.
  */
 export async function setSavingsGoalAllocationAction(
@@ -213,8 +214,9 @@ export async function setSavingsGoalAllocationAction(
     formData.get("savingsAccountId") ?? "",
   ).trim();
   const amount = parseAmount(String(formData.get("amount") ?? ""));
+  const modeRaw = String(formData.get("mode") ?? "fixed");
   const mode: SavingsGoalAllocationMode =
-    String(formData.get("mode") ?? "fixed") === "full" ? "full" : "fixed";
+    modeRaw === "full" || modeRaw === "remainder" ? modeRaw : "fixed";
 
   if (!goalId || !savingsAccountId) {
     return { error: "invalid" };
@@ -281,8 +283,8 @@ export async function setSavingsGoalAllocationAction(
       user_id: user.id,
       goal_id: goalId,
       savings_account_id: savingsAccountId,
-      // En mode « tout le livret », le montant stocké n'est jamais lu.
-      amount: mode === "full" ? 0 : amount,
+      // Hors montant fixe, la valeur stockée n'est jamais lue.
+      amount: mode === "fixed" ? amount : 0,
       allocation_mode: mode,
     },
     { onConflict: "goal_id,savings_account_id" },

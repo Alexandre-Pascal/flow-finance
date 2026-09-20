@@ -124,8 +124,12 @@ export interface SavingsGoal {
   updated_at: string;
 }
 
-/** « fixed » : un montant fixe du livret. « full » : tout le solde, qui suit ses variations. */
-export type SavingsGoalAllocationMode = "fixed" | "full";
+/**
+ * « fixed » : un montant fixe du livret.
+ * « remainder » : ce que les autres objectifs n'ont pas pris sur ce livret.
+ * « full » : tout le solde. Les deux derniers suivent les variations du solde.
+ */
+export type SavingsGoalAllocationMode = "fixed" | "remainder" | "full";
 
 /** Part d'un livret affectée à un objectif. */
 export interface SavingsGoalAllocation {

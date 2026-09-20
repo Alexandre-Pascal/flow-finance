@@ -1,10 +1,10 @@
 /**
  * @file savings-goals.ts
  * @description Objectifs d'épargne financés par des parts de livrets. Une
- * affectation vaut soit un montant fixe, soit la totalité du livret — dans ce
- * cas l'objectif suit le solde réel et se complète tout seul. Un livret peut
- * porter plusieurs objectifs, et le solde non affecté reste visible ; rien
- * n'est plafonné automatiquement, on signale les livrets sur-affectés.
+ * affectation vaut un montant fixe, le reste du livret, ou sa totalité — les
+ * deux derniers suivent le solde réel et se complètent tout seuls. Un livret
+ * peut porter plusieurs objectifs et le solde non affecté reste visible ; les
+ * montants fixes ne sont jamais rognés, on signale les livrets sur-affectés.
  */
 
 import type {
@@ -54,6 +54,8 @@ export interface GoalAccountView {
   isOverAllocated: boolean;
   /** Un objectif réserve la totalité du livret. */
   isReserved: boolean;
+  /** Un objectif récupère ce qui reste du livret. */
+  hasRemainderClaim: boolean;
   goals: Array<{
     goalId: string;
     goalName: string;
@@ -135,17 +137,14 @@ export function buildSavingsGoalsOverview(
   const known = allocations.filter(
     (allocation) =>
       accountById.has(allocation.savings_account_id) &&
-      (allocation.allocation_mode === "full" || allocation.amount > 0),
+      (allocation.allocation_mode !== "fixed" || allocation.amount > 0),
   );
 
-  /** Un livret réservé apporte son solde du moment, pas un montant figé. */
-  const effectiveAmount = (allocation: SavingsGoalAllocation): number => {
-    if (allocation.allocation_mode !== "full") {
-      return allocation.amount;
-    }
-    const funding = accountById.get(allocation.savings_account_id);
-    return Math.max(0, funding?.balance ?? 0);
-  };
+  const sortedGoals = [...goals].sort(
+    (a, b) => a.position - b.position || a.name.localeCompare(b.name),
+  );
+  const goalById = new Map(sortedGoals.map((goal) => [goal.id, goal]));
+  const goalRank = new Map(sortedGoals.map((goal, index) => [goal.id, index]));
 
   const byGoal = new Map<string, SavingsGoalAllocation[]>();
   const byAccount = new Map<string, SavingsGoalAllocation[]>();
@@ -159,10 +158,44 @@ export function buildSavingsGoalsOverview(
     byAccount.set(allocation.savings_account_id, accountRows);
   }
 
-  const sortedGoals = [...goals].sort(
-    (a, b) => a.position - b.position || a.name.localeCompare(b.name),
-  );
-  const goalById = new Map(sortedGoals.map((goal) => [goal.id, goal]));
+  // Le montant compté dépend du livret entier : « tout » prend le solde, « le
+  // reste » prend ce que les autres objectifs n'ont pas pris. On résout donc
+  // livret par livret avant de parcourir les objectifs.
+  const countedById = new Map<string, number>();
+  for (const [accountId, rows] of byAccount) {
+    const balance = Math.max(0, accountById.get(accountId)?.balance ?? 0);
+    const remainderRows: SavingsGoalAllocation[] = [];
+    let claimed = 0;
+
+    for (const allocation of rows) {
+      if (allocation.allocation_mode === "remainder") {
+        remainderRows.push(allocation);
+        continue;
+      }
+      const counted =
+        allocation.allocation_mode === "full" ? balance : allocation.amount;
+      countedById.set(allocation.id, counted);
+      claimed += counted;
+    }
+
+    const left = Math.max(0, round(balance - claimed));
+    // Plusieurs objectifs sur « le reste » du même livret : ils le partagent à
+    // parts égales, les centimes restants allant au premier de la liste.
+    const share = remainderRows.length > 0 ? Math.floor((left * 100) / remainderRows.length) / 100 : 0;
+    const ordered = [...remainderRows].sort(
+      (a, b) =>
+        (goalRank.get(a.goal_id) ?? 0) - (goalRank.get(b.goal_id) ?? 0),
+    );
+    ordered.forEach((allocation, index) => {
+      countedById.set(
+        allocation.id,
+        index === 0 ? round(left - share * (ordered.length - 1)) : share,
+      );
+    });
+  }
+
+  const effectiveAmount = (allocation: SavingsGoalAllocation): number =>
+    countedById.get(allocation.id) ?? 0;
 
   const goalViews: SavingsGoalView[] = sortedGoals.map((goal) => {
     const rows = byGoal.get(goal.id) ?? [];
@@ -214,8 +247,13 @@ export function buildSavingsGoalsOverview(
       balance: funding.balance,
       allocated,
       unallocated: round(funding.balance - allocated),
-      isOverAllocated: allocated > funding.balance,
-      isReserved: rows.some((allocation) => allocation.allocation_mode === "full"),
+      isOverAllocated: round(allocated) > round(funding.balance),
+      isReserved: rows.some(
+        (allocation) => allocation.allocation_mode === "full",
+      ),
+      hasRemainderClaim: rows.some(
+        (allocation) => allocation.allocation_mode === "remainder",
+      ),
       goals: rows
         .map((allocation) => {
           const goal = goalById.get(allocation.goal_id);

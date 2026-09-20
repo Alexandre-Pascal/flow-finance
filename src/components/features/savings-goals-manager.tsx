@@ -261,10 +261,10 @@ function AllocationEditor({
           const draft = drafts[view.account.id] ?? "";
           const mode = modes[view.account.id] ?? "fixed";
           const unchanged =
-            mode === "full"
-              ? row?.mode === "full"
-              : row?.mode !== "full" &&
-                draft.trim() === (fixedHere ? String(fixedHere) : "");
+            mode === "fixed"
+              ? (row?.mode ?? "fixed") === "fixed" &&
+                draft.trim() === (fixedHere ? String(fixedHere) : "")
+              : row?.mode === mode;
 
           return (
             <li
@@ -298,6 +298,7 @@ function AllocationEditor({
                   {(
                     [
                       ["fixed", "allocationModeFixed"],
+                      ["remainder", "allocationModeRemainder"],
                       ["full", "allocationModeFull"],
                     ] as const
                   ).map(([value, labelKey]) => (
@@ -322,11 +323,15 @@ function AllocationEditor({
                   ))}
                 </div>
 
-                {mode === "full" ? (
+                {mode !== "fixed" ? (
                   <span className="flex-1 text-xs tabular-nums text-muted-foreground">
-                    {t("allocationFullValue", {
-                      amount: formatCurrency(view.balance, locale),
-                    })}
+                    {mode === "full"
+                      ? t("allocationFullValue", {
+                          amount: formatCurrency(view.balance, locale),
+                        })
+                      : t("allocationRemainderValue", {
+                          amount: formatCurrency(Math.max(0, available), locale),
+                        })}
                   </span>
                 ) : (
                   <Input
@@ -535,11 +540,13 @@ function GoalCard({
                 aria-hidden
               />
               <span className="text-foreground">{allocation.accountName}</span>
-              {allocation.mode === "full" ? (
+              {allocation.mode === "fixed" ? null : (
                 <span className="rounded-full bg-muted px-1.5 text-[0.65rem] uppercase tracking-wide">
-                  {t("allocationFullBadge")}
+                  {allocation.mode === "full"
+                    ? t("allocationFullBadge")
+                    : t("allocationRemainderBadge")}
                 </span>
-              ) : null}
+              )}
               <span className="tabular-nums">
                 {formatCurrency(allocation.amount, locale)}
               </span>
@@ -642,9 +649,11 @@ function AccountsRecap({
                   <span className="truncate text-sm font-medium text-foreground">
                     {view.account.name}
                   </span>
-                  {view.isReserved ? (
+                  {view.isReserved || view.hasRemainderClaim ? (
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-muted-foreground">
-                      {t("accountReserved")}
+                      {view.isReserved
+                        ? t("accountReserved")
+                        : t("accountRemainder")}
                     </span>
                   ) : null}
                 </div>
