@@ -42,6 +42,7 @@ export interface SpendingFlowGraphProps {
 }
 
 const NODE_WIDTH = 10;
+const NODE_PADDING = 30;
 const LABEL_GAP = 8;
 const LABEL_HEIGHT = 22;
 /** Couloir réservé aux libellés de la dernière colonne. */
@@ -58,6 +59,52 @@ interface NodeShapeProps {
   locale: string;
   maxDepth: number;
   chartWidth: number;
+  /** Décalage vertical par colonne, pour la centrer. */
+  offsets: number[];
+}
+
+/**
+ * recharts empile chaque colonne depuis le haut : la plus remplie occupe
+ * toute la hauteur, les autres laissent un vide sous elles. On recalcule sa
+ * mise à l'échelle pour décaler chaque colonne de la moitié de ce vide — le
+ * même décalage s'applique aux nœuds et aux deux bouts de chaque lien, donc
+ * rien ne se détache.
+ */
+function centeringOffsets(flow: SpendingFlow, plotHeight: number): number[] {
+  const maxDepth = flow.nodes.reduce(
+    (deepest, node) => Math.max(deepest, node.depth),
+    0,
+  );
+  const columns: Array<{ count: number; total: number }> = [];
+
+  for (const node of flow.nodes) {
+    const column = node.isLeaf ? maxDepth : node.depth;
+    const current = columns[column] ?? { count: 0, total: 0 };
+    columns[column] = {
+      count: current.count + 1,
+      total: current.total + node.value,
+    };
+  }
+
+  const filled = columns.filter((column) => column && column.total > 0);
+  if (filled.length === 0) {
+    return [];
+  }
+
+  const ratio = Math.min(
+    ...filled.map(
+      (column) =>
+        (plotHeight - (column.count - 1) * NODE_PADDING) / column.total,
+    ),
+  );
+
+  return Array.from(columns, (column) => {
+    if (!column) {
+      return 0;
+    }
+    const used = column.total * ratio + (column.count - 1) * NODE_PADDING;
+    return Math.max(0, (plotHeight - used) / 2);
+  });
 }
 
 /** Barre du nœud plus son libellé, avec halo pour rester lisible sur les liens. */
@@ -70,6 +117,7 @@ function FlowNodeShape({
   locale,
   maxDepth,
   chartWidth,
+  offsets,
 }: NodeShapeProps) {
   const isLast = payload.depth === maxDepth;
   // Largeur d'un couloir intermédiaire : l'écart entre deux colonnes, moins la
@@ -79,12 +127,13 @@ function FlowNodeShape({
       ? (chartWidth - MARGIN.left - MARGIN.right - NODE_WIDTH) / maxDepth
       : 0;
   const lane = isLast ? MARGIN.right : columnWidth - NODE_WIDTH;
+  const top = y + (offsets[payload.depth] ?? 0);
 
   return (
     <g>
       <rect
         x={x}
-        y={y}
+        y={top}
         width={width}
         height={Math.max(height, 1)}
         rx={2}
@@ -97,7 +146,7 @@ function FlowNodeShape({
       */}
       <foreignObject
         x={x + width + LABEL_GAP}
-        y={y + height / 2 - LABEL_HEIGHT / 2}
+        y={top + height / 2 - LABEL_HEIGHT / 2}
         width={Math.max(0, lane - LABEL_GAP * 2)}
         height={LABEL_HEIGHT}
       >
@@ -122,7 +171,12 @@ interface LinkShapeProps {
   sourceControlX: number;
   targetControlX: number;
   linkWidth: number;
-  payload: { color?: string };
+  payload: {
+    color?: string;
+    source?: { depth?: number };
+    target?: { depth?: number };
+  };
+  offsets: number[];
 }
 
 function FlowLinkShape({
@@ -134,10 +188,15 @@ function FlowLinkShape({
   targetControlX,
   linkWidth,
   payload,
+  offsets,
 }: LinkShapeProps) {
+  // Chaque bout suit le décalage de sa propre colonne.
+  const from = sourceY + (offsets[payload.source?.depth ?? 0] ?? 0);
+  const to = targetY + (offsets[payload.target?.depth ?? 0] ?? 0);
+
   return (
     <path
-      d={`M${sourceX},${sourceY}C${sourceControlX},${sourceY} ${targetControlX},${targetY} ${targetX},${targetY}`}
+      d={`M${sourceX},${from}C${sourceControlX},${from} ${targetControlX},${to} ${targetX},${to}`}
       fill="none"
       stroke={payload.color ?? "var(--muted-foreground)"}
       strokeWidth={Math.max(linkWidth, 1)}
@@ -156,6 +215,10 @@ export default function SpendingFlowGraph({
     (deepest, node) => Math.max(deepest, node.depth),
     0,
   );
+  const offsets = centeringOffsets(
+    flow,
+    height - MARGIN.top - MARGIN.bottom,
+  );
 
   return (
     <Sankey
@@ -163,7 +226,7 @@ export default function SpendingFlowGraph({
       height={height}
       data={{ nodes: flow.nodes, links: flow.links }}
       nodeWidth={NODE_WIDTH}
-      nodePadding={30}
+      nodePadding={NODE_PADDING}
       // Tout ce qui ne se subdivise pas file jusqu'au bord droit.
       align="justify"
       // Sans ces deux réglages, recharts replace chaque nœud à la moyenne de
@@ -178,11 +241,12 @@ export default function SpendingFlowGraph({
           locale={locale}
           maxDepth={maxDepth}
           chartWidth={width}
+          offsets={offsets}
         />
       }
       link={
         // @ts-expect-error — recharts injecte la géométrie du lien.
-        <FlowLinkShape />
+        <FlowLinkShape offsets={offsets} />
       }
     >
       <Tooltip
