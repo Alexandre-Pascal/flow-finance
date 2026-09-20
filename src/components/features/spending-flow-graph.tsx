@@ -59,52 +59,139 @@ interface NodeShapeProps {
   locale: string;
   maxDepth: number;
   chartWidth: number;
-  /** Décalage vertical par colonne, pour la centrer. */
-  offsets: number[];
+  /** Décalage vertical par nœud, pour le centrer sur ses enfants. */
+  shifts: Map<string, number>;
 }
 
 /**
- * recharts empile chaque colonne depuis le haut : la plus remplie occupe
- * toute la hauteur, les autres laissent un vide sous elles. On recalcule sa
- * mise à l'échelle pour décaler chaque colonne de la moitié de ce vide — le
- * même décalage s'applique aux nœuds et aux deux bouts de chaque lien, donc
- * rien ne se détache.
+ * recharts empile chaque colonne depuis le haut : la colonne la plus remplie
+ * tient toute la hauteur, les autres laissent un vide sous elles. Centrer
+ * chaque colonne sur elle-même décalerait un parent par rapport à ses lignes,
+ * et les rubans se remettraient à se croiser. On centre donc chaque nœud sur
+ * l'étendue de ses enfants, en remontant depuis la droite : le budget finit
+ * centré sur tout le graphique, les entrées sur le budget, et les rubans
+ * restent horizontaux.
+ *
+ * Le décalage obtenu s'applique au nœud et aux bouts de liens qui le touchent.
  */
-function centeringOffsets(flow: SpendingFlow, plotHeight: number): number[] {
+function verticalShifts(
+  flow: SpendingFlow,
+  plotHeight: number,
+): Map<string, number> {
   const maxDepth = flow.nodes.reduce(
     (deepest, node) => Math.max(deepest, node.depth),
     0,
   );
-  const columns: Array<{ count: number; total: number }> = [];
 
+  const columns: SpendingFlowNode[][] = [];
   for (const node of flow.nodes) {
-    const column = node.isLeaf ? maxDepth : node.depth;
-    const current = columns[column] ?? { count: 0, total: 0 };
-    columns[column] = {
-      count: current.count + 1,
-      total: current.total + node.value,
-    };
+    const index = node.isLeaf ? maxDepth : node.depth;
+    columns[index] = [...(columns[index] ?? []), node];
   }
 
-  const filled = columns.filter((column) => column && column.total > 0);
+  const filled = columns.filter((column) => column?.length);
   if (filled.length === 0) {
-    return [];
+    return new Map();
   }
 
+  // Même mise à l'échelle que recharts : la colonne la plus serrée commande.
   const ratio = Math.min(
-    ...filled.map(
-      (column) =>
-        (plotHeight - (column.count - 1) * NODE_PADDING) / column.total,
-    ),
+    ...filled.map((column) => {
+      const total = column.reduce((sum, node) => sum + node.value, 0);
+      return total > 0
+        ? (plotHeight - (column.length - 1) * NODE_PADDING) / total
+        : Number.POSITIVE_INFINITY;
+    }),
   );
 
-  return Array.from(columns, (column) => {
-    if (!column) {
-      return 0;
+  const heights = new Map<string, number>();
+  const base = new Map<string, number>();
+  for (const column of filled) {
+    let cursor = 0;
+    for (const node of column) {
+      const nodeHeight = node.value * ratio;
+      heights.set(node.key, nodeHeight);
+      base.set(node.key, cursor);
+      cursor += nodeHeight + NODE_PADDING;
     }
-    const used = column.total * ratio + (column.count - 1) * NODE_PADDING;
-    return Math.max(0, (plotHeight - used) / 2);
-  });
+  }
+
+  // Dans une barre, les liens entrants s'empilent dans l'ordre où ils arrivent :
+  // on note la bande de chacun pour pouvoir y aligner son nœud d'origine.
+  const bandStart = new Map<number, number>();
+  const filling = new Map<string, number>();
+  const outgoingOf = new Map<string, number[]>();
+  for (const [index, link] of flow.links.entries()) {
+    const parent = flow.nodes[link.source]?.key;
+    const child = flow.nodes[link.target]?.key;
+    if (!parent || !child) {
+      continue;
+    }
+    const used = filling.get(child) ?? 0;
+    bandStart.set(index, used * ratio);
+    filling.set(child, used + link.value);
+    outgoingOf.set(parent, [...(outgoingOf.get(parent) ?? []), index]);
+  }
+
+  const placed = new Map<string, number>();
+  for (const node of columns[maxDepth] ?? []) {
+    placed.set(node.key, base.get(node.key) ?? 0);
+  }
+
+  for (let depth = maxDepth - 1; depth >= 0; depth -= 1) {
+    const column = columns[depth];
+    if (!column?.length) {
+      continue;
+    }
+
+    const wanted = column.map((node) => {
+      const nodeHeight = heights.get(node.key) ?? 0;
+      const bands = (outgoingOf.get(node.key) ?? [])
+        .map((index) => {
+          const link = flow.links[index];
+          const childY = placed.get(flow.nodes[link.target]?.key ?? "");
+          if (childY === undefined) {
+            return null;
+          }
+          const start = childY + (bandStart.get(index) ?? 0);
+          return { start, end: start + link.value * ratio };
+        })
+        .filter((band) => band !== null);
+
+      if (bands.length === 0) {
+        return base.get(node.key) ?? 0;
+      }
+
+      const top = Math.min(...bands.map((band) => band.start));
+      const bottom = Math.max(...bands.map((band) => band.end));
+      return (top + bottom) / 2 - nodeHeight / 2;
+    });
+
+    // L'ordre de la colonne ne bouge pas : on ne fait qu'écarter ce qui se
+    // chevauche, vers le bas puis, si ça déborde, vers le haut.
+    let cursor = 0;
+    for (const [index, node] of column.entries()) {
+      wanted[index] = Math.max(wanted[index], cursor);
+      cursor = wanted[index] + (heights.get(node.key) ?? 0) + NODE_PADDING;
+    }
+    let floor = plotHeight;
+    for (let index = column.length - 1; index >= 0; index -= 1) {
+      const nodeHeight = heights.get(column[index].key) ?? 0;
+      wanted[index] = Math.min(wanted[index], floor - nodeHeight);
+      floor = wanted[index] - NODE_PADDING;
+    }
+
+    column.forEach((node, index) => placed.set(node.key, wanted[index]));
+  }
+
+  const shifts = new Map<string, number>();
+  for (const node of flow.nodes) {
+    shifts.set(
+      node.key,
+      (placed.get(node.key) ?? 0) - (base.get(node.key) ?? 0),
+    );
+  }
+  return shifts;
 }
 
 /** Barre du nœud plus son libellé, avec halo pour rester lisible sur les liens. */
@@ -117,7 +204,7 @@ function FlowNodeShape({
   locale,
   maxDepth,
   chartWidth,
-  offsets,
+  shifts,
 }: NodeShapeProps) {
   const isLast = payload.depth === maxDepth;
   // Largeur d'un couloir intermédiaire : l'écart entre deux colonnes, moins la
@@ -127,7 +214,7 @@ function FlowNodeShape({
       ? (chartWidth - MARGIN.left - MARGIN.right - NODE_WIDTH) / maxDepth
       : 0;
   const lane = isLast ? MARGIN.right : columnWidth - NODE_WIDTH;
-  const top = y + (offsets[payload.depth] ?? 0);
+  const top = y + (shifts.get(payload.key) ?? 0);
 
   return (
     <g>
@@ -173,10 +260,10 @@ interface LinkShapeProps {
   linkWidth: number;
   payload: {
     color?: string;
-    source?: { depth?: number };
-    target?: { depth?: number };
+    source?: { key?: string };
+    target?: { key?: string };
   };
-  offsets: number[];
+  shifts: Map<string, number>;
 }
 
 function FlowLinkShape({
@@ -188,11 +275,11 @@ function FlowLinkShape({
   targetControlX,
   linkWidth,
   payload,
-  offsets,
+  shifts,
 }: LinkShapeProps) {
-  // Chaque bout suit le décalage de sa propre colonne.
-  const from = sourceY + (offsets[payload.source?.depth ?? 0] ?? 0);
-  const to = targetY + (offsets[payload.target?.depth ?? 0] ?? 0);
+  // Chaque bout suit le décalage de son propre nœud.
+  const from = sourceY + (shifts.get(payload.source?.key ?? "") ?? 0);
+  const to = targetY + (shifts.get(payload.target?.key ?? "") ?? 0);
 
   return (
     <path
@@ -215,10 +302,7 @@ export default function SpendingFlowGraph({
     (deepest, node) => Math.max(deepest, node.depth),
     0,
   );
-  const offsets = centeringOffsets(
-    flow,
-    height - MARGIN.top - MARGIN.bottom,
-  );
+  const shifts = verticalShifts(flow, height - MARGIN.top - MARGIN.bottom);
 
   return (
     <Sankey
@@ -241,12 +325,12 @@ export default function SpendingFlowGraph({
           locale={locale}
           maxDepth={maxDepth}
           chartWidth={width}
-          offsets={offsets}
+          shifts={shifts}
         />
       }
       link={
         // @ts-expect-error — recharts injecte la géométrie du lien.
-        <FlowLinkShape offsets={offsets} />
+        <FlowLinkShape shifts={shifts} />
       }
     >
       <Tooltip
