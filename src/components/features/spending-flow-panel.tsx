@@ -227,7 +227,7 @@ export function SpendingFlowPanel({
       const column = node.isLeaf ? maxDepth : node.depth;
       perColumn.set(column, (perColumn.get(column) ?? 0) + 1);
     }
-    return Math.max(360, Math.max(...perColumn.values(), 1) * 46);
+    return Math.max(360, Math.max(...perColumn.values(), 1) * 52);
   }, [flow.nodes]);
 
   return (

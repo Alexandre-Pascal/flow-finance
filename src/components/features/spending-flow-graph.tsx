@@ -43,33 +43,10 @@ export interface SpendingFlowGraphProps {
 
 const NODE_WIDTH = 10;
 const LABEL_GAP = 8;
-/** Largeur moyenne d'un caractère à 11px, pour tronquer sans mesurer le DOM. */
-const CHAR_WIDTH = 6.2;
+const LABEL_HEIGHT = 22;
 /** Couloir réservé aux libellés de la dernière colonne. */
 const LABEL_LANE = 280;
 const MARGIN = { top: 8, right: LABEL_LANE, bottom: 8, left: 8 };
-
-/**
- * Chaque libellé s'écrit dans le couloir à droite de son nœud : deux colonnes
- * ne peuvent donc pas empiéter l'une sur l'autre. Reste à tronquer ce qui
- * dépasse du couloir — le nom complet reste lisible au survol.
- */
-function fitLabel(
-  name: string,
-  amountText: string,
-  laneWidth: number,
-): string {
-  const room = laneWidth - amountText.length * CHAR_WIDTH - LABEL_GAP * 2;
-  const maxChars = Math.floor(room / CHAR_WIDTH);
-
-  if (maxChars >= name.length) {
-    return name;
-  }
-  if (maxChars <= 1) {
-    return "";
-  }
-  return `${name.slice(0, maxChars - 1).trimEnd()}…`;
-}
 
 interface NodeShapeProps {
   x: number;
@@ -102,8 +79,6 @@ function FlowNodeShape({
       ? (chartWidth - MARGIN.left - MARGIN.right - NODE_WIDTH) / maxDepth
       : 0;
   const lane = isLast ? MARGIN.right : columnWidth - NODE_WIDTH;
-  const amountText = formatCurrency(payload.value, locale);
-  const name = fitLabel(payload.name, amountText, lane);
 
   return (
     <g>
@@ -115,21 +90,26 @@ function FlowNodeShape({
         rx={2}
         fill={payload.color}
       />
-      <text
+      {/*
+        Le libellé passe par un foreignObject : la pastille opaque le détache
+        des rubans qu'il survole, et la troncature CSS tombe exactement à la
+        largeur du couloir, sans estimer la largeur du texte.
+      */}
+      <foreignObject
         x={x + width + LABEL_GAP}
-        y={y + height / 2}
-        textAnchor="start"
-        dominantBaseline="middle"
-        className="fill-foreground text-[11px] font-medium"
-        stroke="var(--background)"
-        strokeWidth={3}
-        paintOrder="stroke"
+        y={y + height / 2 - LABEL_HEIGHT / 2}
+        width={Math.max(0, lane - LABEL_GAP * 2)}
+        height={LABEL_HEIGHT}
       >
-        {name}
-        <tspan className="fill-muted-foreground" dx={name ? 6 : 0}>
-          {amountText}
-        </tspan>
-      </text>
+        <div className="flex h-full w-fit max-w-full items-center gap-1.5 rounded bg-background/95 px-1 text-[11px] leading-none">
+          <span className="min-w-0 truncate font-medium text-foreground">
+            {payload.name}
+          </span>
+          <span className="shrink-0 tabular-nums text-muted-foreground">
+            {formatCurrency(payload.value, locale)}
+          </span>
+        </div>
+      </foreignObject>
     </g>
   );
 }
@@ -183,7 +163,7 @@ export default function SpendingFlowGraph({
       height={height}
       data={{ nodes: flow.nodes, links: flow.links }}
       nodeWidth={NODE_WIDTH}
-      nodePadding={26}
+      nodePadding={30}
       // Tout ce qui ne se subdivise pas file jusqu'au bord droit.
       align="justify"
       margin={MARGIN}
