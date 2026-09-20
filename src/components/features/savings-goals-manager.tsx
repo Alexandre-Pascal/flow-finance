@@ -44,12 +44,21 @@ import {
 } from "@/lib/finance/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type {
-  GoalAccountView,
+  GoalSourceView,
   SavingsGoalsOverview,
   SavingsGoalView,
 } from "@/lib/finance/savings-goals";
 import { cn } from "@/lib/utils";
-import type { SavingsGoalAllocationMode } from "@/types/database";
+import type {
+  SavingsGoalAllocationMode,
+  SavingsGoalSourceKind,
+} from "@/types/database";
+
+/** Support visé par une affectation, côté client. */
+interface GoalFundingSourceRef {
+  id: string;
+  kind: SavingsGoalSourceKind;
+}
 
 interface SavingsGoalsManagerProps {
   overview: SavingsGoalsOverview;
@@ -185,19 +194,19 @@ function GoalFields({
 
 function AllocationEditor({
   goal,
-  accounts,
+  sources,
   isPending,
   locale,
   onAllocate,
   onClose,
 }: {
   goal: SavingsGoalView;
-  accounts: GoalAccountView[];
+  sources: GoalSourceView[];
   isPending: boolean;
   locale: string;
   onAllocate: (
     goalId: string,
-    accountId: string,
+    source: GoalFundingSourceRef,
     amount: string,
     mode: SavingsGoalAllocationMode,
   ) => void;
@@ -205,16 +214,16 @@ function AllocationEditor({
 }) {
   const t = useTranslations("goals");
   const current = useMemo(
-    () => new Map(goal.allocations.map((row) => [row.accountId, row])),
+    () => new Map(goal.allocations.map((row) => [row.sourceId, row])),
     [goal.allocations],
   );
   // Un livret réservé n'a pas de montant saisi : le champ repart vide.
   const [drafts, setDrafts] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      accounts.map((view) => {
-        const row = current.get(view.account.id);
+      sources.map((view) => {
+        const row = current.get(view.source.id);
         return [
-          view.account.id,
+          view.source.id,
           row && row.mode === "fixed" ? String(row.amount) : "",
         ];
       }),
@@ -223,9 +232,9 @@ function AllocationEditor({
   const [modes, setModes] = useState<Record<string, SavingsGoalAllocationMode>>(
     () =>
       Object.fromEntries(
-        accounts.map((view) => [
-          view.account.id,
-          current.get(view.account.id)?.mode ?? "fixed",
+        sources.map((view) => [
+          view.source.id,
+          current.get(view.source.id)?.mode ?? "fixed",
         ]),
       ),
   );
@@ -252,14 +261,14 @@ function AllocationEditor({
       </div>
 
       <ul className="space-y-2">
-        {accounts.map((view) => {
-          const row = current.get(view.account.id);
+        {sources.map((view) => {
+          const row = current.get(view.source.id);
           const fixedHere = row && row.mode === "fixed" ? row.amount : 0;
           const countedHere = row?.amount ?? 0;
           // Ce que l'objectif peut prendre : le non affecté du livret plus sa propre part.
           const available = view.unallocated + countedHere;
-          const draft = drafts[view.account.id] ?? "";
-          const mode = modes[view.account.id] ?? "fixed";
+          const draft = drafts[view.source.id] ?? "";
+          const mode = modes[view.source.id] ?? "fixed";
           const unchanged =
             mode === "fixed"
               ? (row?.mode ?? "fixed") === "fixed" &&
@@ -268,17 +277,17 @@ function AllocationEditor({
 
           return (
             <li
-              key={view.account.id}
+              key={view.source.id}
               className="space-y-2 rounded-md border border-border bg-background p-2"
             >
               <div className="flex items-center gap-2">
                 <span
                   className="size-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: view.account.color }}
+                  style={{ backgroundColor: view.source.color }}
                   aria-hidden
                 />
                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                  {view.account.name}
+                  {view.source.name}
                 </span>
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {t("available", {
@@ -292,7 +301,7 @@ function AllocationEditor({
                   className="flex rounded-md border border-border p-0.5"
                   role="radiogroup"
                   aria-label={t("allocationModeLabel", {
-                    account: view.account.name,
+                    account: view.source.name,
                   })}
                 >
                   {(
@@ -314,7 +323,7 @@ function AllocationEditor({
                       onClick={() =>
                         setModes((previous) => ({
                           ...previous,
-                          [view.account.id]: value,
+                          [view.source.id]: value,
                         }))
                       }
                     >
@@ -341,14 +350,14 @@ function AllocationEditor({
                     step="0.01"
                     className="h-8 w-28 tabular-nums"
                     aria-label={t("allocationAmountLabel", {
-                      account: view.account.name,
+                      account: view.source.name,
                     })}
                     value={draft}
                     disabled={isPending}
                     onChange={(event) =>
                       setDrafts((previous) => ({
                         ...previous,
-                        [view.account.id]: event.target.value,
+                        [view.source.id]: event.target.value,
                       }))
                     }
                   />
@@ -365,7 +374,7 @@ function AllocationEditor({
                   onClick={() =>
                     onAllocate(
                       goal.goal.id,
-                      view.account.id,
+                      { id: view.source.id, kind: view.source.kind },
                       draft.trim() || "0",
                       mode,
                     )
@@ -384,7 +393,7 @@ function AllocationEditor({
 
 function GoalCard({
   goal,
-  accounts,
+  sources,
   isDemo,
   isPending,
   locale,
@@ -393,7 +402,7 @@ function GoalCard({
   onAllocate,
 }: {
   goal: SavingsGoalView;
-  accounts: GoalAccountView[];
+  sources: GoalSourceView[];
   isDemo: boolean;
   isPending: boolean;
   locale: string;
@@ -401,7 +410,7 @@ function GoalCard({
   onDelete: (id: string) => void;
   onAllocate: (
     goalId: string,
-    accountId: string,
+    source: GoalFundingSourceRef,
     amount: string,
     mode: SavingsGoalAllocationMode,
   ) => void;
@@ -531,7 +540,7 @@ function GoalCard({
         <ul className="flex flex-wrap gap-2">
           {goal.allocations.map((allocation) => (
             <li
-              key={allocation.accountId}
+              key={allocation.sourceId}
               className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground"
             >
               <span
@@ -539,7 +548,7 @@ function GoalCard({
                 style={{ backgroundColor: allocation.color }}
                 aria-hidden
               />
-              <span className="text-foreground">{allocation.accountName}</span>
+              <span className="text-foreground">{allocation.sourceName}</span>
               {allocation.mode === "fixed" ? null : (
                 <span className="rounded-full bg-muted px-1.5 text-[0.65rem] uppercase tracking-wide">
                   {allocation.mode === "full"
@@ -558,12 +567,12 @@ function GoalCard({
       )}
 
       {isAllocating && !isDemo ? (
-        accounts.length === 0 ? (
+        sources.length === 0 ? (
           <p className="text-xs text-muted-foreground">{t("noAccounts")}</p>
         ) : (
           <AllocationEditor
             goal={goal}
-            accounts={accounts}
+            sources={sources}
             isPending={isPending}
             locale={locale}
             onAllocate={onAllocate}
@@ -613,11 +622,11 @@ function GoalCard({
   );
 }
 
-function AccountsRecap({
-  accounts,
+function SourcesRecap({
+  sources,
   locale,
 }: {
-  accounts: GoalAccountView[];
+  sources: GoalSourceView[];
   locale: string;
 }) {
   const t = useTranslations("goals");
@@ -626,25 +635,25 @@ function AccountsRecap({
     <div className="space-y-3">
       <p className="text-sm font-medium text-foreground">{t("accountsTitle")}</p>
       <ul className="space-y-2">
-        {accounts.map((view) => {
+        {sources.map((view) => {
           // Le sur-affecté sature la barre : les parts se répartissent alors
           // sur ce qui est réclamé, et l'anneau rouge signale le dépassement.
           const base = Math.max(view.balance, view.allocated, 0.01);
 
           return (
             <li
-              key={view.account.id}
+              key={view.source.id}
               className="space-y-1.5 rounded-lg border border-border px-4 py-3"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <span
                     className="size-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: view.account.color }}
+                    style={{ backgroundColor: view.source.color }}
                     aria-hidden
                   />
                   <span className="truncate text-sm font-medium text-foreground">
-                    {view.account.name}
+                    {view.source.name}
                   </span>
                   {view.isReserved || view.hasRemainderClaim ? (
                     <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-muted-foreground">
@@ -801,13 +810,14 @@ export function SavingsGoalsManager({
 
   function handleAllocate(
     goalId: string,
-    accountId: string,
+    source: GoalFundingSourceRef,
     amount: string,
     mode: SavingsGoalAllocationMode,
   ) {
     const formData = new FormData();
     formData.set("goalId", goalId);
-    formData.set("savingsAccountId", accountId);
+    formData.set("sourceKind", source.kind);
+    formData.set("savingsAccountId", source.kind === "pea" ? "" : source.id);
     formData.set("amount", amount);
     formData.set("mode", mode);
     runAction(setSavingsGoalAllocationAction, formData);
@@ -928,7 +938,7 @@ export function SavingsGoalsManager({
 
           {overview.goals.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {overview.accounts.length === 0 && !isDemo
+              {overview.sources.length === 0 && !isDemo
                 ? t("noAccounts")
                 : t("empty")}
             </p>
@@ -938,7 +948,7 @@ export function SavingsGoalsManager({
                 <GoalCard
                   key={goal.goal.id}
                   goal={goal}
-                  accounts={overview.accounts}
+                  sources={overview.sources}
                   isDemo={isDemo}
                   isPending={isPending}
                   locale={locale}
@@ -950,8 +960,8 @@ export function SavingsGoalsManager({
             </ul>
           )}
 
-          {overview.accounts.length > 0 ? (
-            <AccountsRecap accounts={overview.accounts} locale={locale} />
+          {overview.sources.length > 0 ? (
+            <SourcesRecap sources={overview.sources} locale={locale} />
           ) : null}
         </CardContent>
       </Card>

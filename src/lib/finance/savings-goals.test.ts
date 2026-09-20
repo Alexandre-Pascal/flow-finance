@@ -3,6 +3,9 @@ import {
   buildSavingsGoalsOverview,
   mapSavingsGoalAllocation,
   monthsUntil,
+  peaFundingSource,
+  PEA_SOURCE_ID,
+  savingsFundingSource,
 } from "./savings-goals";
 import type {
   SavingsAccount,
@@ -61,11 +64,25 @@ function allocation(
     id: `${goalId}-${accountId}`,
     user_id: "user-1",
     goal_id: goalId,
+    source_kind: "savings",
     savings_account_id: accountId,
     amount,
     allocation_mode: mode,
     created_at: "",
     updated_at: "",
+  };
+}
+
+/** Affectation visant le PEA : pas d'id de livret. */
+function peaAllocation(
+  goalId: string,
+  amount: number,
+  mode: SavingsGoalAllocationMode = "fixed",
+): SavingsGoalAllocation {
+  return {
+    ...allocation(goalId, PEA_SOURCE_ID, amount, mode),
+    source_kind: "pea",
+    savings_account_id: null,
   };
 }
 
@@ -92,8 +109,8 @@ describe("savings goals overview", () => {
         allocation("g2", lep.id, 500),
       ],
       [
-        { account: livretA, balance: 8200 },
-        { account: lep, balance: 1500 },
+        savingsFundingSource(livretA, 8200),
+        savingsFundingSource(lep, 1500),
       ],
     );
 
@@ -103,12 +120,12 @@ describe("savings goals overview", () => {
     expect(matelas.isReached).toBe(false);
     // Le voyage est financé sur deux livrets.
     expect(voyage.allocated).toBe(2500);
-    expect(voyage.allocations.map((row) => row.accountName)).toEqual([
+    expect(voyage.allocations.map((row) => row.sourceName)).toEqual([
       "Livret A",
       "LEP",
     ]);
 
-    const [viewA, viewLep] = overview.accounts;
+    const [viewA, viewLep] = overview.sources;
     expect(viewA.allocated).toBe(7000);
     expect(viewA.unallocated).toBe(1200);
     expect(viewLep.unallocated).toBe(1000);
@@ -122,11 +139,11 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Matelas de sécu", 9000)],
       [allocation("g1", livretA.id, 9000)],
-      [{ account: livretA, balance: 8200 }],
+      [savingsFundingSource(livretA, 8200)],
     );
 
-    expect(overview.accounts[0].unallocated).toBe(-800);
-    expect(overview.accounts[0].isOverAllocated).toBe(true);
+    expect(overview.sources[0].unallocated).toBe(-800);
+    expect(overview.sources[0].isOverAllocated).toBe(true);
     expect(overview.hasOverAllocation).toBe(true);
   });
 
@@ -134,7 +151,7 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Matelas de sécu", 6000)],
       [allocation("g1", livretA.id, 5000), allocation("g1", "deleted", 1000)],
-      [{ account: livretA, balance: 8200 }],
+      [savingsFundingSource(livretA, 8200)],
     );
 
     expect(overview.goals[0].allocated).toBe(5000);
@@ -145,7 +162,7 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Matelas de sécu", 5000)],
       [allocation("g1", livretA.id, 6000)],
-      [{ account: livretA, balance: 8200 }],
+      [savingsFundingSource(livretA, 8200)],
     );
 
     expect(overview.goals[0].progress).toBe(1);
@@ -159,7 +176,7 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Voyage", 3000, "2026-12-20")],
       [allocation("g1", livretA.id, 600)],
-      [{ account: livretA, balance: 8200 }],
+      [savingsFundingSource(livretA, 8200)],
       now,
     );
 
@@ -172,8 +189,8 @@ describe("savings goals overview", () => {
       [goal("g1", "Apport", 20000)],
       [fullAllocation("g1", livretA.id), fullAllocation("g1", lep.id)],
       [
-        { account: livretA, balance: 8200 },
-        { account: lep, balance: 1500 },
+        savingsFundingSource(livretA, 8200),
+        savingsFundingSource(lep, 1500),
       ],
     );
 
@@ -181,8 +198,8 @@ describe("savings goals overview", () => {
     expect(overview.goals[0].allocated).toBe(9700);
     expect(overview.goals[0].remaining).toBe(10300);
     expect(overview.goals[0].allocations[0].mode).toBe("full");
-    expect(overview.accounts[0].isReserved).toBe(true);
-    expect(overview.accounts[0].unallocated).toBe(0);
+    expect(overview.sources[0].isReserved).toBe(true);
+    expect(overview.sources[0].unallocated).toBe(0);
     expect(overview.totalUnallocated).toBe(0);
     expect(overview.hasOverAllocation).toBe(false);
   });
@@ -193,12 +210,12 @@ describe("savings goals overview", () => {
 
     expect(
       buildSavingsGoalsOverview(goals, allocations, [
-        { account: livretA, balance: 8200 },
+        savingsFundingSource(livretA, 8200),
       ]).goals[0].allocated,
     ).toBe(8200);
     expect(
       buildSavingsGoalsOverview(goals, allocations, [
-        { account: livretA, balance: 9000 },
+        savingsFundingSource(livretA, 9000),
       ]).goals[0].allocated,
     ).toBe(9000);
   });
@@ -207,11 +224,11 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Apport", 20000), goal("g2", "Voyage", 3000, null, 1)],
       [fullAllocation("g1", livretA.id), allocation("g2", livretA.id, 2000)],
-      [{ account: livretA, balance: 8200 }],
+      [savingsFundingSource(livretA, 8200)],
     );
 
-    expect(overview.accounts[0].allocated).toBe(10200);
-    expect(overview.accounts[0].isOverAllocated).toBe(true);
+    expect(overview.sources[0].allocated).toBe(10200);
+    expect(overview.sources[0].isOverAllocated).toBe(true);
     expect(overview.hasOverAllocation).toBe(true);
   });
 
@@ -219,7 +236,7 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Matelas de sécu", 10000), goal("g2", "Apport", 40000, null, 1)],
       [allocation("g1", livretA.id, 10000), remainderAllocation("g2", livretA.id)],
-      [{ account: livretA, balance: 19000 }],
+      [savingsFundingSource(livretA, 19000)],
     );
 
     const [matelas, apport] = overview.goals;
@@ -227,7 +244,7 @@ describe("savings goals overview", () => {
     expect(apport.allocated).toBe(9000);
     expect(apport.allocations[0].mode).toBe("remainder");
 
-    const [view] = overview.accounts;
+    const [view] = overview.sources;
     expect(view.allocated).toBe(19000);
     expect(view.unallocated).toBe(0);
     expect(view.hasRemainderClaim).toBe(true);
@@ -247,7 +264,7 @@ describe("savings goals overview", () => {
 
     expect(
       buildSavingsGoalsOverview(goals, allocations, [
-        { account: livretA, balance: 20000 },
+        savingsFundingSource(livretA, 20000),
       ]).goals[1].allocated,
     ).toBe(10000);
   });
@@ -264,13 +281,13 @@ describe("savings goals overview", () => {
         remainderAllocation("g2", livretA.id),
         remainderAllocation("g3", livretA.id),
       ],
-      [{ account: livretA, balance: 19000 }],
+      [savingsFundingSource(livretA, 19000)],
     );
 
     const [, apport, voyage] = overview.goals;
     expect(apport.allocated + voyage.allocated).toBe(9000);
     expect(apport.allocated).toBe(4500);
-    expect(overview.accounts[0].unallocated).toBe(0);
+    expect(overview.sources[0].unallocated).toBe(0);
     expect(overview.hasOverAllocation).toBe(false);
   });
 
@@ -278,11 +295,63 @@ describe("savings goals overview", () => {
     const overview = buildSavingsGoalsOverview(
       [goal("g1", "Matelas de sécu", 20000), goal("g2", "Apport", 40000, null, 1)],
       [allocation("g1", livretA.id, 20000), remainderAllocation("g2", livretA.id)],
-      [{ account: livretA, balance: 19000 }],
+      [savingsFundingSource(livretA, 19000)],
     );
 
     expect(overview.goals[1].allocated).toBe(0);
-    expect(overview.accounts[0].isOverAllocated).toBe(true);
+    expect(overview.sources[0].isOverAllocated).toBe(true);
+  });
+
+  it("funds a goal with a share of the PEA, next to a savings account", () => {
+    const overview = buildSavingsGoalsOverview(
+      [goal("g1", "Apport", 40000)],
+      [allocation("g1", livretA.id, 8000), peaAllocation("g1", 5000)],
+      [savingsFundingSource(livretA, 8200), peaFundingSource("PEA", 12000)],
+    );
+
+    expect(overview.goals[0].allocated).toBe(13000);
+    expect(overview.goals[0].allocations.map((row) => row.sourceKind)).toEqual([
+      "savings",
+      "pea",
+    ]);
+
+    const pea = overview.sources[1];
+    expect(pea.source.kind).toBe("pea");
+    expect(pea.allocated).toBe(5000);
+    expect(pea.unallocated).toBe(7000);
+    expect(overview.totalBalance).toBe(20200);
+  });
+
+  it("lets the PEA be taken whole and follow its valuation", () => {
+    const goals = [goal("g1", "Apport", 40000)];
+    const allocations = [peaAllocation("g1", 0, "full")];
+
+    expect(
+      buildSavingsGoalsOverview(goals, allocations, [
+        peaFundingSource("PEA", 12000),
+      ]).goals[0].allocated,
+    ).toBe(12000);
+    // Les cours montent : l'objectif suit, sans ressaisie.
+    expect(
+      buildSavingsGoalsOverview(goals, allocations, [
+        peaFundingSource("PEA", 12800),
+      ]).goals[0].allocated,
+    ).toBe(12800);
+  });
+
+  it("keeps a savings share and a PEA share apart on the same goal", () => {
+    const overview = buildSavingsGoalsOverview(
+      [goal("g1", "Apport", 40000)],
+      [
+        allocation("g1", livretA.id, 10000, "remainder"),
+        peaAllocation("g1", 0, "remainder"),
+      ],
+      [savingsFundingSource(livretA, 19000), peaFundingSource("PEA", 12000)],
+    );
+
+    // Chaque support a son propre « reste » : 19 000 et 12 000.
+    expect(overview.goals[0].allocated).toBe(31000);
+    expect(overview.sources.every((view) => view.unallocated === 0)).toBe(true);
   });
 
   it("keeps the allocation mode as stored, so a saved share is not dropped", () => {
@@ -307,6 +376,15 @@ describe("savings goals overview", () => {
       mapSavingsGoalAllocation({ ...row, allocation_mode: "wat" })
         .allocation_mode,
     ).toBe("fixed");
+
+    const pea = mapSavingsGoalAllocation({
+      ...row,
+      savings_account_id: null,
+      source_kind: "pea",
+      allocation_mode: "full",
+    });
+    expect(pea.source_kind).toBe("pea");
+    expect(pea.savings_account_id).toBeNull();
   });
 
   it("counts no month left once the deadline has passed", () => {

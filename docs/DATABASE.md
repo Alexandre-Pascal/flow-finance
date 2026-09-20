@@ -61,17 +61,18 @@ Objectifs d'épargne (page Objectifs).
 
 ### `savings_goal_allocations`
 
-Part d'un livret affectée à un objectif : un livret peut financer plusieurs
-objectifs, et le solde non affecté reste disponible.
+Part d'un support affectée à un objectif : un support peut financer plusieurs
+objectifs, et la valeur non affectée reste disponible.
 
 | Colonne | Type | Description |
 |---------|------|-------------|
 | goal_id | uuid | → `savings_goals` |
-| savings_account_id | uuid | → `savings_accounts` |
+| source_kind | text | `savings` (livret) ou `pea` |
+| savings_account_id | uuid | → `savings_accounts` ; `null` si `source_kind = 'pea'` |
 | allocation_mode | text | `fixed` (montant), `remainder` (ce qui reste du livret) ou `full` (livret entier) |
 | amount | numeric | Montant affecté en mode `fixed` (> 0) ; ignoré en `full` |
 
-**Contrainte unique** : `(goal_id, savings_account_id)`
+**Contraintes uniques** : `(goal_id, savings_account_id)` et un seul PEA par objectif
 
 ## RLS
 

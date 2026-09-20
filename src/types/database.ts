@@ -131,12 +131,17 @@ export interface SavingsGoal {
  */
 export type SavingsGoalAllocationMode = "fixed" | "remainder" | "full";
 
-/** Part d'un livret affectée à un objectif. */
+/** Support qui finance un objectif : un livret, ou le PEA (un seul par utilisateur). */
+export type SavingsGoalSourceKind = "savings" | "pea";
+
+/** Part d'un support affectée à un objectif. */
 export interface SavingsGoalAllocation {
   id: string;
   user_id: string;
   goal_id: string;
-  savings_account_id: string;
+  source_kind: SavingsGoalSourceKind;
+  /** `null` quand la source est le PEA. */
+  savings_account_id: string | null;
   amount: number;
   allocation_mode: SavingsGoalAllocationMode;
   created_at: string;

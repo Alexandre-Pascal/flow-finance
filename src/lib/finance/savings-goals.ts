@@ -1,10 +1,11 @@
 /**
  * @file savings-goals.ts
- * @description Objectifs d'épargne financés par des parts de livrets. Une
- * affectation vaut un montant fixe, le reste du livret, ou sa totalité — les
- * deux derniers suivent le solde réel et se complètent tout seuls. Un livret
- * peut porter plusieurs objectifs et le solde non affecté reste visible ; les
- * montants fixes ne sont jamais rognés, on signale les livrets sur-affectés.
+ * @description Objectifs d'épargne financés par des parts de supports : livrets
+ * et PEA. Une affectation vaut un montant fixe, le reste du support, ou sa
+ * totalité — les deux derniers suivent la valeur réelle et se complètent tout
+ * seuls. Un support peut porter plusieurs objectifs et le solde non affecté
+ * reste visible ; les montants fixes ne sont jamais rognés, on signale les
+ * supports sur-affectés.
  */
 
 import type {
@@ -12,26 +13,71 @@ import type {
   SavingsGoal,
   SavingsGoalAllocation,
   SavingsGoalAllocationMode,
+  SavingsGoalSourceKind,
 } from "@/types/database";
 
-/** Solde connu d'un livret, tel que reconstruit par `buildSavingsOverview`. */
-export interface GoalFundingAccount {
-  account: SavingsAccount;
+/** Le PEA est unique par utilisateur : pas d'id en base, une clé stable ici. */
+export const PEA_SOURCE_ID = "pea";
+
+/** Bleu secondaire du design system, pour distinguer le PEA des livrets. */
+export const PEA_SOURCE_COLOR = "#1E3A8A";
+
+/** Support finançable, avec sa valeur du moment. */
+export interface GoalFundingSource {
+  /** Id du livret, ou `PEA_SOURCE_ID`. */
+  id: string;
+  kind: SavingsGoalSourceKind;
+  name: string;
+  color: string;
   balance: number;
 }
 
+export function savingsFundingSource(
+  account: SavingsAccount,
+  balance: number,
+): GoalFundingSource {
+  return {
+    id: account.id,
+    kind: "savings",
+    name: account.name,
+    color: account.color,
+    balance,
+  };
+}
+
+export function peaFundingSource(
+  name: string,
+  balance: number,
+): GoalFundingSource {
+  return {
+    id: PEA_SOURCE_ID,
+    kind: "pea",
+    name,
+    color: PEA_SOURCE_COLOR,
+    balance,
+  };
+}
+
+/** Clé du support visé par une affectation. */
+export function allocationSourceId(allocation: SavingsGoalAllocation): string {
+  return allocation.source_kind === "pea"
+    ? PEA_SOURCE_ID
+    : (allocation.savings_account_id ?? "");
+}
+
 export interface GoalAllocationView {
-  accountId: string;
-  accountName: string;
+  sourceId: string;
+  sourceName: string;
+  sourceKind: SavingsGoalSourceKind;
   color: string;
-  /** Montant réellement compté : le solde du livret en mode « tout le livret ». */
+  /** Montant réellement compté : la valeur du support en mode « tout ». */
   amount: number;
   mode: SavingsGoalAllocationMode;
 }
 
 export interface SavingsGoalView {
   goal: SavingsGoal;
-  /** Somme affectée à l'objectif, tous livrets confondus. */
+  /** Somme affectée à l'objectif, tous supports confondus. */
   allocated: number;
   /** Reste à financer (0 si la cible est atteinte). */
   remaining: number;
@@ -45,16 +91,16 @@ export interface SavingsGoalView {
   monthlyEffort: number | null;
 }
 
-export interface GoalAccountView {
-  account: SavingsAccount;
+export interface GoalSourceView {
+  source: GoalFundingSource;
   balance: number;
   allocated: number;
-  /** Solde non affecté : négatif si les objectifs dépassent le solde. */
+  /** Valeur non affectée : négative si les objectifs dépassent le support. */
   unallocated: number;
   isOverAllocated: boolean;
-  /** Un objectif réserve la totalité du livret. */
+  /** Un objectif réserve la totalité du support. */
   isReserved: boolean;
-  /** Un objectif récupère ce qui reste du livret. */
+  /** Un objectif récupère ce qui reste du support. */
   hasRemainderClaim: boolean;
   goals: Array<{
     goalId: string;
@@ -67,7 +113,7 @@ export interface GoalAccountView {
 
 export interface SavingsGoalsOverview {
   goals: SavingsGoalView[];
-  accounts: GoalAccountView[];
+  sources: GoalSourceView[];
   totalTarget: number;
   totalAllocated: number;
   totalBalance: number;
@@ -107,7 +153,10 @@ export function mapSavingsGoalAllocation(
     id: String(row.id),
     user_id: String(row.user_id),
     goal_id: String(row.goal_id),
-    savings_account_id: String(row.savings_account_id),
+    source_kind: row.source_kind === "pea" ? "pea" : "savings",
+    savings_account_id: row.savings_account_id
+      ? String(row.savings_account_id)
+      : null,
     amount: Number(row.amount ?? 0),
     allocation_mode: parseAllocationMode(row.allocation_mode),
     created_at: String(row.created_at ?? ""),
@@ -127,21 +176,21 @@ export function monthsUntil(targetDate: string, now: Date): number {
 }
 
 /**
- * Croise objectifs, affectations et soldes réels des livrets.
- * Les affectations orphelines (livret supprimé) sont ignorées.
+ * Croise objectifs, affectations et valeurs réelles des supports.
+ * Les affectations orphelines (support supprimé) sont ignorées.
  */
 export function buildSavingsGoalsOverview(
   goals: SavingsGoal[],
   allocations: SavingsGoalAllocation[],
-  fundingAccounts: GoalFundingAccount[],
+  fundingSources: GoalFundingSource[],
   now: Date = new Date(),
 ): SavingsGoalsOverview {
-  const accountById = new Map(
-    fundingAccounts.map((funding) => [funding.account.id, funding]),
+  const sourceById = new Map(
+    fundingSources.map((source) => [source.id, source]),
   );
   const known = allocations.filter(
     (allocation) =>
-      accountById.has(allocation.savings_account_id) &&
+      sourceById.has(allocationSourceId(allocation)) &&
       (allocation.allocation_mode !== "fixed" || allocation.amount > 0),
   );
 
@@ -152,23 +201,24 @@ export function buildSavingsGoalsOverview(
   const goalRank = new Map(sortedGoals.map((goal, index) => [goal.id, index]));
 
   const byGoal = new Map<string, SavingsGoalAllocation[]>();
-  const byAccount = new Map<string, SavingsGoalAllocation[]>();
+  const bySource = new Map<string, SavingsGoalAllocation[]>();
   for (const allocation of known) {
     const goalRows = byGoal.get(allocation.goal_id) ?? [];
     goalRows.push(allocation);
     byGoal.set(allocation.goal_id, goalRows);
 
-    const accountRows = byAccount.get(allocation.savings_account_id) ?? [];
-    accountRows.push(allocation);
-    byAccount.set(allocation.savings_account_id, accountRows);
+    const sourceId = allocationSourceId(allocation);
+    const sourceRows = bySource.get(sourceId) ?? [];
+    sourceRows.push(allocation);
+    bySource.set(sourceId, sourceRows);
   }
 
-  // Le montant compté dépend du livret entier : « tout » prend le solde, « le
-  // reste » prend ce que les autres objectifs n'ont pas pris. On résout donc
-  // livret par livret avant de parcourir les objectifs.
+  // Le montant compté dépend du support entier : « tout » prend la valeur,
+  // « le reste » prend ce que les autres objectifs n'ont pas pris. On résout
+  // donc support par support avant de parcourir les objectifs.
   const countedById = new Map<string, number>();
-  for (const [accountId, rows] of byAccount) {
-    const balance = Math.max(0, accountById.get(accountId)?.balance ?? 0);
+  for (const [sourceId, rows] of bySource) {
+    const balance = Math.max(0, sourceById.get(sourceId)?.balance ?? 0);
     const remainderRows: SavingsGoalAllocation[] = [];
     let claimed = 0;
 
@@ -184,12 +234,14 @@ export function buildSavingsGoalsOverview(
     }
 
     const left = Math.max(0, round(balance - claimed));
-    // Plusieurs objectifs sur « le reste » du même livret : ils le partagent à
+    // Plusieurs objectifs sur « le reste » du même support : ils le partagent à
     // parts égales, les centimes restants allant au premier de la liste.
-    const share = remainderRows.length > 0 ? Math.floor((left * 100) / remainderRows.length) / 100 : 0;
+    const share =
+      remainderRows.length > 0
+        ? Math.floor((left * 100) / remainderRows.length) / 100
+        : 0;
     const ordered = [...remainderRows].sort(
-      (a, b) =>
-        (goalRank.get(a.goal_id) ?? 0) - (goalRank.get(b.goal_id) ?? 0),
+      (a, b) => (goalRank.get(a.goal_id) ?? 0) - (goalRank.get(b.goal_id) ?? 0),
     );
     ordered.forEach((allocation, index) => {
       countedById.set(
@@ -217,17 +269,16 @@ export function buildSavingsGoalsOverview(
       allocated,
       remaining,
       progress:
-        goal.target_amount > 0
-          ? Math.min(1, allocated / goal.target_amount)
-          : 0,
+        goal.target_amount > 0 ? Math.min(1, allocated / goal.target_amount) : 0,
       isReached: allocated >= goal.target_amount,
       allocations: rows
         .map((allocation) => {
-          const funding = accountById.get(allocation.savings_account_id);
+          const source = sourceById.get(allocationSourceId(allocation));
           return {
-            accountId: allocation.savings_account_id,
-            accountName: funding?.account.name ?? "",
-            color: funding?.account.color ?? "#475569",
+            sourceId: allocationSourceId(allocation),
+            sourceName: source?.name ?? "",
+            sourceKind: allocation.source_kind,
+            color: source?.color ?? "#475569",
             amount: effectiveAmount(allocation),
             mode: allocation.allocation_mode,
           };
@@ -241,18 +292,18 @@ export function buildSavingsGoalsOverview(
     };
   });
 
-  const accountViews: GoalAccountView[] = fundingAccounts.map((funding) => {
-    const rows = byAccount.get(funding.account.id) ?? [];
+  const sourceViews: GoalSourceView[] = fundingSources.map((source) => {
+    const rows = bySource.get(source.id) ?? [];
     const allocated = round(
       rows.reduce((sum, allocation) => sum + effectiveAmount(allocation), 0),
     );
 
     return {
-      account: funding.account,
-      balance: funding.balance,
+      source,
+      balance: source.balance,
       allocated,
-      unallocated: round(funding.balance - allocated),
-      isOverAllocated: round(allocated) > round(funding.balance),
+      unallocated: round(source.balance - allocated),
+      isOverAllocated: round(allocated) > round(source.balance),
       isReserved: rows.some(
         (allocation) => allocation.allocation_mode === "full",
       ),
@@ -275,7 +326,7 @@ export function buildSavingsGoalsOverview(
   });
 
   const totalBalance = round(
-    fundingAccounts.reduce((sum, funding) => sum + funding.balance, 0),
+    fundingSources.reduce((sum, source) => sum + source.balance, 0),
   );
   const totalAllocated = round(
     known.reduce((sum, allocation) => sum + effectiveAmount(allocation), 0),
@@ -283,13 +334,13 @@ export function buildSavingsGoalsOverview(
 
   return {
     goals: goalViews,
-    accounts: accountViews,
+    sources: sourceViews,
     totalTarget: round(
       sortedGoals.reduce((sum, goal) => sum + goal.target_amount, 0),
     ),
     totalAllocated,
     totalBalance,
     totalUnallocated: round(totalBalance - totalAllocated),
-    hasOverAllocation: accountViews.some((view) => view.isOverAllocated),
+    hasOverAllocation: sourceViews.some((view) => view.isOverAllocated),
   };
 }

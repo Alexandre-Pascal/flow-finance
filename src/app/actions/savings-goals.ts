@@ -13,7 +13,10 @@ import {
   normalizeColor,
 } from "@/lib/finance/expense-categories";
 import { createClient } from "@/lib/supabase/server";
-import type { SavingsGoalAllocationMode } from "@/types/database";
+import type {
+  SavingsGoalAllocationMode,
+  SavingsGoalSourceKind,
+} from "@/types/database";
 
 export type SavingsGoalActionError =
   | "demo"
@@ -38,6 +41,7 @@ function isSchemaError(message: string, code?: string): boolean {
     normalized.includes("savings_goals") ||
     normalized.includes("savings_goal_allocations") ||
     normalized.includes("allocation_mode") ||
+    normalized.includes("source_kind") ||
     normalized.includes("does not exist")
   );
 }
@@ -213,12 +217,16 @@ export async function setSavingsGoalAllocationAction(
   const savingsAccountId = String(
     formData.get("savingsAccountId") ?? "",
   ).trim();
+  const sourceKind: SavingsGoalSourceKind =
+    String(formData.get("sourceKind") ?? "savings") === "pea"
+      ? "pea"
+      : "savings";
   const amount = parseAmount(String(formData.get("amount") ?? ""));
   const modeRaw = String(formData.get("mode") ?? "fixed");
   const mode: SavingsGoalAllocationMode =
     modeRaw === "full" || modeRaw === "remainder" ? modeRaw : "fixed";
 
-  if (!goalId || !savingsAccountId) {
+  if (!goalId || (sourceKind === "savings" && !savingsAccountId)) {
     return { error: "invalid" };
   }
   if (mode === "fixed" && amount === null) {
@@ -230,7 +238,8 @@ export async function setSavingsGoalAllocationAction(
     return { error: "config" };
   }
 
-  // Les deux bouts de l'affectation doivent appartenir à l'utilisateur.
+  // Les deux bouts de l'affectation doivent appartenir à l'utilisateur. Le PEA
+  // est unique par compte : rien à vérifier côté support.
   const [{ data: goal, error: goalError }, { data: account, error: accountError }] =
     await Promise.all([
       supabase
@@ -239,12 +248,14 @@ export async function setSavingsGoalAllocationAction(
         .eq("id", goalId)
         .eq("user_id", user.id)
         .maybeSingle(),
-      supabase
-        .from("savings_accounts")
-        .select("id")
-        .eq("id", savingsAccountId)
-        .eq("user_id", user.id)
-        .maybeSingle(),
+      sourceKind === "savings"
+        ? supabase
+            .from("savings_accounts")
+            .select("id")
+            .eq("id", savingsAccountId)
+            .eq("user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: { id: "pea" }, error: null }),
     ]);
 
   if (goalError || accountError) {
@@ -259,12 +270,39 @@ export async function setSavingsGoalAllocationAction(
     return { error: "invalid" };
   }
 
+  /** Cible la ligne du couple (objectif, support) : le PEA n'a pas d'id. */
+  const baseQuery = () => {
+    const query = supabase
+      .from("savings_goal_allocations")
+      .select("id")
+      .eq("goal_id", goalId)
+      .eq("user_id", user.id)
+      .eq("source_kind", sourceKind);
+    return sourceKind === "pea"
+      ? query.is("savings_account_id", null)
+      : query.eq("savings_account_id", savingsAccountId);
+  };
+
+  const { data: existing, error: existingError } = await baseQuery().maybeSingle();
+
+  if (existingError) {
+    console.error("[setSavingsGoalAllocation] load row failed:", existingError);
+    return isSchemaError(existingError.message, existingError.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  // Montant nul en mode « montant fixe » : on retire l'affectation.
   if (mode === "fixed" && (amount ?? 0) <= 0) {
+    if (!existing) {
+      revalidateGoalPages();
+      return {};
+    }
+
     const { error } = await supabase
       .from("savings_goal_allocations")
       .delete()
-      .eq("goal_id", goalId)
-      .eq("savings_account_id", savingsAccountId)
+      .eq("id", existing.id)
       .eq("user_id", user.id);
 
     if (error) {
@@ -278,20 +316,28 @@ export async function setSavingsGoalAllocationAction(
     return {};
   }
 
-  const { error } = await supabase.from("savings_goal_allocations").upsert(
-    {
-      user_id: user.id,
-      goal_id: goalId,
-      savings_account_id: savingsAccountId,
-      // Hors montant fixe, la valeur stockée n'est jamais lue.
-      amount: mode === "fixed" ? amount : 0,
-      allocation_mode: mode,
-    },
-    { onConflict: "goal_id,savings_account_id" },
-  );
+  // Hors montant fixe, la valeur stockée n'est jamais lue.
+  const payload = {
+    amount: mode === "fixed" ? amount : 0,
+    allocation_mode: mode,
+  };
+
+  const { error } = existing
+    ? await supabase
+        .from("savings_goal_allocations")
+        .update(payload)
+        .eq("id", existing.id)
+        .eq("user_id", user.id)
+    : await supabase.from("savings_goal_allocations").insert({
+        user_id: user.id,
+        goal_id: goalId,
+        source_kind: sourceKind,
+        savings_account_id: sourceKind === "pea" ? null : savingsAccountId,
+        ...payload,
+      });
 
   if (error) {
-    console.error("[setSavingsGoalAllocation] upsert failed:", error);
+    console.error("[setSavingsGoalAllocation] save failed:", error);
     return isSchemaError(error.message, error.code)
       ? { error: "schema" }
       : { error: "save" };
