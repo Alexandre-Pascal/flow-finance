@@ -4,6 +4,7 @@ import type {
   SavingsAccount,
   SavingsGoal,
   SavingsGoalAllocation,
+  SavingsGoalAllocationMode,
 } from "@/types/database";
 
 function account(id: string, name: string): SavingsAccount {
@@ -50,6 +51,7 @@ function allocation(
   goalId: string,
   accountId: string,
   amount: number,
+  mode: SavingsGoalAllocationMode = "fixed",
 ): SavingsGoalAllocation {
   return {
     id: `${goalId}-${accountId}`,
@@ -57,9 +59,15 @@ function allocation(
     goal_id: goalId,
     savings_account_id: accountId,
     amount,
+    allocation_mode: mode,
     created_at: "",
     updated_at: "",
   };
+}
+
+/** Livret réservé en entier : le montant stocké n'est pas lu. */
+function fullAllocation(goalId: string, accountId: string) {
+  return allocation(goalId, accountId, 0, "full");
 }
 
 const livretA = account("sav-1", "Livret A");
@@ -148,6 +156,54 @@ describe("savings goals overview", () => {
 
     expect(overview.goals[0].monthsLeft).toBe(3);
     expect(overview.goals[0].monthlyEffort).toBe(800);
+  });
+
+  it("lets a whole account fund a goal and follow its balance", () => {
+    const overview = buildSavingsGoalsOverview(
+      [goal("g1", "Apport", 20000)],
+      [fullAllocation("g1", livretA.id), fullAllocation("g1", lep.id)],
+      [
+        { account: livretA, balance: 8200 },
+        { account: lep, balance: 1500 },
+      ],
+    );
+
+    // Rien n'est saisi : l'objectif vaut la somme des soldes du moment.
+    expect(overview.goals[0].allocated).toBe(9700);
+    expect(overview.goals[0].remaining).toBe(10300);
+    expect(overview.goals[0].allocations[0].mode).toBe("full");
+    expect(overview.accounts[0].isReserved).toBe(true);
+    expect(overview.accounts[0].unallocated).toBe(0);
+    expect(overview.totalUnallocated).toBe(0);
+    expect(overview.hasOverAllocation).toBe(false);
+  });
+
+  it("follows the balance upwards without touching the allocation", () => {
+    const allocations = [fullAllocation("g1", livretA.id)];
+    const goals = [goal("g1", "Apport", 20000)];
+
+    expect(
+      buildSavingsGoalsOverview(goals, allocations, [
+        { account: livretA, balance: 8200 },
+      ]).goals[0].allocated,
+    ).toBe(8200);
+    expect(
+      buildSavingsGoalsOverview(goals, allocations, [
+        { account: livretA, balance: 9000 },
+      ]).goals[0].allocated,
+    ).toBe(9000);
+  });
+
+  it("flags a reserved account that another goal also draws on", () => {
+    const overview = buildSavingsGoalsOverview(
+      [goal("g1", "Apport", 20000), goal("g2", "Voyage", 3000, null, 1)],
+      [fullAllocation("g1", livretA.id), allocation("g2", livretA.id, 2000)],
+      [{ account: livretA, balance: 8200 }],
+    );
+
+    expect(overview.accounts[0].allocated).toBe(10200);
+    expect(overview.accounts[0].isOverAllocated).toBe(true);
+    expect(overview.hasOverAllocation).toBe(true);
   });
 
   it("counts no month left once the deadline has passed", () => {

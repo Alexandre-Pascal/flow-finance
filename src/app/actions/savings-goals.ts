@@ -13,6 +13,7 @@ import {
   normalizeColor,
 } from "@/lib/finance/expense-categories";
 import { createClient } from "@/lib/supabase/server";
+import type { SavingsGoalAllocationMode } from "@/types/database";
 
 export type SavingsGoalActionError =
   | "demo"
@@ -36,6 +37,7 @@ function isSchemaError(message: string, code?: string): boolean {
     code === "PGRST205" ||
     normalized.includes("savings_goals") ||
     normalized.includes("savings_goal_allocations") ||
+    normalized.includes("allocation_mode") ||
     normalized.includes("does not exist")
   );
 }
@@ -194,8 +196,9 @@ export async function deleteSavingsGoalAction(
 }
 
 /**
- * Fixe la part d'un livret affectée à un objectif.
- * Un montant nul (ou négatif) supprime l'affectation.
+ * Fixe la part d'un livret affectée à un objectif : un montant fixe, ou la
+ * totalité du livret (« full », qui suit ensuite le solde réel).
+ * Un montant nul (ou négatif) en mode « fixed » supprime l'affectation.
  */
 export async function setSavingsGoalAllocationAction(
   formData: FormData,
@@ -210,8 +213,13 @@ export async function setSavingsGoalAllocationAction(
     formData.get("savingsAccountId") ?? "",
   ).trim();
   const amount = parseAmount(String(formData.get("amount") ?? ""));
+  const mode: SavingsGoalAllocationMode =
+    String(formData.get("mode") ?? "fixed") === "full" ? "full" : "fixed";
 
-  if (!goalId || !savingsAccountId || amount === null) {
+  if (!goalId || !savingsAccountId) {
+    return { error: "invalid" };
+  }
+  if (mode === "fixed" && amount === null) {
     return { error: "invalid" };
   }
 
@@ -249,7 +257,7 @@ export async function setSavingsGoalAllocationAction(
     return { error: "invalid" };
   }
 
-  if (amount <= 0) {
+  if (mode === "fixed" && (amount ?? 0) <= 0) {
     const { error } = await supabase
       .from("savings_goal_allocations")
       .delete()
@@ -273,7 +281,9 @@ export async function setSavingsGoalAllocationAction(
       user_id: user.id,
       goal_id: goalId,
       savings_account_id: savingsAccountId,
-      amount,
+      // En mode « tout le livret », le montant stocké n'est jamais lu.
+      amount: mode === "full" ? 0 : amount,
+      allocation_mode: mode,
     },
     { onConflict: "goal_id,savings_account_id" },
   );

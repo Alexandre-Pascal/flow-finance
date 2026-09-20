@@ -68,7 +68,8 @@ objectifs, et le solde non affecté reste disponible.
 |---------|------|-------------|
 | goal_id | uuid | → `savings_goals` |
 | savings_account_id | uuid | → `savings_accounts` |
-| amount | numeric | Montant fixe affecté (> 0) |
+| allocation_mode | text | `fixed` (montant) ou `full` (livret entier réservé) |
+| amount | numeric | Montant affecté en mode `fixed` (> 0) ; ignoré en `full` |
 
 **Contrainte unique** : `(goal_id, savings_account_id)`
 

@@ -49,6 +49,7 @@ import type {
   SavingsGoalView,
 } from "@/lib/finance/savings-goals";
 import { cn } from "@/lib/utils";
+import type { SavingsGoalAllocationMode } from "@/types/database";
 
 interface SavingsGoalsManagerProps {
   overview: SavingsGoalsOverview;
@@ -194,22 +195,39 @@ function AllocationEditor({
   accounts: GoalAccountView[];
   isPending: boolean;
   locale: string;
-  onAllocate: (goalId: string, accountId: string, amount: string) => void;
+  onAllocate: (
+    goalId: string,
+    accountId: string,
+    amount: string,
+    mode: SavingsGoalAllocationMode,
+  ) => void;
   onClose: () => void;
 }) {
   const t = useTranslations("goals");
   const current = useMemo(
-    () =>
-      new Map(goal.allocations.map((row) => [row.accountId, row.amount])),
+    () => new Map(goal.allocations.map((row) => [row.accountId, row])),
     [goal.allocations],
   );
+  // Un livret réservé n'a pas de montant saisi : le champ repart vide.
   const [drafts, setDrafts] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      accounts.map((view) => [
-        view.account.id,
-        current.get(view.account.id)?.toString() ?? "",
-      ]),
+      accounts.map((view) => {
+        const row = current.get(view.account.id);
+        return [
+          view.account.id,
+          row && row.mode === "fixed" ? String(row.amount) : "",
+        ];
+      }),
     ),
+  );
+  const [modes, setModes] = useState<Record<string, SavingsGoalAllocationMode>>(
+    () =>
+      Object.fromEntries(
+        accounts.map((view) => [
+          view.account.id,
+          current.get(view.account.id)?.mode ?? "fixed",
+        ]),
+      ),
   );
 
   return (
@@ -235,63 +253,122 @@ function AllocationEditor({
 
       <ul className="space-y-2">
         {accounts.map((view) => {
-          const allocatedHere = current.get(view.account.id) ?? 0;
+          const row = current.get(view.account.id);
+          const fixedHere = row && row.mode === "fixed" ? row.amount : 0;
+          const countedHere = row?.amount ?? 0;
           // Ce que l'objectif peut prendre : le non affecté du livret plus sa propre part.
-          const available = view.unallocated + allocatedHere;
+          const available = view.unallocated + countedHere;
           const draft = drafts[view.account.id] ?? "";
+          const mode = modes[view.account.id] ?? "fixed";
           const unchanged =
-            draft.trim() === (allocatedHere ? String(allocatedHere) : "");
+            mode === "full"
+              ? row?.mode === "full"
+              : row?.mode !== "full" &&
+                draft.trim() === (fixedHere ? String(fixedHere) : "");
 
           return (
             <li
               key={view.account.id}
-              className="flex flex-wrap items-center gap-2"
+              className="space-y-2 rounded-md border border-border bg-background p-2"
             >
-              <span
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ backgroundColor: view.account.color }}
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                {view.account.name}
-              </span>
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {t("available", {
-                  amount: formatCurrency(Math.max(0, available), locale),
-                })}
-              </span>
-              <Input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                className="h-8 w-28 tabular-nums"
-                aria-label={t("allocationAmountLabel", {
-                  account: view.account.name,
-                })}
-                value={draft}
-                disabled={isPending}
-                onChange={(event) =>
-                  setDrafts((previous) => ({
-                    ...previous,
-                    [view.account.id]: event.target.value,
-                  }))
-                }
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-8 shrink-0 cursor-pointer"
-                aria-label={t("allocationSave")}
-                title={t("allocationSave")}
-                disabled={isPending || unchanged}
-                onClick={() =>
-                  onAllocate(goal.goal.id, view.account.id, draft.trim() || "0")
-                }
-              >
-                <Check className="size-4" aria-hidden />
-              </Button>
+              <div className="flex items-center gap-2">
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: view.account.color }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  {view.account.name}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {t("available", {
+                    amount: formatCurrency(Math.max(0, available), locale),
+                  })}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  className="flex rounded-md border border-border p-0.5"
+                  role="radiogroup"
+                  aria-label={t("allocationModeLabel", {
+                    account: view.account.name,
+                  })}
+                >
+                  {(
+                    [
+                      ["fixed", "allocationModeFixed"],
+                      ["full", "allocationModeFull"],
+                    ] as const
+                  ).map(([value, labelKey]) => (
+                    <Button
+                      key={value}
+                      type="button"
+                      size="sm"
+                      role="radio"
+                      aria-checked={mode === value}
+                      variant={mode === value ? "default" : "ghost"}
+                      className="h-7 cursor-pointer px-2 text-xs"
+                      disabled={isPending}
+                      onClick={() =>
+                        setModes((previous) => ({
+                          ...previous,
+                          [view.account.id]: value,
+                        }))
+                      }
+                    >
+                      {t(labelKey)}
+                    </Button>
+                  ))}
+                </div>
+
+                {mode === "full" ? (
+                  <span className="flex-1 text-xs tabular-nums text-muted-foreground">
+                    {t("allocationFullValue", {
+                      amount: formatCurrency(view.balance, locale),
+                    })}
+                  </span>
+                ) : (
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    className="h-8 w-28 tabular-nums"
+                    aria-label={t("allocationAmountLabel", {
+                      account: view.account.name,
+                    })}
+                    value={draft}
+                    disabled={isPending}
+                    onChange={(event) =>
+                      setDrafts((previous) => ({
+                        ...previous,
+                        [view.account.id]: event.target.value,
+                      }))
+                    }
+                  />
+                )}
+
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 shrink-0 cursor-pointer"
+                  aria-label={t("allocationSave")}
+                  title={t("allocationSave")}
+                  disabled={isPending || unchanged}
+                  onClick={() =>
+                    onAllocate(
+                      goal.goal.id,
+                      view.account.id,
+                      draft.trim() || "0",
+                      mode,
+                    )
+                  }
+                >
+                  <Check className="size-4" aria-hidden />
+                </Button>
+              </div>
             </li>
           );
         })}
@@ -317,7 +394,12 @@ function GoalCard({
   locale: string;
   onUpdate: (id: string, values: GoalFormValues) => void;
   onDelete: (id: string) => void;
-  onAllocate: (goalId: string, accountId: string, amount: string) => void;
+  onAllocate: (
+    goalId: string,
+    accountId: string,
+    amount: string,
+    mode: SavingsGoalAllocationMode,
+  ) => void;
 }) {
   const t = useTranslations("goals");
   const [isEditing, setEditing] = useState(false);
@@ -453,6 +535,11 @@ function GoalCard({
                 aria-hidden
               />
               <span className="text-foreground">{allocation.accountName}</span>
+              {allocation.mode === "full" ? (
+                <span className="rounded-full bg-muted px-1.5 text-[0.65rem] uppercase tracking-wide">
+                  {t("allocationFullBadge")}
+                </span>
+              ) : null}
               <span className="tabular-nums">
                 {formatCurrency(allocation.amount, locale)}
               </span>
@@ -555,6 +642,11 @@ function AccountsRecap({
                   <span className="truncate text-sm font-medium text-foreground">
                     {view.account.name}
                   </span>
+                  {view.isReserved ? (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-muted-foreground">
+                      {t("accountReserved")}
+                    </span>
+                  ) : null}
                 </div>
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {t("accountSplit", {
@@ -672,11 +764,17 @@ export function SavingsGoalsManager({
     runAction(deleteSavingsGoalAction, formData);
   }
 
-  function handleAllocate(goalId: string, accountId: string, amount: string) {
+  function handleAllocate(
+    goalId: string,
+    accountId: string,
+    amount: string,
+    mode: SavingsGoalAllocationMode,
+  ) {
     const formData = new FormData();
     formData.set("goalId", goalId);
     formData.set("savingsAccountId", accountId);
     formData.set("amount", amount);
+    formData.set("mode", mode);
     runAction(setSavingsGoalAllocationAction, formData);
   }
 
