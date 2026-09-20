@@ -95,6 +95,11 @@ export function mapSavingsGoal(row: Record<string, unknown>): SavingsGoal {
   };
 }
 
+/** Tout mode inconnu retombe sur « montant fixe », le seul qui lit `amount`. */
+function parseAllocationMode(raw: unknown): SavingsGoalAllocationMode {
+  return raw === "full" || raw === "remainder" ? raw : "fixed";
+}
+
 export function mapSavingsGoalAllocation(
   row: Record<string, unknown>,
 ): SavingsGoalAllocation {
@@ -104,7 +109,7 @@ export function mapSavingsGoalAllocation(
     goal_id: String(row.goal_id),
     savings_account_id: String(row.savings_account_id),
     amount: Number(row.amount ?? 0),
-    allocation_mode: row.allocation_mode === "full" ? "full" : "fixed",
+    allocation_mode: parseAllocationMode(row.allocation_mode),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };

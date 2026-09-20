@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildSavingsGoalsOverview, monthsUntil } from "./savings-goals";
+import {
+  buildSavingsGoalsOverview,
+  mapSavingsGoalAllocation,
+  monthsUntil,
+} from "./savings-goals";
 import type {
   SavingsAccount,
   SavingsGoal,
@@ -279,6 +283,30 @@ describe("savings goals overview", () => {
 
     expect(overview.goals[1].allocated).toBe(0);
     expect(overview.accounts[0].isOverAllocated).toBe(true);
+  });
+
+  it("keeps the allocation mode as stored, so a saved share is not dropped", () => {
+    const row = {
+      id: "a1",
+      user_id: "user-1",
+      goal_id: "g1",
+      savings_account_id: livretA.id,
+      amount: 0,
+    };
+
+    expect(
+      mapSavingsGoalAllocation({ ...row, allocation_mode: "remainder" })
+        .allocation_mode,
+    ).toBe("remainder");
+    expect(
+      mapSavingsGoalAllocation({ ...row, allocation_mode: "full" })
+        .allocation_mode,
+    ).toBe("full");
+    // Mode inconnu (base pas à jour) : on retombe sur le montant fixe.
+    expect(
+      mapSavingsGoalAllocation({ ...row, allocation_mode: "wat" })
+        .allocation_mode,
+    ).toBe("fixed");
   });
 
   it("counts no month left once the deadline has passed", () => {
