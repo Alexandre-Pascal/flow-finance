@@ -166,6 +166,11 @@ export default function SpendingFlowGraph({
       nodePadding={30}
       // Tout ce qui ne se subdivise pas file jusqu'au bord droit.
       align="justify"
+      // Sans ces deux réglages, recharts replace chaque nœud à la moyenne de
+      // ses liens et entrelace les colonnes : un poste passait alors par-dessus
+      // trois rubans pour rejoindre sa place. L'ordre vient du flux lui-même.
+      verticalAlign="top"
+      sort={false}
       margin={MARGIN}
       node={
         // @ts-expect-error — recharts injecte x/y/width/height/payload.

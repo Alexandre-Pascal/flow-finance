@@ -284,7 +284,28 @@ export function buildSpendingFlow({
     });
   }
 
-  for (const poste of outgoing) {
+  // L'ordre d'émission fixe l'ordre vertical du graphique. Les postes qui se
+  // subdivisent passent en premier : leurs lignes de détail occupent alors le
+  // haut de la dernière colonne, juste en face d'eux, et les postes qui y vont
+  // directement se rangent dessous — aucun ruban n'a de raison d'en croiser un
+  // autre.
+  const prepared = outgoing.map((poste) => ({
+    poste,
+    children: fitChildren(
+      details[poste.key] ?? [],
+      poste,
+      maxChildren,
+      minChildShare,
+      labels.other,
+      formatOtherLines,
+    ),
+  }));
+  const ordered = [
+    ...prepared.filter((entry) => entry.children.length > 0),
+    ...prepared.filter((entry) => entry.children.length === 0),
+  ];
+
+  for (const { poste, children } of ordered) {
     const posteIndex = addNode({
       ...poste,
       value: poste.amount,
@@ -298,14 +319,7 @@ export function buildSpendingFlow({
       color: poste.color,
     });
 
-    for (const child of fitChildren(
-      details[poste.key] ?? [],
-      poste,
-      maxChildren,
-      minChildShare,
-      labels.other,
-      formatOtherLines,
-    )) {
+    for (const child of children) {
       const childIndex = addNode({
         ...child,
         value: child.amount,

@@ -314,6 +314,34 @@ describe("spending flow", () => {
     expect(other?.items).toBeUndefined();
   });
 
+  it("emits the buckets that split up first, so nothing has to cross", () => {
+    const flow = buildSpendingFlow({
+      incomes: [entry("salary", 1000)],
+      categories: [
+        entry("trip", 400),
+        entry("subs", 300),
+        entry("gifts", 100),
+      ],
+      details: {
+        subs: [entry("rent", 200), entry("gym", 100)],
+      },
+      labels,
+    });
+
+    // « subs » se subdivise : il passe devant « trip », pourtant plus gros,
+    // pour que ses lignes occupent le haut de la dernière colonne.
+    expect(flow.nodes.map((node) => node.key)).toEqual([
+      "salary",
+      BUDGET_KEY,
+      "subs",
+      "rent",
+      "gym",
+      "trip",
+      "gifts",
+      REST_KEY,
+    ]);
+  });
+
   it("reports no data when an end of the flow is missing", () => {
     expect(
       buildSpendingFlow({ incomes: [], categories: [entry("a", 10)], labels })
