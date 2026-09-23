@@ -475,6 +475,104 @@ export function matchesRecurringPayment(
   return dayDistance(txDay, rule.billing_day) <= RULE_MATCH_DAY_TOLERANCE;
 }
 
+/** Transaction telle que le rattachement en a besoin. */
+type AssignableTransaction = Pick<
+  TransactionWithAccount,
+  "id" | "amount" | "description" | "booking_date"
+>;
+
+/**
+ * Répartit des transactions entre les abonnements, en raisonnant par période
+ * plutôt que ligne à ligne.
+ *
+ * Un abonnement mensuel ne prélève qu'une fois par mois : deux lignes au même
+ * libellé et au même montant le même mois relèvent donc de deux abonnements
+ * distincts (deux abonnements Apple, par exemple). Chaque ligne va à
+ * l'abonnement dont le jour de prélèvement est le plus proche, et celle qui ne
+ * trouve pas de place reste libre — à rattacher à un second abonnement plutôt
+ * qu'avalée par le premier.
+ *
+ * Les cadences plus longues (semestriel, annuel) gardent l'ancien
+ * comportement : leurs prélèvements sont trop irréguliers pour un quota.
+ */
+export function assignRecurringPayments(
+  transactions: AssignableTransaction[],
+  rules: RecurringPayment[],
+): Map<string, string | null> {
+  const assignment = new Map<string, string | null>();
+  const candidates = new Map<string, RecurringPayment[]>();
+
+  for (const tx of transactions) {
+    assignment.set(tx.id, null);
+    candidates.set(
+      tx.id,
+      rules.filter((rule) => matchesRecurringPayment(tx, rule)),
+    );
+  }
+
+  const rank = new Map(rules.map((rule, index) => [rule.id, index]));
+  const pairs: Array<{
+    txId: string;
+    ruleId: string;
+    slot: string;
+    distance: number;
+    date: string;
+    rank: number;
+  }> = [];
+
+  for (const tx of transactions) {
+    for (const rule of candidates.get(tx.id) ?? []) {
+      if (parseRecurringCadence(rule.cadence) !== "monthly") {
+        continue;
+      }
+      pairs.push({
+        txId: tx.id,
+        ruleId: rule.id,
+        slot: `${rule.id}:${tx.booking_date.slice(0, 7)}`,
+        // Sans jour de prélèvement connu, aucune préférence.
+        distance:
+          rule.billing_day === null
+            ? 15
+            : dayDistance(getBookingDay(tx.booking_date), rule.billing_day),
+        date: tx.booking_date,
+        rank: rank.get(rule.id) ?? 0,
+      });
+    }
+  }
+
+  // Les couples les plus évidents se servent en premier.
+  pairs.sort(
+    (a, b) =>
+      a.distance - b.distance ||
+      a.date.localeCompare(b.date) ||
+      a.rank - b.rank,
+  );
+
+  const taken = new Set<string>();
+  for (const pair of pairs) {
+    if (assignment.get(pair.txId) || taken.has(pair.slot)) {
+      continue;
+    }
+    taken.add(pair.slot);
+    assignment.set(pair.txId, pair.ruleId);
+  }
+
+  // Cadences sans quota : premier abonnement qui correspond.
+  for (const tx of transactions) {
+    if (assignment.get(tx.id)) {
+      continue;
+    }
+    const fallback = (candidates.get(tx.id) ?? []).find(
+      (rule) => parseRecurringCadence(rule.cadence) !== "monthly",
+    );
+    if (fallback) {
+      assignment.set(tx.id, fallback.id);
+    }
+  }
+
+  return assignment;
+}
+
 export function findMatchingRecurringPayment(
   tx: Pick<TransactionWithAccount, "amount" | "description" | "booking_date">,
   rules: RecurringPayment[],

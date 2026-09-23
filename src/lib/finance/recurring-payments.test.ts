@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assignRecurringPayments,
   buildMonthlySubscriptionOverview,
   groupRulesByCanonical,
   listActiveSubscriptions,
@@ -392,5 +393,95 @@ describe("inferCadenceFromPaymentDates", () => {
     expect(
       inferCadenceFromPaymentDates(["2025-11-05", "2026-05-22"]),
     ).toBe("semiannual");
+  });
+});
+
+describe("assignRecurringPayments", () => {
+  const apple = (id: string, day: number) =>
+    rule({
+      id,
+      name: "Apple Cork",
+      amount: 9.99,
+      description_pattern: "APPLE CORK",
+      billing_day: day,
+    });
+
+  const charge = (id: string, date: string) =>
+    tx({
+      id,
+      amount: -9.99,
+      description: `PAIEMENT PAR CARTE X0745 APPLE CORK ${date.slice(8)}/09`,
+      booking_date: date,
+    });
+
+  it("gives each subscription its own charge when two share a label", () => {
+    const transactions = [
+      charge("tx-18", "2026-09-21"),
+      charge("tx-21", "2026-09-22"),
+    ];
+    const assignment = assignRecurringPayments(transactions, [
+      apple("apple-a", 21),
+      apple("apple-b", 22),
+    ]);
+
+    expect(assignment.get("tx-18")).toBe("apple-a");
+    expect(assignment.get("tx-21")).toBe("apple-b");
+  });
+
+  it("leaves the second charge of a month free rather than doubling one up", () => {
+    const assignment = assignRecurringPayments(
+      [charge("tx-18", "2026-09-21"), charge("tx-21", "2026-09-22")],
+      [apple("apple-a", 21)],
+    );
+
+    expect(assignment.get("tx-18")).toBe("apple-a");
+    expect(assignment.get("tx-21")).toBeNull();
+  });
+
+  it("repeats the split month after month", () => {
+    const assignment = assignRecurringPayments(
+      [
+        charge("sept-a", "2026-09-21"),
+        charge("sept-b", "2026-09-22"),
+        charge("oct-a", "2026-10-21"),
+        charge("oct-b", "2026-10-22"),
+      ],
+      [apple("apple-a", 21), apple("apple-b", 22)],
+    );
+
+    expect(assignment.get("sept-a")).toBe("apple-a");
+    expect(assignment.get("oct-a")).toBe("apple-a");
+    expect(assignment.get("sept-b")).toBe("apple-b");
+    expect(assignment.get("oct-b")).toBe("apple-b");
+  });
+
+  it("keeps no monthly quota on a yearly subscription", () => {
+    const yearly = rule({
+      id: "insurance",
+      name: "Assurance",
+      amount: 120,
+      description_pattern: "ASSURANCE",
+      cadence: "yearly",
+      billing_month: 9,
+      billing_day: 10,
+    });
+    const transactions = [
+      tx({
+        id: "tx-1",
+        amount: -120,
+        description: "PRLV SEPA ASSURANCE",
+        booking_date: "2026-09-10",
+      }),
+      tx({
+        id: "tx-2",
+        amount: -120,
+        description: "PRLV SEPA ASSURANCE",
+        booking_date: "2026-09-12",
+      }),
+    ];
+
+    const assignment = assignRecurringPayments(transactions, [yearly]);
+    expect(assignment.get("tx-1")).toBe("insurance");
+    expect(assignment.get("tx-2")).toBe("insurance");
   });
 });

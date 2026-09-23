@@ -5,7 +5,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  findMatchingRecurringPayment,
+  assignRecurringPayments,
   mapRecurringPayment,
 } from "@/lib/finance/recurring-payments";
 import { createClient } from "@/lib/supabase/server";
@@ -79,16 +79,21 @@ export async function rematchRecurringPaymentsForUser(
   const updatesByPayment = new Map<string | null, string[]>();
   let matched = 0;
 
+  // Le rattachement se décide sur l'ensemble : un abonnement mensuel ne prend
+  // qu'une transaction par mois, ce qui laisse la place à un second abonnement
+  // au même libellé.
+  const assignment = assignRecurringPayments(
+    transactions.map((tx) => ({
+      id: String(tx.id),
+      amount: Number(tx.amount),
+      description: String(tx.description),
+      booking_date: String(tx.booking_date),
+    })),
+    recurringRules,
+  );
+
   for (const tx of transactions) {
-    const rule = findMatchingRecurringPayment(
-      {
-        amount: Number(tx.amount),
-        description: String(tx.description),
-        booking_date: String(tx.booking_date),
-      },
-      recurringRules,
-    );
-    const nextId = rule?.id ?? null;
+    const nextId = assignment.get(String(tx.id)) ?? null;
 
     if (tx.recurring_payment_id === nextId) {
       continue;

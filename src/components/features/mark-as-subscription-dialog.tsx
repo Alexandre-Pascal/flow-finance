@@ -39,12 +39,12 @@ import {
   resolveGeneralStoredPattern,
 } from "@/lib/finance/recurring-labels";
 import {
+  assignRecurringPayments,
   DEFAULT_PAYPAL_PATTERN,
   getBookingDay,
   getBookingMonth,
   inferCadenceFromPaymentDates,
   listCanonicalRules,
-  matchesRecurringPayment,
 } from "@/lib/finance/recurring-payments";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type {
@@ -163,12 +163,15 @@ export function MarkAsSubscriptionDialog({
       updated_at: "",
     };
 
-    return transactions
-      .filter(
-        (candidateTx) =>
-          !candidateTx.recurring_payment_id &&
-          matchesRecurringPayment(candidateTx, candidate),
-      )
+    // Même règle de répartition que le serveur : un abonnement mensuel ne
+    // prend qu'une transaction par mois, l'aperçu ne promet donc pas plus.
+    const free = transactions.filter(
+      (candidateTx) => !candidateTx.recurring_payment_id,
+    );
+    const assignment = assignRecurringPayments(free, [candidate]);
+
+    return free
+      .filter((candidateTx) => assignment.get(candidateTx.id) === candidate.id)
       .map((candidateTx) => candidateTx.booking_date)
       .sort();
   }, [
