@@ -2,6 +2,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { TransactionsTable } from "@/components/features/transactions-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getFinanceData } from "@/lib/finance/queries";
+import { getProfileSettings } from "@/lib/get-profile-settings";
+import { getConfiguredIncomeSources } from "@/lib/profile-settings";
 
 export default async function TransactionsPage({
   params,
@@ -12,18 +14,24 @@ export default async function TransactionsPage({
   setRequestLocale(locale);
   const t = await getTranslations("transactions");
 
-  const {
-    transactions,
-    categories,
-    savingsAccounts,
-    peaInvestmentPlans,
-    recurringPayments,
-    isDemo,
-  } = await getFinanceData(locale, {
-    savingsAdjustments: false,
-    dismissedSuggestions: false,
-    bankConnection: false,
-  });
+  const [
+    {
+      transactions,
+      categories,
+      savingsAccounts,
+      peaInvestmentPlans,
+      recurringPayments,
+      isDemo,
+    },
+    profileSettings,
+  ] = await Promise.all([
+    getFinanceData(locale, {
+      savingsAdjustments: false,
+      dismissedSuggestions: false,
+      bankConnection: false,
+    }),
+    getProfileSettings(),
+  ]);
 
   const sorted = [...transactions].sort((a, b) =>
     b.booking_date.localeCompare(a.booking_date),
@@ -45,6 +53,8 @@ export default async function TransactionsPage({
             savingsAccounts={savingsAccounts}
             peaInvestmentPlans={peaInvestmentPlans}
             recurringPayments={recurringPayments}
+            incomeSources={getConfiguredIncomeSources(profileSettings)}
+            payrollKeyword={profileSettings.payroll.keyword}
             isDemo={isDemo}
           />
         </CardContent>

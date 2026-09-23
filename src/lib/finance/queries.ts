@@ -105,6 +105,7 @@ const TRANSACTION_COLUMNS = [
   "note",
   "savings_account_id",
   "savings_account_manual",
+  "income_source",
   "pea_plan_id",
   "pea_manual",
   "created_at",
@@ -156,6 +157,7 @@ function mapTransaction(
       ? String(row.savings_account_id)
       : null,
     savings_account_manual: Boolean(row.savings_account_manual),
+    income_source: row.income_source ? String(row.income_source) : null,
     pea_plan_id: row.pea_plan_id ? String(row.pea_plan_id) : null,
     pea_manual: Boolean(row.pea_manual),
     created_at: String(row.created_at),

@@ -22,6 +22,7 @@ import {
   syncPeaBankTransfersAction,
 } from "@/app/actions/pea";
 import { assignTransactionSavingsAccountAction } from "@/app/actions/savings";
+import { assignTransactionIncomeSourceAction } from "@/app/actions/transactions";
 import { updateTransactionNoteAction } from "@/app/actions/transactions";
 import { MarkAsSubscriptionDialog } from "@/components/features/mark-as-subscription-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +64,13 @@ import {
 } from "@/components/ui/table";
 import { dedupeCategories } from "@/lib/finance/expense-categories";
 import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  isPayrollTransfer,
+  isTrackedIncomeTransfer,
+  PAYROLL_INCOME_KEY,
+} from "@/lib/finance/tracked-transfers";
 import { isInternalTransfer } from "@/lib/pea/transfers";
+import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import type {
   Category,
   PeaInvestmentPlan,
@@ -85,6 +92,10 @@ interface TransactionsTableProps {
   peaInvestmentPlans?: PeaInvestmentPlan[];
   /** Abonnements existants, pour proposer un rattachement depuis une transaction. */
   recurringPayments?: RecurringPayment[];
+  /** Sources de rentrées configurées, pour rattacher une entrée à la main. */
+  incomeSources?: ProfileTrackedIncomeSource[];
+  /** Mot-clé du salaire, pour afficher la source détectée automatiquement. */
+  payrollKeyword?: string | null;
   compact?: boolean;
   isDemo?: boolean;
 }
@@ -390,11 +401,99 @@ function SavingsAssign({
   );
 }
 
+/** Rattache une rentrée au salaire ou à une source suivie. */
+function IncomeAssign({
+  tx,
+  incomeSources,
+  payrollKeyword,
+  isDemo,
+}: {
+  tx: TransactionWithAccount;
+  incomeSources: ProfileTrackedIncomeSource[];
+  payrollKeyword: string | null;
+  isDemo: boolean;
+}) {
+  const t = useTranslations("transactions");
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  const options = [
+    { id: PAYROLL_INCOME_KEY, label: t("incomeSalary") },
+    ...incomeSources.map((source) => ({ id: source.id, label: source.label })),
+  ];
+
+  const isManual = Boolean(tx.income_source);
+  // Sans rattachement, on montre ce que la détection par mots-clés a trouvé.
+  const detected = isPayrollTransfer(tx, payrollKeyword)
+    ? PAYROLL_INCOME_KEY
+    : (incomeSources.find((source) => isTrackedIncomeTransfer(tx, source))?.id ??
+      null);
+  const current = tx.income_source ?? detected;
+  const label =
+    options.find((option) => option.id === current)?.label ??
+    t("incomeAssignPlaceholder");
+
+  function assign(value: string) {
+    if (isDemo) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("transactionId", tx.id);
+    formData.set("incomeSource", value);
+    startTransition(async () => {
+      const result = await assignTransactionIncomeSourceAction(formData);
+      if (!result.error) {
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={isPending || isDemo}
+          className="inline-flex h-8 max-w-[180px] cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-normal text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          aria-label={t("incomeAssignLabel")}
+        >
+          <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{label}</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>{t("incomeAssignLabel")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.id}
+            checked={isManual && tx.income_source === option.id}
+            onCheckedChange={() => assign(option.id)}
+            className="cursor-pointer"
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={!isManual}
+          onCheckedChange={() => assign("auto")}
+          className="cursor-pointer"
+        >
+          {t("incomeAssignAuto")}
+        </DropdownMenuCheckboxItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function TransactionExpenseType({
   tx,
   categories,
   savingsAccounts,
   peaInvestmentPlans,
+  incomeSources,
+  payrollKeyword,
   compact,
   isDemo,
 }: {
@@ -402,6 +501,8 @@ function TransactionExpenseType({
   categories: Category[];
   savingsAccounts: SavingsAccount[];
   peaInvestmentPlans: PeaInvestmentPlan[];
+  incomeSources: ProfileTrackedIncomeSource[];
+  payrollKeyword: string | null;
   compact: boolean;
   isDemo: boolean;
 }) {
@@ -444,7 +545,18 @@ function TransactionExpenseType({
   }
 
   if (tx.amount >= 0) {
-    return <span className="text-muted-foreground">—</span>;
+    if (compact || tx.amount === 0) {
+      return <span className="text-muted-foreground">—</span>;
+    }
+
+    return (
+      <IncomeAssign
+        tx={tx}
+        incomeSources={incomeSources}
+        payrollKeyword={payrollKeyword}
+        isDemo={isDemo}
+      />
+    );
   }
 
   if (tx.recurring_payment_name) {
@@ -600,6 +712,8 @@ export function TransactionsTable({
   locale,
   savingsAccounts = [],
   peaInvestmentPlans = [],
+  incomeSources = [],
+  payrollKeyword = null,
   recurringPayments = [],
   compact = false,
   isDemo = false,
@@ -836,6 +950,8 @@ export function TransactionsTable({
                 categories={uniqueCategories}
                 savingsAccounts={savingsAccounts}
                 peaInvestmentPlans={peaInvestmentPlans}
+                incomeSources={incomeSources}
+                payrollKeyword={payrollKeyword}
                 compact={compact}
                 isDemo={isDemo}
               />

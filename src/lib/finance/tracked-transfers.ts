@@ -8,6 +8,15 @@ import { shiftMonthKey } from "@/lib/finance/payroll-budget";
 import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import type { TransactionWithAccount } from "@/types/database";
 
+/** Valeur de `income_source` qui rattache une transaction au salaire. */
+export const PAYROLL_INCOME_KEY = "payroll";
+
+/** Ce dont les détecteurs de rentrée ont besoin, rattachement manuel compris. */
+export type IncomeCandidate = Pick<
+  TransactionWithAccount,
+  "amount" | "description"
+> & { income_source?: string | null };
+
 export interface MonthlyTransferOverview {
   monthKey: string;
   month: string;
@@ -102,13 +111,25 @@ export function hitsTrackedIncomeExclude(
  * Hors salaire : ne pas confondre avec isPayrollTransfer.
  */
 export function isTrackedIncomeTransfer(
-  tx: Pick<TransactionWithAccount, "amount" | "description">,
-  source: Pick<
-    ProfileTrackedIncomeSource,
-    "keywords" | "excludeKeywords" | "requireRoundAmount"
-  > | null | undefined,
+  tx: IncomeCandidate,
+  source:
+    | Pick<
+        ProfileTrackedIncomeSource,
+        "id" | "keywords" | "excludeKeywords" | "requireRoundAmount"
+      >
+    | null
+    | undefined,
 ): boolean {
-  if (!source || tx.amount <= 0 || source.keywords.length === 0) {
+  if (!source || tx.amount <= 0) {
+    return false;
+  }
+
+  // Un rattachement manuel tranche : ni les mots-clés ni les exclusions.
+  if (tx.income_source) {
+    return tx.income_source === source.id;
+  }
+
+  if (source.keywords.length === 0) {
     return false;
   }
 
@@ -140,7 +161,10 @@ export function isTrackedPersonTransfer(
   if (!keyword) {
     return false;
   }
+  // Pas d'id : un rattachement manuel relève des sources configurées, pas de
+  // cet appel historique à un seul mot-clé.
   return isTrackedIncomeTransfer(tx, {
+    id: "",
     keywords: [keyword],
     excludeKeywords: [],
     requireRoundAmount: true,
@@ -174,10 +198,19 @@ export function isTrackedOutgoingTransfer(
  * Indépendant des sources d'aide familiale (tracked income).
  */
 export function isPayrollTransfer(
-  tx: Pick<TransactionWithAccount, "amount" | "description">,
+  tx: IncomeCandidate,
   keyword: string | null | undefined,
 ): boolean {
-  if (!keyword || tx.amount <= 0) {
+  if (tx.amount <= 0) {
+    return false;
+  }
+
+  // Un rattachement manuel tranche : ni le mot-clé ni la forme du libellé.
+  if (tx.income_source) {
+    return tx.income_source === PAYROLL_INCOME_KEY;
+  }
+
+  if (!keyword) {
     return false;
   }
 

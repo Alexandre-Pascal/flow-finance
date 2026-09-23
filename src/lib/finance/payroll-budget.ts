@@ -84,6 +84,11 @@ export function shouldCountAsBudgetIncome(
     return false;
   }
 
+  // Rattachement manuel : l'utilisateur a tranché, le libellé ne compte plus.
+  if (tx.income_source) {
+    return true;
+  }
+
   if (isNonIncomeTransferDescription(tx.description)) {
     return false;
   }

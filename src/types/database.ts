@@ -66,6 +66,11 @@ export interface Transaction {
   /** Affectation manuelle à un plan d'investissement PEA (prime sur les mots-clés). */
   pea_plan_id?: string | null;
   pea_manual?: boolean;
+  /**
+   * Rattachement manuel d'une rentrée : « payroll » ou l'id d'une source
+   * suivie. `null` laisse la détection par mots-clés décider.
+   */
+  income_source?: string | null;
   created_at: string;
   updated_at: string;
 }

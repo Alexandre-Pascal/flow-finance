@@ -40,6 +40,7 @@ Comptes bancaires synchronisés ou saisis.
 | booking_date | date | Date comptable |
 | amount | numeric | Montant signé |
 | status | text | `BOOK` ou `PDNG` |
+| income_source | text | Rentrée rattachée à la main : `payroll` ou l'id d'une source suivie |
 
 **Contrainte unique** : `(account_id, entry_reference)`
 

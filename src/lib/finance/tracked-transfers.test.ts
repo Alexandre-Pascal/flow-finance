@@ -96,6 +96,7 @@ describe("isTrackedPersonTransfer", () => {
 
 describe("isTrackedIncomeTransfer", () => {
   const sophie = {
+    id: "sophie",
     keywords: ["PASCAL SOPHIE", "MME PASCAL SOPHIE"],
     excludeKeywords: ["ALUTEC"],
     requireRoundAmount: true,
@@ -155,6 +156,37 @@ describe("isTrackedIncomeTransfer", () => {
         sophie,
       ),
     ).toBe(false);
+  });
+
+  it("follows a manual attachment over the keywords", () => {
+    const salaryLike = tx({
+      amount: 1800,
+      description: "VIREMENT EN VOTRE FAVEUR DE UN CLIENT INCONNU",
+    });
+
+    // Rattachée à la main au salaire : elle compte comme salaire…
+    expect(
+      isPayrollTransfer({ ...salaryLike, income_source: "payroll" }, "EMPLOYEUR"),
+    ).toBe(true);
+    // …et plus comme une rentrée suivie, même si le libellé s'y prêtait.
+    expect(
+      isTrackedIncomeTransfer(
+        {
+          amount: 500,
+          description: "VIREMENT EN VOTRE FAVEUR DE MME PASCAL SOPHIE",
+          income_source: "payroll",
+        },
+        sophie,
+      ),
+    ).toBe(false);
+    expect(
+      isTrackedIncomeTransfer(
+        { ...salaryLike, income_source: "sophie" },
+        sophie,
+      ),
+    ).toBe(true);
+    // Sans rattachement, le mot-clé reprend la main.
+    expect(isPayrollTransfer(salaryLike, "EMPLOYEUR")).toBe(false);
   });
 
   it("does not treat mother transfers as payroll", () => {
