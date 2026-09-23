@@ -36,6 +36,29 @@ export function shiftMonthKey(monthKey: string, months: number): string {
  * Si un mot-clé salaire est fourni et matche, applique `budgetShiftMonths`.
  * Les rentrées suivies (mère, etc.) restent sur le mois de réception.
  */
+/**
+ * À partir de ce jour du mois, un salaire est considéré comme versé pour le
+ * mois suivant. En deçà, c'est un complément du mois en cours (rappel, prime,
+ * solde de tout compte) : le décaler l'enverrait financer un mois à venir.
+ */
+export const PAYROLL_SHIFT_MIN_DAY = 20;
+
+/** Mois budgétaire d'un virement de salaire, décalage compris. */
+export function payrollBudgetMonthKey(
+  bookingDate: string,
+  shiftMonths: number,
+): string {
+  const bookingMonth = bookingDate.slice(0, 7);
+  if (shiftMonths === 0) {
+    return bookingMonth;
+  }
+
+  const day = Number(bookingDate.slice(8, 10));
+  return Number.isFinite(day) && day >= PAYROLL_SHIFT_MIN_DAY
+    ? shiftMonthKey(bookingMonth, shiftMonths)
+    : bookingMonth;
+}
+
 export function getIncomeMonthKey(
   tx: TransactionWithAccount,
   options: PayrollBudgetOptions = {},
@@ -50,13 +73,8 @@ export function getIncomeMonthKey(
     return bookingMonth;
   }
 
-  if (
-    keyword &&
-    shift !== 0 &&
-    tx.amount > 0 &&
-    isPayrollTransfer(tx, keyword)
-  ) {
-    return shiftMonthKey(bookingMonth, shift);
+  if (shift !== 0 && tx.amount > 0 && isPayrollTransfer(tx, keyword)) {
+    return payrollBudgetMonthKey(tx.booking_date, shift);
   }
 
   return bookingMonth;

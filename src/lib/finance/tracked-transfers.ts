@@ -4,7 +4,7 @@
  */
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
-import { shiftMonthKey } from "@/lib/finance/payroll-budget";
+import { payrollBudgetMonthKey } from "@/lib/finance/payroll-budget";
 import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import type { TransactionWithAccount } from "@/types/database";
 
@@ -260,11 +260,10 @@ export function buildMonthlyTransferOverview(
   const buckets = new Map<string, { amount: number; transferCount: number }>();
 
   for (const tx of matched) {
-    const bookingMonth = tx.booking_date.slice(0, 7);
     const key =
       shiftMonths !== 0 && tx.amount > 0
-        ? shiftMonthKey(bookingMonth, shiftMonths)
-        : bookingMonth;
+        ? payrollBudgetMonthKey(tx.booking_date, shiftMonths)
+        : tx.booking_date.slice(0, 7);
     const bucket = buckets.get(key) ?? { amount: 0, transferCount: 0 };
     const signed = absoluteAmounts ? Math.abs(tx.amount) : tx.amount;
     bucket.amount += signed;

@@ -36,6 +36,18 @@ describe("payroll-budget", () => {
     );
   });
 
+  it("keeps an early-month payroll top-up in the month it lands", () => {
+    // Le solde du salaire d'août versé le 2 septembre finance septembre :
+    // le décaler l'enverrait financer octobre, un mois encore à venir.
+    expect(getIncomeMonthKey(payrollTx("2026-09-02", 128.06), payrollOptions)).toBe(
+      "2026-09",
+    );
+    // Le virement de fin de mois, lui, finance bien le mois suivant.
+    expect(getIncomeMonthKey(payrollTx("2026-08-31", 2000), payrollOptions)).toBe(
+      "2026-09",
+    );
+  });
+
   it("keeps payroll in booking month when shift is 0", () => {
     expect(
       getIncomeMonthKey(payrollTx("2025-07-28", 3000), {
