@@ -71,6 +71,10 @@ export async function GET(request: Request) {
     if (connError) throw connError;
 
     if (session.accounts.length === 0) {
+      // Consentement accordé mais aucun compte partagé : garder la connexion
+      // laisserait une banque « reliée » sans rien derrière, dans la liste des
+      // Paramètres comme dans les relances de synchronisation.
+      await supabase.from("bank_connections").delete().eq("id", connection.id);
       return NextResponse.redirect(`${appUrl}/fr/settings?error=no_accounts`);
     }
 
