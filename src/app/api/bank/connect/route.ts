@@ -6,7 +6,10 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { resolveConnectAspsp } from "@/lib/enable-banking/aspsps";
+import {
+  findConnectAspsp,
+  resolveConnectAspsp,
+} from "@/lib/enable-banking/aspsps";
 import { startAuthorization } from "@/lib/enable-banking/client";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { createClient } from "@/lib/supabase/server";
@@ -33,7 +36,18 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const aspsp = resolveConnectAspsp(searchParams.get("aspsp"));
+  const requestedAspsp = searchParams.get("aspsp");
+
+  // Une banque demandée mais inconnue est une erreur : retomber en silence sur
+  // la banque par défaut enverrait l'utilisateur s'authentifier ailleurs.
+  if (requestedAspsp && !findConnectAspsp(requestedAspsp)) {
+    return NextResponse.json(
+      { error: `Unknown bank: ${requestedAspsp}` },
+      { status: 400 },
+    );
+  }
+
+  const aspsp = resolveConnectAspsp(requestedAspsp);
 
   const state = randomUUID();
   const cookieStore = await cookies();

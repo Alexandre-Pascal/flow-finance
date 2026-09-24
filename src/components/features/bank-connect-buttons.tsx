@@ -22,11 +22,17 @@ export function BankConnectButtons({
 
   return (
     <form
-      action={`/api/bank/connect?aspsp=${encodeURIComponent(aspspId)}`}
+      action="/api/bank/connect"
       method="get"
       className="space-y-3"
       onSubmit={() => setPending(true)}
     >
+      {/*
+        En GET, le navigateur remplace la query string de l'action par les
+        champs du formulaire : la banque choisie doit donc être un champ, sinon
+        elle est perdue et le serveur retombe sur la banque par défaut.
+      */}
+      <input type="hidden" name="aspsp" value={aspspId} />
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{t("aspspPickHint")}</p>
         <div className="flex flex-wrap gap-2">
