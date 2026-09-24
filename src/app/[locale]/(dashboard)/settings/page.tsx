@@ -38,6 +38,7 @@ export default async function SettingsPage({
     {
       accounts,
       bankConnection,
+      bankConnections,
       transactions,
       recurringPayments,
       categories,
@@ -123,27 +124,41 @@ export default async function SettingsPage({
               {isBankLinked ? t("bankConnected") : t("bankNotConnected")}
             </span>
           </div>
-          {bankConnection?.aspsp_name ? (
-            <p className="text-sm text-muted-foreground">
-              {t("aspspConnected", { name: bankConnection.aspsp_name })}
-            </p>
-          ) : null}
-          {bankConnection?.valid_until ? (
-            <p className="text-sm text-muted-foreground">
-              {t("consentExpires", {
-                date: new Date(bankConnection.valid_until).toLocaleDateString(
-                  locale,
-                ),
-              })}
-            </p>
+          {bankConnections.length > 0 ? (
+            <ul className="space-y-1">
+              {bankConnections.map((connection) => (
+                <li
+                  key={connection.id}
+                  className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm text-muted-foreground"
+                >
+                  <span>
+                    {connection.aspsp_name
+                      ? t("aspspConnected", { name: connection.aspsp_name })
+                      : t("bankConnected")}
+                  </span>
+                  {connection.valid_until ? (
+                    <span className="text-xs">
+                      {t("consentExpires", {
+                        date: new Date(
+                          connection.valid_until,
+                        ).toLocaleDateString(locale),
+                      })}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           ) : null}
           {isBankLinked && !hasSyncedAccounts ? (
             <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {t("connectNoAccountsError")}
             </p>
           ) : null}
-          {bankReady && (!isBankLinked || !hasSyncedAccounts) ? (
-            <BankConnectButtons />
+          {/* Toujours proposé : on peut relier une seconde banque. */}
+          {bankReady ? (
+            <BankConnectButtons
+              connected={isBankLinked && hasSyncedAccounts}
+            />
           ) : null}
           {bankReady && isBankLinked && hasSyncedAccounts ? (
             <BankSyncButtons />

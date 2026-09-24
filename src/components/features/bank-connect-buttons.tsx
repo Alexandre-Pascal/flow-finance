@@ -1,6 +1,6 @@
 /**
  * @file bank-connect-buttons.tsx
- * @description Choix de région CA puis démarrage OAuth Enable Banking.
+ * @description Choix de la banque puis démarrage OAuth Enable Banking.
  */
 
 "use client";
@@ -8,11 +8,16 @@
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CA_ASPSPS } from "@/lib/enable-banking/aspsps";
+import { CONNECT_ASPSPS } from "@/lib/enable-banking/aspsps";
 
-export function BankConnectButtons() {
+export function BankConnectButtons({
+  connected = false,
+}: {
+  /** Une banque est déjà reliée : on propose d'en ajouter une autre. */
+  connected?: boolean;
+}) {
   const t = useTranslations("settings");
-  const [aspspId, setAspspId] = useState(CA_ASPSPS[0]?.id ?? "");
+  const [aspspId, setAspspId] = useState(CONNECT_ASPSPS[0]?.id ?? "");
   const [pending, setPending] = useState(false);
 
   return (
@@ -25,7 +30,7 @@ export function BankConnectButtons() {
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{t("aspspPickHint")}</p>
         <div className="flex flex-wrap gap-2">
-          {CA_ASPSPS.map((aspsp) => (
+          {CONNECT_ASPSPS.map((aspsp) => (
             <Button
               key={aspsp.id}
               type="button"
@@ -45,7 +50,11 @@ export function BankConnectButtons() {
         className="cursor-pointer bg-accent text-accent-foreground hover:bg-accent/90"
         disabled={pending || !aspspId}
       >
-        {pending ? t("connectingBank") : t("connectBank")}
+        {pending
+          ? t("connectingBank")
+          : connected
+            ? t("connectAnotherBank")
+            : t("connectBank")}
       </Button>
     </form>
   );

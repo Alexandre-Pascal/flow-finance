@@ -77,7 +77,10 @@ export interface FinanceData {
   categoriesSchemaReady: boolean;
   savingsSchemaReady: boolean;
   monthlySpending: { month: string; amount: number }[];
+  /** Connexion la plus récente — celle qu'on affiche par défaut. */
   bankConnection: BankConnection | null;
+  /** Toutes les banques reliées, de la plus récente à la plus ancienne. */
+  bankConnections: BankConnection[];
   isDemo: boolean;
 }
 
@@ -206,17 +209,6 @@ async function readRows(
   return { rows: (data ?? []) as Record<string, unknown>[], error };
 }
 
-async function readRow(
-  query: PostgrestResult | null,
-): Promise<{ row: Record<string, unknown> | null; error: unknown }> {
-  if (!query) {
-    return { row: null, error: null };
-  }
-
-  const { data, error } = await query;
-  return { row: (data ?? null) as Record<string, unknown> | null, error };
-}
-
 /**
  * Lit les transactions des comptes fournis en ne demandant que les colonnes
  * utilisées par l'interface.
@@ -315,13 +307,14 @@ async function fetchFromSupabase(
       savingsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
+      bankConnections: [],
       isDemo: false,
     };
   }
 
   const [
     { rows: accountRows },
-    { row: connectionRow },
+    { rows: connectionRows },
     { rows: recurringRows, error: recurringError },
     { rows: dismissalRows, error: dismissalError },
     { rows: savingsRows, error: savingsError },
@@ -330,15 +323,13 @@ async function fetchFromSupabase(
     { rows: peaHoldingRows },
   ] = await Promise.all([
     readRows(supabase.from("accounts").select("*").order("name")),
-    readRow(
+    readRows(
       sections.bankConnection === false
         ? null
         : supabase
             .from("bank_connections")
             .select("*")
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+            .order("created_at", { ascending: false }),
     ),
     readRows(
       supabase
@@ -398,6 +389,7 @@ async function fetchFromSupabase(
     fetchCategories(supabase, user.id),
   ]);
 
+  const bankConnections = connectionRows.map((row) => mapBankConnection(row));
   const savingsSchemaReady = !savingsError && !adjustmentError;
   const savingsAccounts = savingsRows.map((row) => mapSavingsAccount(row));
   const savingsAdjustments = adjustmentRows.map((row) =>
@@ -480,7 +472,8 @@ async function fetchFromSupabase(
     categoriesSchemaReady,
     savingsSchemaReady,
     monthlySpending: buildMonthlySpending(transactions, locale),
-    bankConnection: connectionRow ? mapBankConnection(connectionRow) : null,
+    bankConnection: bankConnections[0] ?? null,
+    bankConnections,
     isDemo: false,
   };
 }
@@ -513,6 +506,7 @@ export async function getFinanceData(
       savingsSchemaReady: false,
       monthlySpending: [],
       bankConnection: null,
+      bankConnections: [],
       isDemo: false,
     };
   }
@@ -529,6 +523,7 @@ export async function getFinanceData(
       monthlySpending: MOCK_MONTHLY_SPENDING,
       dismissedSuggestionKeys: [],
       bankConnection: null,
+      bankConnections: [],
       isDemo: true,
       subscriptionsSchemaReady: true,
       categoriesSchemaReady: true,

@@ -1,18 +1,19 @@
 /**
  * @file aspsps.ts
- * @description Caisses régionales Crédit Agricole exposées à la connexion.
+ * @description Banques proposées à la connexion.
  *
- * Les noms doivent correspondre exactement à ceux d'Enable Banking.
- * À vérifier dans le Control Panel si l'OAuth échoue.
+ * `name` et `country` doivent correspondre exactement à ce que renvoie
+ * `GET /aspsps` chez Enable Banking — c'est ce couple qui identifie la banque
+ * au moment d'ouvrir le flux d'autorisation.
  */
 
-export interface CaAspspOption {
+export interface ConnectAspspOption {
   id: string;
   name: string;
   country: string;
 }
 
-export const CA_ASPSPS: readonly CaAspspOption[] = [
+export const CONNECT_ASPSPS: readonly ConnectAspspOption[] = [
   {
     id: "toulouse",
     name: "Crédit Agricole Toulouse 31",
@@ -23,18 +24,23 @@ export const CA_ASPSPS: readonly CaAspspOption[] = [
     name: "Crédit Agricole Nord Midi-Pyrénées",
     country: "FR",
   },
+  {
+    id: "revolut",
+    name: "Revolut",
+    country: "FR",
+  },
 ] as const;
 
-export function findCaAspsp(id: string | null | undefined): CaAspspOption | null {
+export function findConnectAspsp(id: string | null | undefined): ConnectAspspOption | null {
   if (!id) {
     return null;
   }
-  return CA_ASPSPS.find((aspsp) => aspsp.id === id) ?? null;
+  return CONNECT_ASPSPS.find((aspsp) => aspsp.id === id) ?? null;
 }
 
-/** Fallback : ASPSP d'env, sinon première région de la liste. */
-export function resolveConnectAspsp(aspspId: string | null | undefined): CaAspspOption {
-  const fromQuery = findCaAspsp(aspspId);
+/** Repli : banque définie en variable d'env, sinon première de la liste. */
+export function resolveConnectAspsp(aspspId: string | null | undefined): ConnectAspspOption {
+  const fromQuery = findConnectAspsp(aspspId);
   if (fromQuery) {
     return fromQuery;
   }
@@ -48,5 +54,5 @@ export function resolveConnectAspsp(aspspId: string | null | undefined): CaAspsp
     };
   }
 
-  return CA_ASPSPS[0];
+  return CONNECT_ASPSPS[0];
 }
