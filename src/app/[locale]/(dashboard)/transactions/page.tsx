@@ -16,6 +16,7 @@ export default async function TransactionsPage({
 
   const [
     {
+      accounts,
       transactions,
       categories,
       savingsAccounts,
@@ -53,6 +54,7 @@ export default async function TransactionsPage({
             savingsAccounts={savingsAccounts}
             peaInvestmentPlans={peaInvestmentPlans}
             recurringPayments={recurringPayments}
+            accounts={accounts}
             incomeSources={getConfiguredIncomeSources(profileSettings)}
             payrollKeyword={profileSettings.payroll.keyword}
             isDemo={isDemo}

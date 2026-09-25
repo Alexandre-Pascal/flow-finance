@@ -14,6 +14,7 @@ import {
   mapRecurringPayment,
   resolveCanonicalRules,
 } from "@/lib/finance/recurring-payments";
+import { annotateAccountTransfers } from "@/lib/finance/account-transfers";
 import {
   annotateSavingsTransfers,
   mapSavingsAccount,
@@ -456,6 +457,9 @@ async function fetchFromSupabase(
     peaInvestmentPlans,
     peaHoldingRows.map((row) => mapPeaHolding(row)),
   );
+  // En dernier : un virement déjà reconnu comme versement d'épargne garde sa
+  // qualification, plus parlante qu'un simple déplacement entre comptes.
+  transactions = annotateAccountTransfers(transactions, accounts);
 
   return {
     accounts,

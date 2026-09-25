@@ -10,7 +10,7 @@ import {
   shouldCountAsBudgetIncome,
   type PayrollBudgetOptions,
 } from "@/lib/finance/payroll-budget";
-import { isInternalTransfer } from "@/lib/pea/transfers";
+import { isNeutralTransfer } from "@/lib/finance/account-transfers";
 
 export type MonthlyPeriod = 1 | 3 | 6 | 12 | "all";
 
@@ -66,7 +66,7 @@ export function buildMonthlySpending(
           booked.getFullYear() === date.getFullYear() &&
           booked.getMonth() === date.getMonth() &&
           tx.amount < 0 &&
-          !isInternalTransfer(tx)
+          !isNeutralTransfer(tx)
         );
       })
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);

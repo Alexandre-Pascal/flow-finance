@@ -71,6 +71,9 @@ export interface Transaction {
    * suivie. `null` laisse la détection par mots-clés décider.
    */
   income_source?: string | null;
+  /** Compte de l'utilisateur en face d'un virement interne (prime sur le libellé). */
+  transfer_account_id?: string | null;
+  transfer_manual?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -311,6 +314,20 @@ export interface PeaTransferRef {
   direction: "deposit" | "withdrawal";
 }
 
+/**
+ * Virement entre deux comptes de l'utilisateur, associé à une transaction.
+ * `direction` décrit le mouvement vu du compte qui porte la ligne.
+ *
+ * La contrepartie vaut `null` quand le libellé nomme le titulaire sans
+ * permettre de désigner un compte : l'argent est bien à lui et ne compte ni en
+ * dépense ni en revenu, mais dire d'où il vient serait une invention.
+ */
+export interface AccountTransferRef {
+  counterpart_account_id: string | null;
+  counterpart_account_name: string | null;
+  direction: "out" | "in";
+}
+
 /** Transaction enrichie pour l'affichage UI (jointure compte). */
 export interface TransactionWithAccount extends Transaction {
   account_name: string;
@@ -320,4 +337,5 @@ export interface TransactionWithAccount extends Transaction {
   category_color?: string | null;
   savings_transfer?: SavingsTransferRef | null;
   pea_transfer?: PeaTransferRef | null;
+  account_transfer?: AccountTransferRef | null;
 }

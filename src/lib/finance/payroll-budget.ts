@@ -10,7 +10,7 @@ import {
   isTrackedIncomeTransfer,
 } from "@/lib/finance/tracked-transfers";
 import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
-import { isInternalTransfer } from "@/lib/pea/transfers";
+import { isNeutralTransfer } from "@/lib/finance/account-transfers";
 import type { TransactionWithAccount } from "@/types/database";
 
 export interface PayrollBudgetOptions {
@@ -121,7 +121,7 @@ export function shouldCountAsBudgetIncome(
     return true;
   }
 
-  if (isInternalTransfer(tx)) {
+  if (isNeutralTransfer(tx)) {
     return false;
   }
 
@@ -139,7 +139,7 @@ export function shouldCountAsBudgetExpense(
     return false;
   }
 
-  if (isInternalTransfer(tx)) {
+  if (isNeutralTransfer(tx)) {
     return false;
   }
 

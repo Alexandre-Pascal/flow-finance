@@ -22,7 +22,10 @@ import {
   syncPeaBankTransfersAction,
 } from "@/app/actions/pea";
 import { assignTransactionSavingsAccountAction } from "@/app/actions/savings";
-import { assignTransactionIncomeSourceAction } from "@/app/actions/transactions";
+import {
+  assignTransactionIncomeSourceAction,
+  assignTransactionTransferAccountAction,
+} from "@/app/actions/transactions";
 import { updateTransactionNoteAction } from "@/app/actions/transactions";
 import { MarkAsSubscriptionDialog } from "@/components/features/mark-as-subscription-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -69,9 +72,10 @@ import {
   isTrackedIncomeTransfer,
   PAYROLL_INCOME_KEY,
 } from "@/lib/finance/tracked-transfers";
-import { isInternalTransfer } from "@/lib/pea/transfers";
+import { isNeutralTransfer } from "@/lib/finance/account-transfers";
 import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import type {
+  Account,
   Category,
   PeaInvestmentPlan,
   RecurringPayment,
@@ -92,6 +96,8 @@ interface TransactionsTableProps {
   peaInvestmentPlans?: PeaInvestmentPlan[];
   /** Abonnements existants, pour proposer un rattachement depuis une transaction. */
   recurringPayments?: RecurringPayment[];
+  /** Comptes de l'utilisateur, pour rattacher un virement à la main. */
+  accounts?: Account[];
   /** Sources de rentrées configurées, pour rattacher une entrée à la main. */
   incomeSources?: ProfileTrackedIncomeSource[];
   /** Mot-clé du salaire, pour afficher la source détectée automatiquement. */
@@ -401,6 +407,106 @@ function SavingsAssign({
   );
 }
 
+/** Libellé d'un virement interne, selon qu'on sache nommer la contrepartie. */
+function transferLabel(
+  ref: NonNullable<TransactionWithAccount["account_transfer"]>,
+  t: ReturnType<typeof useTranslations<"transactions">>,
+): string {
+  if (!ref.counterpart_account_name) {
+    return t("transferSelf");
+  }
+  return ref.direction === "out"
+    ? t("transferTo", { name: ref.counterpart_account_name })
+    : t("transferFrom", { name: ref.counterpart_account_name });
+}
+
+/** Déclare, corrige ou retire un virement entre deux comptes de l'utilisateur. */
+function TransferAssign({
+  tx,
+  accounts,
+  isDemo,
+}: {
+  tx: TransactionWithAccount;
+  accounts: Account[];
+  isDemo: boolean;
+}) {
+  const t = useTranslations("transactions");
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  const ref = tx.account_transfer;
+  const others = accounts.filter((account) => account.id !== tx.account_id);
+
+  function assign(value: string) {
+    if (isDemo) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("transactionId", tx.id);
+    formData.set("transferAccountId", value);
+    startTransition(async () => {
+      const result = await assignTransactionTransferAccountAction(formData);
+      if (!result.error) {
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={isPending || isDemo}
+          className={cn(
+            "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-normal transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
+            ref ? "max-w-[190px] text-muted-foreground" : "px-2 text-muted-foreground/70",
+          )}
+          aria-label={t("transferAssignLabel")}
+          title={t("transferAssignLabel")}
+        >
+          <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
+          {ref ? (
+            <span className="truncate">{transferLabel(ref, t)}</span>
+          ) : null}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel>{t("transferAssignLabel")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {others.map((account) => (
+          <DropdownMenuCheckboxItem
+            key={account.id}
+            checked={
+              Boolean(tx.transfer_manual) &&
+              tx.transfer_account_id === account.id
+            }
+            onCheckedChange={() => assign(account.id)}
+            className="cursor-pointer"
+          >
+            <span className="truncate">{account.name}</span>
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={Boolean(tx.transfer_manual) && !tx.transfer_account_id}
+          onCheckedChange={() => assign("none")}
+          className="cursor-pointer"
+        >
+          {t("transferAssignNone")}
+        </DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem
+          checked={!tx.transfer_manual}
+          onCheckedChange={() => assign("auto")}
+          className="cursor-pointer"
+        >
+          {t("transferAssignAuto")}
+        </DropdownMenuCheckboxItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** Rattache une rentrée au salaire ou à une source suivie. */
 function IncomeAssign({
   tx,
@@ -492,6 +598,7 @@ function TransactionExpenseType({
   categories,
   savingsAccounts,
   peaInvestmentPlans,
+  accounts,
   incomeSources,
   payrollKeyword,
   compact,
@@ -501,12 +608,16 @@ function TransactionExpenseType({
   categories: Category[];
   savingsAccounts: SavingsAccount[];
   peaInvestmentPlans: PeaInvestmentPlan[];
+  accounts: Account[];
   incomeSources: ProfileTrackedIncomeSource[];
   payrollKeyword: string | null;
   compact: boolean;
   isDemo: boolean;
 }) {
   const t = useTranslations("transactions");
+  // Le rattachement manuel reste accessible sur toute ligne : les conversions
+  // Revolut (« To EUR ») ne nomment aucun compte et échappent à la détection.
+  const canAssignTransfer = !compact && !isDemo && accounts.length > 1;
 
   if (tx.savings_transfer) {
     const ref = tx.savings_transfer;
@@ -544,18 +655,33 @@ function TransactionExpenseType({
     );
   }
 
+  if (tx.account_transfer) {
+    const label = transferLabel(tx.account_transfer, t);
+
+    if (!canAssignTransfer) {
+      return <SavingsTransferBadge label={label} />;
+    }
+
+    return <TransferAssign tx={tx} accounts={accounts} isDemo={isDemo} />;
+  }
+
   if (tx.amount >= 0) {
     if (compact || tx.amount === 0) {
       return <span className="text-muted-foreground">—</span>;
     }
 
     return (
-      <IncomeAssign
-        tx={tx}
-        incomeSources={incomeSources}
-        payrollKeyword={payrollKeyword}
-        isDemo={isDemo}
-      />
+      <div className="flex items-center gap-1.5">
+        {canAssignTransfer ? (
+          <TransferAssign tx={tx} accounts={accounts} isDemo={isDemo} />
+        ) : null}
+        <IncomeAssign
+          tx={tx}
+          incomeSources={incomeSources}
+          payrollKeyword={payrollKeyword}
+          isDemo={isDemo}
+        />
+      </div>
     );
   }
 
@@ -586,7 +712,14 @@ function TransactionExpenseType({
     );
   }
 
-  return <CategorySelect tx={tx} categories={categories} isDemo={isDemo} />;
+  return (
+    <div className="flex items-center gap-1.5">
+      {canAssignTransfer ? (
+        <TransferAssign tx={tx} accounts={accounts} isDemo={isDemo} />
+      ) : null}
+      <CategorySelect tx={tx} categories={categories} isDemo={isDemo} />
+    </div>
+  );
 }
 
 function TransactionNote({
@@ -712,6 +845,7 @@ export function TransactionsTable({
   locale,
   savingsAccounts = [],
   peaInvestmentPlans = [],
+  accounts = [],
   incomeSources = [],
   payrollKeyword = null,
   recurringPayments = [],
@@ -772,7 +906,7 @@ export function TransactionsTable({
       } else if (
         tx.amount < 0 &&
         !tx.recurring_payment_id &&
-        !isInternalTransfer(tx)
+        !isNeutralTransfer(tx)
       ) {
         uncategorized += 1;
       }
@@ -803,7 +937,7 @@ export function TransactionsTable({
           tx.amount < 0 &&
           !tx.recurring_payment_id &&
           !tx.category_id &&
-          !isInternalTransfer(tx)
+          !isNeutralTransfer(tx)
         );
       }
       if (categoryFilter === "recurring") {
@@ -871,7 +1005,7 @@ export function TransactionsTable({
       !isDemo &&
       tx.amount < 0 &&
       !tx.recurring_payment_id &&
-      !isInternalTransfer(tx)
+      !isNeutralTransfer(tx)
     );
   }
 
@@ -950,6 +1084,7 @@ export function TransactionsTable({
                 categories={uniqueCategories}
                 savingsAccounts={savingsAccounts}
                 peaInvestmentPlans={peaInvestmentPlans}
+                accounts={accounts}
                 incomeSources={incomeSources}
                 payrollKeyword={payrollKeyword}
                 compact={compact}
