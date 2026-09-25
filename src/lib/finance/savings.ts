@@ -6,6 +6,7 @@
  * partir des transactions correspondantes.
  */
 
+import { isManualAccount } from "@/lib/finance/account-transfers";
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
 import type {
   Account,
@@ -669,24 +670,37 @@ export function buildCheckingOverview(
   return accounts
     .filter((account) => account.type === "checking")
     .map((account) => {
-      const txs = transactions.filter((tx) => tx.account_id === account.id);
+      // Un compte manuel — une pocket — n'a pas de lignes à lui : ses
+      // mouvements sont les virements qui le désignent, vus à l'envers. Une
+      // sortie du compte principal est une entrée dans la pocket.
+      const entries = isManualAccount(account)
+        ? transactions
+            .filter(
+              (tx) => tx.account_transfer?.counterpart_account_id === account.id,
+            )
+            .map((tx) => ({ tx, amount: -tx.amount }))
+        : transactions
+            .filter((tx) => tx.account_id === account.id)
+            .map((tx) => ({ tx, amount: tx.amount }));
 
       const netByMonth = new Map<
         string,
         { deposits: number; withdrawals: number }
       >();
-      for (const tx of txs) {
-        const key = tx.booking_date.slice(0, 7);
+      for (const entry of entries) {
+        const key = entry.tx.booking_date.slice(0, 7);
         const bucket = netByMonth.get(key) ?? { deposits: 0, withdrawals: 0 };
-        if (tx.amount >= 0) {
-          bucket.deposits += tx.amount;
+        if (entry.amount >= 0) {
+          bucket.deposits += entry.amount;
         } else {
-          bucket.withdrawals += Math.abs(tx.amount);
+          bucket.withdrawals += Math.abs(entry.amount);
         }
         netByMonth.set(key, bucket);
       }
 
-      const txMonthKeys = txs.map((tx) => tx.booking_date.slice(0, 7));
+      const txMonthKeys = entries.map((entry) =>
+        entry.tx.booking_date.slice(0, 7),
+      );
       const earliestKey = [nowMonthKey, ...txMonthKeys].sort()[0];
       const startDate = new Date(`${earliestKey}-01T00:00:00`);
       const monthKeys = enumerateCalendarMonths(startDate, now);
@@ -724,14 +738,14 @@ export function buildCheckingOverview(
         balance: balances[index],
       }));
 
-      const movements: SavingsMovementItem[] = [...txs]
-        .sort((a, b) => b.booking_date.localeCompare(a.booking_date))
-        .map((tx) => ({
-          id: tx.id,
-          date: tx.booking_date,
-          monthKey: tx.booking_date.slice(0, 7),
-          label: tx.description,
-          amount: tx.amount,
+      const movements: SavingsMovementItem[] = [...entries]
+        .sort((a, b) => b.tx.booking_date.localeCompare(a.tx.booking_date))
+        .map((entry) => ({
+          id: entry.tx.id,
+          date: entry.tx.booking_date,
+          monthKey: entry.tx.booking_date.slice(0, 7),
+          label: entry.tx.description,
+          amount: entry.amount,
           source: "transfer",
         }));
 
