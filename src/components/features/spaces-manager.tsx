@@ -12,7 +12,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
 import {
   deleteManualAccountAction,
-  renameAccountAction,
+  updateAccountAction,
 } from "@/app/actions/accounts";
 import {
   assignAccountSpaceAction,
@@ -60,6 +60,7 @@ export function SpacesManager({
   const [draftName, setDraftName] = useState("");
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [draftAccountName, setDraftAccountName] = useState("");
+  const [draftKeywords, setDraftKeywords] = useState("");
 
   const fallback = defaultSpace(spaces);
 
@@ -113,14 +114,14 @@ export function SpacesManager({
     runAction(deleteSpaceAction, formData);
   }
 
-  function handleRenameAccount(accountId: string) {
-    const name = draftAccountName.trim();
-    setEditingAccountId(null);
+  function handleSaveAccount(accountId: string) {
     const formData = new FormData();
     formData.set("id", accountId);
     // Un nom vide rend la main au libellé de la banque.
-    formData.set("name", name);
-    runAction(renameAccountAction, formData);
+    formData.set("name", draftAccountName.trim());
+    formData.set("keywords", draftKeywords);
+    setEditingAccountId(null);
+    runAction(updateAccountAction, formData);
   }
 
   function handleDeleteAccount(accountId: string) {
@@ -313,48 +314,61 @@ export function SpacesManager({
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-4 py-3"
                 >
                   {editingAccountId === account.id ? (
-                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex items-center gap-1">
+                        <Input
+                          value={draftAccountName}
+                          onChange={(event) =>
+                            setDraftAccountName(event.target.value)
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              handleSaveAccount(account.id);
+                            }
+                            if (event.key === "Escape") {
+                              setEditingAccountId(null);
+                            }
+                          }}
+                          className="h-8"
+                          placeholder={account.name}
+                          aria-label={t("accountRename")}
+                          autoFocus
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 shrink-0 cursor-pointer"
+                          aria-label={t("accountSave")}
+                          disabled={isPending}
+                          onClick={() => handleSaveAccount(account.id)}
+                        >
+                          <Check className="size-4" aria-hidden />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 shrink-0 cursor-pointer"
+                          aria-label={t("spaceRenameCancel")}
+                          disabled={isPending}
+                          onClick={() => setEditingAccountId(null)}
+                        >
+                          <X className="size-4" aria-hidden />
+                        </Button>
+                      </div>
                       <Input
-                        value={draftAccountName}
-                        onChange={(event) =>
-                          setDraftAccountName(event.target.value)
-                        }
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            handleRenameAccount(account.id);
-                          }
-                          if (event.key === "Escape") {
-                            setEditingAccountId(null);
-                          }
-                        }}
-                        className="h-8"
-                        placeholder={account.name}
-                        aria-label={t("accountRename")}
-                        autoFocus
+                        value={draftKeywords}
+                        onChange={(event) => setDraftKeywords(event.target.value)}
+                        className="h-8 font-mono text-xs"
+                        placeholder={t("accountKeywordsPlaceholder")}
+                        aria-label={t("accountKeywordsLabel")}
+                        disabled={isPending}
                       />
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-8 shrink-0 cursor-pointer"
-                        aria-label={t("accountRename")}
-                        disabled={isPending}
-                        onClick={() => handleRenameAccount(account.id)}
-                      >
-                        <Check className="size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="size-8 shrink-0 cursor-pointer"
-                        aria-label={t("spaceRenameCancel")}
-                        disabled={isPending}
-                        onClick={() => setEditingAccountId(null)}
-                      >
-                        <X className="size-4" aria-hidden />
-                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        {t("accountKeywordsHint")}
+                      </p>
                     </div>
                   ) : (
                     <div className="min-w-0">
@@ -368,8 +382,8 @@ export function SpacesManager({
                           account.currency,
                         )}
                         {account.display_name ? ` · ${account.name}` : null}
-                        {isManualAccount(account)
-                          ? ` · ${(account.match_keywords ?? [])[0]}`
+                        {(account.match_keywords ?? []).length > 0
+                          ? ` · ${(account.match_keywords ?? []).join(" ; ")}`
                           : null}
                       </p>
                     </div>
@@ -387,6 +401,9 @@ export function SpacesManager({
                         disabled={isPending}
                         onClick={() => {
                           setDraftAccountName(account.display_name ?? "");
+                          setDraftKeywords(
+                            (account.match_keywords ?? []).join(" ; "),
+                          );
                           setEditingAccountId(account.id);
                         }}
                       >

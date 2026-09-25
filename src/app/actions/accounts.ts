@@ -166,12 +166,17 @@ export async function deleteManualAccountAction(
 }
 
 /**
- * Renomme un compte pour l'affichage.
+ * Met à jour ce que l'utilisateur maîtrise sur un compte : son nom d'affichage
+ * et les fragments de libellé qui le désignent dans un virement.
  *
- * Le nom de la banque n'est pas touché : c'est lui qui permet de reconnaître un
- * virement entre comptes dans un libellé. Un nom vide rend la main à la banque.
+ * Le nom donné par la banque n'est pas touché : c'est lui qui sert de repli
+ * pour reconnaître un virement. Un nom vide lui rend la main.
+ *
+ * Les libellés, eux, tranchent là où le nom du titulaire ne suffit pas :
+ * « From Alexandre P » désigne un compte Revolut, « M. PASCAL ALEXANDRE » un
+ * compte Crédit Agricole, alors que les deux nomment la même personne.
  */
-export async function renameAccountAction(
+export async function updateAccountAction(
   formData: FormData,
 ): Promise<{ error?: AccountActionError }> {
   const user = await requireAuth();
@@ -192,14 +197,19 @@ export async function renameAccountAction(
     return { error: "config" };
   }
 
+  const keywords = String(formData.get("keywords") ?? "")
+    .split(/[\n;]+/)
+    .map((keyword) => keyword.trim())
+    .filter((keyword) => keyword.length >= KEYWORD_MIN_LENGTH);
+
   const { error } = await supabase
     .from("accounts")
-    .update({ display_name: raw || null })
+    .update({ display_name: raw || null, match_keywords: keywords })
     .eq("id", id)
     .eq("user_id", user.id);
 
   if (error) {
-    console.error("[renameAccount] update failed:", error);
+    console.error("[updateAccount] update failed:", error);
     return isSchemaError(error.message, error.code)
       ? { error: "schema" }
       : { error: "save" };

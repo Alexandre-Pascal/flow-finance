@@ -253,9 +253,14 @@ export function isNeutralTransfer(
   return isInternalTransfer(tx) || (isAccountTransfer(tx) && !isCrossSpaceTransfer(tx));
 }
 
-/** Un compte créé à la main : son solde ne vient pas de la banque. */
+/**
+ * Un compte créé à la main : son solde ne vient pas de la banque, il se
+ * reconstruit. Se reconnaît à l'absence d'identifiant bancaire — et non à ses
+ * mots-clés, qu'un compte synchronisé peut aussi porter pour affiner la
+ * détection de ses virements.
+ */
 export function isManualAccount(account: Account): boolean {
-  return (account.match_keywords ?? []).length > 0;
+  return !account.external_uid;
 }
 
 /**

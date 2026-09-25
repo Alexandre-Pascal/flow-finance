@@ -230,6 +230,48 @@ describe("annotateAccountTransfers", () => {
   });
 });
 
+describe("libellés propres à un compte", () => {
+  it("tells two accounts of the same person apart", () => {
+    // « From Alexandre P » vient du Revolut perso, « M. PASCAL ALEXANDRE » du
+    // Crédit Agricole : seul l'utilisateur connaît la règle, il la déclare.
+    const revolutTagged: Account = { ...revolut, match_keywords: ["ALEXANDRE P"] };
+    const caTagged: Account = { ...ca, match_keywords: ["PASCAL ALEXANDRE"] };
+    const tagged = [caTagged, revolutTagged, joint];
+
+    expect(
+      matchAccountTransfer(tx("joint", "From Alexandre P", 1), tagged),
+    ).toEqual({ kind: "counterpart", account: revolutTagged });
+
+    expect(
+      matchAccountTransfer(
+        tx("joint", "OBA topup from M. PASCAL ALEXANDRE", 122),
+        tagged,
+      ),
+    ).toEqual({ kind: "counterpart", account: caTagged });
+  });
+
+  it("does not turn a bank account into a manual one", () => {
+    // Des mots-clés sur un compte synchronisé affinent la détection ; son
+    // solde reste celui de la banque.
+    const tagged: Account = {
+      ...ca,
+      external_uid: "uid-ca",
+      balance: 103.78,
+      match_keywords: ["PASCAL ALEXANDRE"],
+    };
+    const [rebuilt] = withManualBalances(
+      [tagged],
+      annotateAccountTransfers(
+        [tx("revolut", "To M. PASCAL ALEXANDRE", -50)],
+        [tagged, revolut],
+        spaces,
+      ),
+    );
+
+    expect(rebuilt.balance).toBe(103.78);
+  });
+});
+
 describe("renommage", () => {
   it("keeps matching on the bank name, displays the chosen one", () => {
     // Renommer le compte joint en « Notre compte » ne doit pas empêcher de le
