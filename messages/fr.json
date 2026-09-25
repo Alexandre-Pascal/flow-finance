@@ -162,6 +162,7 @@
     "other": "Autres",
     "subscriptions": "Charges fixes",
     "uncategorized": "Non classé",
+    "spaceTransfer": "Compte joint",
     "empty": "Aucune dépense à analyser. Connectez votre banque pour commencer."
   },
   "spendingFlow": {
@@ -297,6 +298,8 @@
     "transferAssignAuto": "Automatique",
     "savingsAssignPlaceholder": "Affecter à un livret",
     "searchPlaceholder": "Rechercher une transaction…",
+    "accountTabsLabel": "Filtrer par compte",
+    "accountTabAll": "Tous les comptes",
     "noteAdd": "Ajouter une note",
     "noteEdit": "Modifier la note",
     "noteLabel": "Note",
@@ -552,6 +555,7 @@
     "languageDescription": "Choisissez la langue de l'interface.",
     "bankConnection": "Connexion bancaire",
     "spacesTitle": "Espaces et comptes",
+    "spaceSwitchLabel": "Changer d'espace",
     "spacesDescription": "Un espace regroupe les comptes d'un même budget. Séparez ce qui ne se mélange pas : votre budget perso et un compte partagé.",
     "spaceAddLabel": "Nouvel espace",
     "spaceNamePlaceholder": "Joint, colocation…",

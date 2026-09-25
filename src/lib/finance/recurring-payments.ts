@@ -107,6 +107,7 @@ export function mapRecurringPayment(row: Record<string, unknown>): RecurringPaym
   return {
     id: String(row.id),
     user_id: String(row.user_id),
+    space_id: row.space_id ? String(row.space_id) : null,
     name: String(row.name),
     amount: Number(row.amount),
     amount_tolerance: Number(row.amount_tolerance),

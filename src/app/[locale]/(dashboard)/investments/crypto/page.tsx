@@ -1,6 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { CryptoPortfolio } from "@/components/features/crypto-portfolio";
 import { getCryptoPortfolioData } from "@/lib/crypto/queries";
+import { getActiveSpace } from "@/lib/get-active-space";
 import { getProfileSettings } from "@/lib/get-profile-settings";
 import { redirect } from "@/i18n/navigation";
 
@@ -13,7 +14,7 @@ export default async function InvestmentsCryptoPage({
   setRequestLocale(locale);
 
   const profileSettings = await getProfileSettings();
-  if (!profileSettings.modules.investments) {
+  if (!profileSettings.modules.investments || (await getActiveSpace())?.kind === "shared") {
     redirect({ href: "/", locale });
   }
 

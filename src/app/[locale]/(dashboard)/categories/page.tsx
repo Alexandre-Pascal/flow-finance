@@ -20,6 +20,7 @@ export default async function CategoriesPage({
   const breakdown = buildCategoryBreakdown(transactions, locale, {
     subscriptions: t("subscriptions"),
     uncategorized: t("uncategorized"),
+    spaceTransfer: t("spaceTransfer"),
   });
 
   return (

@@ -23,6 +23,7 @@ import {
   type RecurringClusterSuggestion,
 } from "@/lib/finance/recurring-payments";
 import { rematchRecurringPaymentsForUser } from "@/lib/finance/rematch-recurring-payments";
+import { getActiveSpace } from "@/lib/get-active-space";
 import { createClient } from "@/lib/supabase/server";
 import type { RecurringPayment } from "@/types/database";
 
@@ -191,6 +192,7 @@ export async function createRecurringPaymentAction(formData: FormData) {
 
   const { error } = await supabase.from("recurring_payments").insert({
     user_id: user.id,
+    space_id: (await getActiveSpace())?.id ?? null,
     name,
     amount,
     amount_tolerance: amountTolerance,
@@ -540,6 +542,7 @@ export async function createSubscriptionFromTransactionAction(formData: FormData
 
   const { error } = await supabase.from("recurring_payments").insert({
     user_id: user.id,
+    space_id: (await getActiveSpace())?.id ?? null,
     name: resolvedName,
     amount,
     amount_tolerance: payPal ? 0.05 : GENERAL_RECURRING_AMOUNT_TOLERANCE,

@@ -96,8 +96,10 @@ interface TransactionsTableProps {
   peaInvestmentPlans?: PeaInvestmentPlan[];
   /** Abonnements existants, pour proposer un rattachement depuis une transaction. */
   recurringPayments?: RecurringPayment[];
-  /** Comptes de l'utilisateur, pour rattacher un virement à la main. */
+  /** Comptes de l'espace courant : les onglets de filtrage. */
   accounts?: Account[];
+  /** Tous les comptes, tous espaces : cibles possibles d'un virement. */
+  transferAccounts?: Account[];
   /** Sources de rentrées configurées, pour rattacher une entrée à la main. */
   incomeSources?: ProfileTrackedIncomeSource[];
   /** Mot-clé du salaire, pour afficher la source détectée automatiquement. */
@@ -846,6 +848,7 @@ export function TransactionsTable({
   savingsAccounts = [],
   peaInvestmentPlans = [],
   accounts = [],
+  transferAccounts = [],
   incomeSources = [],
   payrollKeyword = null,
   recurringPayments = [],
@@ -858,6 +861,7 @@ export function TransactionsTable({
     [categories],
   );
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
   const [selectedMonths, setSelectedMonths] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
 
@@ -932,6 +936,10 @@ export function TransactionsTable({
           return false;
         }
       }
+      if (accountFilter !== "all" && tx.account_id !== accountFilter) {
+        return false;
+      }
+
       if (categoryFilter === "uncategorized") {
         return (
           tx.amount < 0 &&
@@ -960,13 +968,13 @@ export function TransactionsTable({
       }
       return true;
     });
-  }, [transactions, categoryFilter, selectedMonths, search]);
+  }, [transactions, accountFilter, categoryFilter, selectedMonths, search]);
 
   // Chaque ligne monte deux popovers Radix : tout afficher d'un coup rendait
   // l'hydratation de la page proportionnelle à l'historique complet. On rend
   // donc par tranches, la tranche repartant de zéro à chaque changement de
   // filtre (comparaison de `filterKey` plutôt qu'un effet de synchronisation).
-  const filterKey = `${categoryFilter}|${search}|${[...selectedMonths]
+  const filterKey = `${accountFilter}|${categoryFilter}|${search}|${[...selectedMonths]
     .sort()
     .join(",")}`;
   const [pagination, setPagination] = useState({
@@ -1084,7 +1092,9 @@ export function TransactionsTable({
                 categories={uniqueCategories}
                 savingsAccounts={savingsAccounts}
                 peaInvestmentPlans={peaInvestmentPlans}
-                accounts={accounts}
+                accounts={
+                  transferAccounts.length > 0 ? transferAccounts : accounts
+                }
                 incomeSources={incomeSources}
                 payrollKeyword={payrollKeyword}
                 compact={compact}
@@ -1142,6 +1152,31 @@ export function TransactionsTable({
           className="h-9 pl-9"
         />
       </div>
+
+      {accounts.length > 1 ? (
+        <div
+          className="flex w-full flex-wrap gap-1 rounded-lg border border-border p-1"
+          role="tablist"
+          aria-label={t("accountTabsLabel")}
+        >
+          {[{ id: "all", name: t("accountTabAll") }, ...accounts].map(
+            (account) => (
+              <Button
+                key={account.id}
+                type="button"
+                size="sm"
+                role="tab"
+                aria-selected={accountFilter === account.id}
+                variant={accountFilter === account.id ? "default" : "ghost"}
+                className="h-8 max-w-[14rem] cursor-pointer px-3 text-xs"
+                onClick={() => setAccountFilter(account.id)}
+              >
+                <span className="truncate">{account.name}</span>
+              </Button>
+            ),
+          )}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

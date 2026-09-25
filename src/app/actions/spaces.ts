@@ -7,6 +7,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { ACTIVE_SPACE_COOKIE } from "@/lib/get-active-space";
 import { requireAuth } from "@/lib/auth";
 import { parseSpaceKind } from "@/lib/finance/spaces";
 import { createClient } from "@/lib/supabase/server";
@@ -217,5 +219,55 @@ export async function assignAccountSpaceAction(
   }
 
   revalidateSpacePages();
+  return {};
+}
+
+/**
+ * Bascule d'espace. Le choix vit dans un cookie : un Server Component ne peut
+ * pas en poser un, d'où cette action.
+ */
+export async function setActiveSpaceAction(
+  formData: FormData,
+): Promise<{ error?: SpaceActionError }> {
+  const user = await requireAuth();
+  const spaceId = String(formData.get("spaceId") ?? "").trim();
+  if (!spaceId) {
+    return { error: "invalid" };
+  }
+
+  if (!user.isDemo) {
+    const supabase = await createClient();
+    if (!supabase) {
+      return { error: "config" };
+    }
+
+    const { data: space, error } = await supabase
+      .from("spaces")
+      .select("id")
+      .eq("id", spaceId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      return isSchemaError(error.message, error.code)
+        ? { error: "schema" }
+        : { error: "save" };
+    }
+    if (!space) {
+      return { error: "invalid" };
+    }
+  }
+
+  const cookieStore = await cookies();
+  cookieStore.set(ACTIVE_SPACE_COOKIE, spaceId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+
+  // Tout l'écran dépend de l'espace : on invalide le layout entier.
+  revalidatePath("/", "layout");
   return {};
 }

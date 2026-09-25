@@ -2,11 +2,30 @@ import { describe, expect, it } from "vitest";
 import {
   annotateAccountTransfers,
   holderTokens,
+  isCrossSpaceTransfer,
+  isNeutralTransfer,
   matchAccountTransfer,
 } from "./account-transfers";
-import type { Account, TransactionWithAccount } from "@/types/database";
+import type { Account, Space, TransactionWithAccount } from "@/types/database";
 
-function account(id: string, name: string): Account {
+function space(id: string, kind: Space["kind"]): Space {
+  return {
+    id,
+    user_id: "user-1",
+    name: id,
+    kind,
+    color: "#000000",
+    position: kind === "personal" ? 0 : 1,
+    created_at: "",
+    updated_at: "",
+  };
+}
+
+const perso = space("perso", "personal");
+const partage = space("partage", "shared");
+const spaces = [perso, partage];
+
+function account(id: string, name: string, spaceId = "perso"): Account {
   return {
     id,
     user_id: "user-1",
@@ -18,6 +37,7 @@ function account(id: string, name: string): Account {
     balance: 0,
     currency: "EUR",
     last_transactions_synced_at: null,
+    space_id: spaceId,
     created_at: "",
     updated_at: "",
   };
@@ -25,7 +45,11 @@ function account(id: string, name: string): Account {
 
 const ca = account("ca", "M. PASCAL ALEXANDRE");
 const revolut = account("revolut", "Alexandre Pascal");
-const joint = account("joint", "ALEXANDRE JULIEN PASCAL & ANAÏS ALICIA LACOMBE");
+const joint = account(
+  "joint",
+  "ALEXANDRE JULIEN PASCAL & ANAÏS ALICIA LACOMBE",
+  "partage",
+);
 const accounts = [ca, revolut, joint];
 
 function tx(
@@ -127,12 +151,16 @@ describe("annotateAccountTransfers", () => {
       counterpart_account_id: "joint",
       counterpart_account_name: joint.name,
       direction: "out",
+      counterpart_space_id: "partage",
+      same_space: false,
     });
     // Sur le compte joint lui-même, le libellé ne désigne que son titulaire.
     expect(incoming.account_transfer).toEqual({
       counterpart_account_id: null,
       counterpart_account_name: null,
       direction: "in",
+      counterpart_space_id: null,
+      same_space: true,
     });
   });
 
@@ -146,6 +174,8 @@ describe("annotateAccountTransfers", () => {
       counterpart_account_id: null,
       counterpart_account_name: null,
       direction: "in",
+      counterpart_space_id: null,
+      same_space: true,
     });
   });
 
@@ -209,5 +239,45 @@ describe("holderTokens", () => {
       "ALICIA",
       "LACOMBE",
     ]);
+  });
+});
+
+describe("virements et espaces", () => {
+  it("neutralises a move inside one space", () => {
+    const [row] = annotateAccountTransfers(
+      [tx("ca", "VIREMENT EN VOTRE FAVEUR DE M. PASCAL ALEXANDRE", 500)],
+      accounts,
+      spaces,
+    );
+
+    expect(row.account_transfer?.same_space).toBe(true);
+    expect(isNeutralTransfer(row)).toBe(true);
+    expect(isCrossSpaceTransfer(row)).toBe(false);
+  });
+
+  it("counts a move to the shared space as a real expense", () => {
+    const [row] = annotateAccountTransfers(
+      [tx("revolut", "To ALEXANDRE JULIEN PASCAL & ANAÏS ALICIA LACOMBE", -100)],
+      accounts,
+      spaces,
+    );
+
+    expect(row.account_transfer?.counterpart_space_id).toBe("partage");
+    expect(row.account_transfer?.same_space).toBe(false);
+    // Une contribution au budget partagé sort bien du budget perso.
+    expect(isNeutralTransfer(row)).toBe(false);
+    expect(isCrossSpaceTransfer(row)).toBe(true);
+  });
+
+  it("treats an unidentified counterpart as staying put", () => {
+    // Sans espace connu en face, rien ne prouve que l'argent change de budget.
+    const [row] = annotateAccountTransfers(
+      [tx("ca", "VIREMENT EMIS WEB M. PASCAL ALEXANDRE", -300)],
+      accounts,
+      spaces,
+    );
+
+    expect(row.account_transfer?.counterpart_space_id).toBeNull();
+    expect(isNeutralTransfer(row)).toBe(true);
   });
 });

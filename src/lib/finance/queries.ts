@@ -15,7 +15,9 @@ import {
   resolveCanonicalRules,
 } from "@/lib/finance/recurring-payments";
 import { annotateAccountTransfers } from "@/lib/finance/account-transfers";
+import { defaultSpace } from "@/lib/finance/spaces";
 import { mapSpace } from "@/lib/finance/spaces";
+import { getActiveSpace } from "@/lib/get-active-space";
 import {
   annotateSavingsTransfers,
   mapSavingsAccount,
@@ -86,6 +88,10 @@ export interface FinanceData {
   bankConnections: BankConnection[];
   /** Espaces de l'utilisateur, du plus prioritaire au moins prioritaire. */
   spaces: Space[];
+  /** Espace sur lequel les données sont filtrées. */
+  activeSpace: Space | null;
+  /** Comptes de tous les espaces : pour les libellés et l'écran d'affectation. */
+  allAccounts: Account[];
   isDemo: boolean;
 }
 
@@ -315,6 +321,8 @@ async function fetchFromSupabase(
       bankConnection: null,
       bankConnections: [],
       spaces: [],
+      activeSpace: null,
+      allAccounts: [],
       isDemo: false,
     };
   }
@@ -494,6 +502,8 @@ async function fetchFromSupabase(
     bankConnection: bankConnections[0] ?? null,
     bankConnections,
     spaces,
+    activeSpace: null,
+    allAccounts: accounts,
     isDemo: false,
   };
 }
@@ -528,6 +538,8 @@ export async function getFinanceData(
       bankConnection: null,
       bankConnections: [],
       spaces: [],
+      activeSpace: null,
+      allAccounts: [],
       isDemo: false,
     };
   }
@@ -546,6 +558,8 @@ export async function getFinanceData(
       bankConnection: null,
       bankConnections: [],
       spaces: [],
+      activeSpace: null,
+      allAccounts: MOCK_ACCOUNTS,
       isDemo: true,
       subscriptionsSchemaReady: true,
       categoriesSchemaReady: true,
@@ -553,5 +567,48 @@ export async function getFinanceData(
     };
   }
 
-  return fetchFromSupabase(user, locale, sections);
+  const data = await fetchFromSupabase(user, locale, sections);
+  return scopeFinanceDataToSpace(data, await getActiveSpace(), locale);
+}
+
+/**
+ * Restreint les données à l'espace actif.
+ *
+ * Un seul endroit pour toute l'application : les pages et les agrégats
+ * travaillent ensuite sur des tableaux déjà filtrés, sans rien savoir des
+ * espaces. `allAccounts` reste complet, parce qu'afficher « virement vers le
+ * compte joint » demande un nom qui vit dans l'autre espace.
+ */
+function scopeFinanceDataToSpace(
+  data: FinanceData,
+  activeSpace: Space | null,
+  locale: string,
+): FinanceData {
+  // Un seul espace : rien à filtrer, et surtout rien à cacher.
+  if (!activeSpace || data.spaces.length < 2) {
+    return { ...data, activeSpace };
+  }
+
+  const fallbackId = defaultSpace(data.spaces)?.id ?? null;
+  const belongs = (spaceId: string | null | undefined): boolean =>
+    (spaceId ?? fallbackId) === activeSpace.id;
+
+  const accounts = data.allAccounts.filter((account) =>
+    belongs(account.space_id),
+  );
+  const accountIds = new Set(accounts.map((account) => account.id));
+  const transactions = data.transactions.filter((tx) =>
+    accountIds.has(tx.account_id),
+  );
+
+  return {
+    ...data,
+    activeSpace,
+    accounts,
+    transactions,
+    recurringPayments: data.recurringPayments.filter((rule) =>
+      belongs(rule.space_id),
+    ),
+    monthlySpending: buildMonthlySpending(transactions, locale),
+  };
 }

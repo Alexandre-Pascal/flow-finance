@@ -9,6 +9,7 @@ import {
   type GoalFundingSource,
 } from "@/lib/finance/savings-goals";
 import { getSavingsGoalsData } from "@/lib/finance/savings-goals-queries";
+import { getActiveSpace } from "@/lib/get-active-space";
 import { getProfileSettings } from "@/lib/get-profile-settings";
 import { getPeaPortfolioData } from "@/lib/pea/queries";
 import { redirect } from "@/i18n/navigation";
@@ -23,7 +24,7 @@ export default async function GoalsPage({
 
   // Les objectifs se financent sur les livrets : sans module épargne, pas de page.
   const profileSettings = await getProfileSettings();
-  if (!profileSettings.modules.savings) {
+  if (!profileSettings.modules.savings || (await getActiveSpace())?.kind === "shared") {
     redirect({ href: "/", locale });
   }
 

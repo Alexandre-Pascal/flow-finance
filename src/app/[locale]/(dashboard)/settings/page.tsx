@@ -37,7 +37,7 @@ export default async function SettingsPage({
   const bankReady = isEnableBankingConfigured();
   const [
     {
-      accounts,
+      allAccounts,
       bankConnection,
       bankConnections,
       spaces,
@@ -66,7 +66,7 @@ export default async function SettingsPage({
     (suggestion) => suggestion.source === "general",
   );
 
-  const hasSyncedAccounts = accounts.length > 0;
+  const hasSyncedAccounts = allAccounts.length > 0;
   const isBankLinked =
     bankConnection?.status === "active" || hasSyncedAccounts;
 
@@ -122,7 +122,7 @@ export default async function SettingsPage({
         <CardContent>
           <SpacesManager
             spaces={spaces}
-            accounts={accounts}
+            accounts={allAccounts}
             locale={locale}
             isDemo={isDemo}
           />

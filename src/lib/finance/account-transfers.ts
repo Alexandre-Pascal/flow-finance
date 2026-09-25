@@ -12,10 +12,12 @@
  * synchronisé et ferait bouger un budget passé sans que l'utilisateur agisse.
  */
 
+import { defaultSpace } from "@/lib/finance/spaces";
 import { isInternalTransfer } from "@/lib/pea/transfers";
 import type {
   Account,
   AccountTransferRef,
+  Space,
   TransactionWithAccount,
 } from "@/types/database";
 
@@ -128,16 +130,28 @@ export function matchAccountTransfer(
   return best ? { kind: "counterpart", account: best } : null;
 }
 
-/** Annote chaque transaction avec son éventuel virement vers un autre compte. */
+/**
+ * Annote chaque transaction avec son éventuel virement vers un autre compte.
+ *
+ * `spaces` sert à savoir si le mouvement reste dans le même budget : un
+ * virement vers le compte joint est une dépense, un virement entre deux de mes
+ * comptes perso n'est rien.
+ */
 export function annotateAccountTransfers(
   transactions: TransactionWithAccount[],
   accounts: Account[],
+  spaces: Space[] = [],
 ): TransactionWithAccount[] {
   if (accounts.length < 2) {
     return transactions;
   }
 
   const accountById = new Map(accounts.map((account) => [account.id, account]));
+  const fallbackSpaceId = defaultSpace(spaces)?.id ?? null;
+  const spaceOf = (accountId: string | null | undefined): string | null =>
+    accountId
+      ? (accountById.get(accountId)?.space_id ?? fallbackSpaceId)
+      : null;
 
   return transactions.map((tx) => {
     // Un versement sur un livret ou le PEA est déjà qualifié, et mieux : son
@@ -159,13 +173,22 @@ export function annotateAccountTransfers(
         : null
       : matchAccountTransfer(tx, accounts);
 
+    const counterpartId =
+      match?.kind === "counterpart" ? match.account.id : null;
+    const counterpartSpaceId = spaceOf(counterpartId);
+
     const account_transfer: AccountTransferRef | null = match
       ? {
-          counterpart_account_id:
-            match.kind === "counterpart" ? match.account.id : null,
+          counterpart_account_id: counterpartId,
           counterpart_account_name:
             match.kind === "counterpart" ? match.account.name : null,
           direction: tx.amount < 0 ? "out" : "in",
+          counterpart_space_id: counterpartSpaceId,
+          // Contrepartie inconnue : l'argent reste chez l'utilisateur, faute de
+          // preuve qu'il change de budget.
+          same_space:
+            counterpartSpaceId === null ||
+            counterpartSpaceId === spaceOf(tx.account_id),
         }
       : null;
 
@@ -184,6 +207,16 @@ export function isAccountTransfer(
 }
 
 /**
+ * Virement d'un espace vers un autre : une dépense ici, une rentrée là-bas.
+ * C'est la contribution au budget partagé.
+ */
+export function isCrossSpaceTransfer(
+  tx: Pick<TransactionWithAccount, "account_transfer">,
+): boolean {
+  return tx.account_transfer != null && !tx.account_transfer.same_space;
+}
+
+/**
  * Mouvement qui ne compte ni en dépense ni en revenu.
  *
  * Distinct de `isInternalTransfer` : un virement vers un livret ou le PEA
@@ -197,5 +230,7 @@ export function isNeutralTransfer(
     "savings_transfer" | "pea_transfer" | "account_transfer"
   >,
 ): boolean {
-  return isInternalTransfer(tx) || isAccountTransfer(tx);
+  // Un virement qui change de budget n'est pas neutre : il sort d'ici pour
+  // entrer là-bas.
+  return isInternalTransfer(tx) || (isAccountTransfer(tx) && !isCrossSpaceTransfer(tx));
 }

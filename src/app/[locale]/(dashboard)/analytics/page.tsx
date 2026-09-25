@@ -110,6 +110,7 @@ export default async function AnalyticsPage({
   const categoryBreakdown = buildCategoryBreakdown(transactions, locale, {
     subscriptions: tCategories("subscriptions"),
     uncategorized: tCategories("uncategorized"),
+    spaceTransfer: tCategories("spaceTransfer"),
   });
   const contribution = buildContributionFlow(
     transactions,

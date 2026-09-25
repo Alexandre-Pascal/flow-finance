@@ -190,6 +190,8 @@ export interface RecurringSuggestionDismissal {
 export interface RecurringPayment {
   id: string;
   user_id: string;
+  /** Espace auquel l'abonnement appartient ; `null` vaut espace personnel. */
+  space_id?: string | null;
   name: string;
   amount: number;
   amount_tolerance: number;
@@ -342,6 +344,14 @@ export interface AccountTransferRef {
   counterpart_account_id: string | null;
   counterpart_account_name: string | null;
   direction: "out" | "in";
+  /** Espace du compte d'en face, `null` quand il n'est pas identifié. */
+  counterpart_space_id: string | null;
+  /**
+   * Le mouvement reste dans le même espace : rien n'est dépensé ni gagné.
+   * Faux quand l'argent passe d'un budget à l'autre — une contribution au
+   * compte joint est bien une dépense côté perso.
+   */
+  same_space: boolean;
 }
 
 /** Transaction enrichie pour l'affichage UI (jointure compte). */

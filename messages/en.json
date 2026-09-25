@@ -162,6 +162,7 @@
     "other": "Other",
     "subscriptions": "Fixed costs",
     "uncategorized": "Uncategorized",
+    "spaceTransfer": "Joint account",
     "empty": "No spending to analyze yet. Connect your bank to get started."
   },
   "spendingFlow": {
@@ -297,6 +298,8 @@
     "transferAssignAuto": "Automatic",
     "savingsAssignPlaceholder": "Assign to a savings account",
     "searchPlaceholder": "Search a transaction…",
+    "accountTabsLabel": "Filter by account",
+    "accountTabAll": "All accounts",
     "noteAdd": "Add a note",
     "noteEdit": "Edit note",
     "noteLabel": "Note",
@@ -552,6 +555,7 @@
     "languageDescription": "Choose the interface language.",
     "bankConnection": "Bank connection",
     "spacesTitle": "Spaces and accounts",
+    "spaceSwitchLabel": "Switch space",
     "spacesDescription": "A space groups the accounts of one budget. Keep apart what should not mix: your own budget and a shared account.",
     "spaceAddLabel": "New space",
     "spaceNamePlaceholder": "Joint, flatshare…",

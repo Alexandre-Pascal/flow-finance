@@ -8,6 +8,9 @@ import {
   assignRecurringPayments,
   mapRecurringPayment,
 } from "@/lib/finance/recurring-payments";
+import { matchAccountTransfer } from "@/lib/finance/account-transfers";
+import { defaultSpace, mapSpace } from "@/lib/finance/spaces";
+import type { Account } from "@/types/database";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -45,9 +48,18 @@ export async function rematchRecurringPaymentsForUser(
   const [
     { data: rules, error: rulesError },
     { data: accounts, error: accountsError },
+    { data: spaceRows },
   ] = await Promise.all([
     supabase.from("recurring_payments").select("*").eq("user_id", userId),
-    supabase.from("accounts").select("id").eq("user_id", userId),
+    supabase
+      .from("accounts")
+      .select("id, name, space_id")
+      .eq("user_id", userId),
+    supabase
+      .from("spaces")
+      .select("*")
+      .eq("user_id", userId)
+      .order("position", { ascending: true }),
   ]);
 
   if (rulesError) throw rulesError;
@@ -66,7 +78,9 @@ export async function rematchRecurringPaymentsForUser(
   // Une seule requête pour tous les comptes, au lieu d'une par compte.
   const { data: transactions, error } = await supabase
     .from("transactions")
-    .select("id, amount, description, booking_date, recurring_payment_id")
+    .select(
+      "id, account_id, amount, description, booking_date, recurring_payment_id, transfer_account_id, transfer_manual",
+    )
     .in("account_id", accountIds)
     .lt("amount", 0)
     .eq("recurring_payment_manual", false);
@@ -79,18 +93,71 @@ export async function rematchRecurringPaymentsForUser(
   const updatesByPayment = new Map<string | null, string[]>();
   let matched = 0;
 
-  // Le rattachement se décide sur l'ensemble : un abonnement mensuel ne prend
-  // qu'une transaction par mois, ce qui laisse la place à un second abonnement
-  // au même libellé.
-  const assignment = assignRecurringPayments(
-    transactions.map((tx) => ({
-      id: String(tx.id),
-      amount: Number(tx.amount),
-      description: String(tx.description),
-      booking_date: String(tx.booking_date),
-    })),
-    recurringRules,
+  // Chaque espace se rattache séparément : une règle du budget perso n'a pas à
+  // capter une dépense du compte joint, et le quota « un prélèvement par mois »
+  // se compte par espace.
+  const fallbackSpaceId =
+    defaultSpace((spaceRows ?? []).map((row) => mapSpace(row)))?.id ?? null;
+  const spaceByAccount = new Map(
+    accounts.map((account) => [
+      String(account.id),
+      (account.space_id ? String(account.space_id) : null) ?? fallbackSpaceId,
+    ]),
   );
+  const spaceKey = (value: string | null) => value ?? "__none__";
+
+  // Un virement entre comptes revient chaque mois avec le même libellé : sans
+  // l'écarter, il deviendrait un abonnement, quitterait la rubrique « Compte
+  // joint » et polluerait la liste de l'espace.
+  const accountObjects = accounts.map(
+    (account) =>
+      ({
+        id: String(account.id),
+        name: String(account.name ?? ""),
+        space_id: account.space_id ? String(account.space_id) : null,
+      }) as Account,
+  );
+  const isTransfer = (tx: (typeof transactions)[number]): boolean =>
+    tx.transfer_manual
+      ? Boolean(tx.transfer_account_id)
+      : matchAccountTransfer(
+          {
+            account_id: String(tx.account_id),
+            description: String(tx.description),
+          },
+          accountObjects,
+        ) !== null;
+
+  const rulesBySpace = new Map<string, typeof recurringRules>();
+  for (const rule of recurringRules) {
+    const key = spaceKey(rule.space_id ?? fallbackSpaceId);
+    rulesBySpace.set(key, [...(rulesBySpace.get(key) ?? []), rule]);
+  }
+
+  const assignment = new Map<string, string | null>();
+  const transactionsBySpace = new Map<string, typeof transactions>();
+  for (const tx of transactions) {
+    if (isTransfer(tx)) {
+      continue;
+    }
+    const key = spaceKey(spaceByAccount.get(String(tx.account_id)) ?? null);
+    transactionsBySpace.set(key, [...(transactionsBySpace.get(key) ?? []), tx]);
+  }
+
+  for (const [key, spaceTransactions] of transactionsBySpace) {
+    const spaceAssignment = assignRecurringPayments(
+      spaceTransactions.map((tx) => ({
+        id: String(tx.id),
+        amount: Number(tx.amount),
+        description: String(tx.description),
+        booking_date: String(tx.booking_date),
+      })),
+      rulesBySpace.get(key) ?? [],
+    );
+    for (const [txId, ruleId] of spaceAssignment) {
+      assignment.set(txId, ruleId);
+    }
+  }
 
   for (const tx of transactions) {
     const nextId = assignment.get(String(tx.id)) ?? null;

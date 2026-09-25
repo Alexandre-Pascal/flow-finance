@@ -1,5 +1,6 @@
 import { setRequestLocale } from "next-intl/server";
 import { PeaPortfolio } from "@/components/features/pea-portfolio";
+import { getActiveSpace } from "@/lib/get-active-space";
 import { getProfileSettings } from "@/lib/get-profile-settings";
 import { getPeaPortfolioData } from "@/lib/pea/queries";
 import { redirect } from "@/i18n/navigation";
@@ -13,7 +14,7 @@ export default async function InvestmentsPeaPage({
   setRequestLocale(locale);
 
   const profileSettings = await getProfileSettings();
-  if (!profileSettings.modules.investments) {
+  if (!profileSettings.modules.investments || (await getActiveSpace())?.kind === "shared") {
     redirect({ href: "/", locale });
   }
 

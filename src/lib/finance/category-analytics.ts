@@ -4,7 +4,10 @@
  */
 
 import type { MonthlyPeriod } from "@/lib/finance/aggregates";
-import { isNeutralTransfer } from "@/lib/finance/account-transfers";
+import {
+  isCrossSpaceTransfer,
+  isNeutralTransfer,
+} from "@/lib/finance/account-transfers";
 import type { TransactionWithAccount } from "@/types/database";
 
 /** Clé spéciale regroupant toutes les transactions liées à un abonnement. */
@@ -13,10 +16,13 @@ export const SUBSCRIPTIONS_KEY = "__subscriptions__";
 export const UNCATEGORIZED_KEY = "__uncategorized__";
 /** Clé spéciale pour le regroupement « Autres » côté affichage. */
 export const OTHER_KEY = "__other__";
+/** Clé spéciale des virements vers un autre espace (contribution partagée). */
+export const SPACE_TRANSFER_KEY = "__space_transfer__";
 
 export const SUBSCRIPTIONS_COLOR = "#1E3A8A";
 export const UNCATEGORIZED_COLOR = "#CBD5E1";
 export const OTHER_COLOR = "#64748B";
+export const SPACE_TRANSFER_COLOR = "#7C3AED";
 
 export interface CategoryMeta {
   name: string;
@@ -39,6 +45,8 @@ export interface CategoryBreakdown {
 interface BreakdownLabels {
   subscriptions: string;
   uncategorized: string;
+  /** Libellé des virements vers un autre espace. */
+  spaceTransfer: string;
 }
 
 function monthKeyFromDate(date: Date): string {
@@ -64,6 +72,16 @@ function resolveBucket(
   tx: TransactionWithAccount,
   labels: BreakdownLabels,
 ): CategoryMeta & { key: string } {
+  // Avant l'abonnement : un versement mensuel au compte joint a exactement la
+  // forme d'un prélèvement récurrent, et finirait dans « Abonnements ».
+  if (isCrossSpaceTransfer(tx)) {
+    return {
+      key: SPACE_TRANSFER_KEY,
+      name: labels.spaceTransfer,
+      color: SPACE_TRANSFER_COLOR,
+    };
+  }
+
   if (tx.recurring_payment_id) {
     return {
       key: SUBSCRIPTIONS_KEY,
