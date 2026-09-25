@@ -587,6 +587,7 @@
     "spaceAssignLabel": "Account space",
     "spaceAssignNone": "No space",
     "spaceAccountDelete": "Delete this manual account",
+    "accountRename": "Rename account",
     "spaceSaveError": "Could not save. Try again.",
     "spaceSchemaError": "The database is out of date. Run the Supabase migration (spaces).",
     "bankStatus": "Status",

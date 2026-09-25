@@ -230,6 +230,22 @@ describe("annotateAccountTransfers", () => {
   });
 });
 
+describe("renommage", () => {
+  it("keeps matching on the bank name, displays the chosen one", () => {
+    // Renommer le compte joint en « Notre compte » ne doit pas empêcher de le
+    // reconnaître : le libellé cite toujours les titulaires.
+    const renamed: Account = { ...joint, display_name: "Notre compte" };
+    const [row] = annotateAccountTransfers(
+      [tx("revolut", "To ALEXANDRE JULIEN PASCAL & ANAÏS ALICIA LACOMBE", -100)],
+      [ca, revolut, renamed],
+      spaces,
+    );
+
+    expect(row.account_transfer?.counterpart_account_id).toBe("joint");
+    expect(row.account_transfer?.counterpart_account_name).toBe("Notre compte");
+  });
+});
+
 describe("holderTokens", () => {
   it("drops civilities, accents and one-letter fragments", () => {
     expect(holderTokens("M. PASCAL ALEXANDRE")).toEqual(["PASCAL", "ALEXANDRE"]);

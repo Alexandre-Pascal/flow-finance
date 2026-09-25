@@ -61,6 +61,7 @@ import { Link, useRouter } from "@/i18n/navigation";
 import type { CryptoPortfolioSummary } from "@/lib/crypto/valuation";
 import { type MonthlyPeriod } from "@/lib/finance/aggregates";
 import { CATEGORY_COLOR_PALETTE, normalizeColor } from "@/lib/finance/expense-categories";
+import { accountLabel } from "@/lib/finance/spaces";
 import {
   SAVINGS_ADJUSTMENT_KINDS,
   SAVINGS_KINDS,
@@ -1248,7 +1249,7 @@ function CheckingCard({
             <Landmark className="size-5" aria-hidden />
           </span>
           <div className="min-w-0">
-            <CardTitle className="truncate text-base">{account.name}</CardTitle>
+            <CardTitle className="truncate text-base">{accountLabel(account)}</CardTitle>
             <p className="text-xs text-muted-foreground">{t("checkingLabel")}</p>
           </div>
         </div>

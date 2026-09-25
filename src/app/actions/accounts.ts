@@ -34,6 +34,7 @@ function isSchemaError(message: string, code?: string): boolean {
     normalized.includes("match_keywords") ||
     normalized.includes("base_balance") ||
     normalized.includes("space_id") ||
+    normalized.includes("display_name") ||
     normalized.includes("does not exist")
   );
 }
@@ -155,6 +156,50 @@ export async function deleteManualAccountAction(
 
   if (error) {
     console.error("[deleteManualAccount] delete failed:", error);
+    return isSchemaError(error.message, error.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  revalidateAccountPages();
+  return {};
+}
+
+/**
+ * Renomme un compte pour l'affichage.
+ *
+ * Le nom de la banque n'est pas touché : c'est lui qui permet de reconnaître un
+ * virement entre comptes dans un libellé. Un nom vide rend la main à la banque.
+ */
+export async function renameAccountAction(
+  formData: FormData,
+): Promise<{ error?: AccountActionError }> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  const raw = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, NAME_MAX_LENGTH);
+  if (!id) {
+    return { error: "invalid" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ display_name: raw || null })
+    .eq("id", id)
+    .eq("user_id", user.id);
+
+  if (error) {
+    console.error("[renameAccount] update failed:", error);
     return isSchemaError(error.message, error.code)
       ? { error: "schema" }
       : { error: "save" };

@@ -18,7 +18,7 @@ import {
   annotateAccountTransfers,
   withManualBalances,
 } from "@/lib/finance/account-transfers";
-import { defaultSpace } from "@/lib/finance/spaces";
+import { accountLabel, defaultSpace } from "@/lib/finance/spaces";
 import { mapSpace } from "@/lib/finance/spaces";
 import { getActiveSpace } from "@/lib/get-active-space";
 import {
@@ -136,6 +136,7 @@ function mapAccount(row: Record<string, unknown>): Account {
     connection_id: row.connection_id ? String(row.connection_id) : null,
     external_uid: row.external_uid ? String(row.external_uid) : null,
     name: String(row.name),
+    display_name: row.display_name ? String(row.display_name) : null,
     iban: row.iban ? String(row.iban) : null,
     type: row.type as Account["type"],
     balance: Number(row.balance),
@@ -184,7 +185,7 @@ function mapTransaction(
     pea_manual: Boolean(row.pea_manual),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
-    account_name: account.name,
+    account_name: accountLabel(account),
     account_type: account.type,
     recurring_payment_name: recurringPaymentName ?? null,
     category_name: category?.name ?? null,

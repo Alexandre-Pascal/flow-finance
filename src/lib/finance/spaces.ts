@@ -6,7 +6,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Space, SpaceKind } from "@/types/database";
+import type { Account, Space, SpaceKind } from "@/types/database";
 
 export const DEFAULT_SPACE_NAME = "Perso";
 
@@ -83,4 +83,11 @@ export async function ensureDefaultSpaceId(
   }
 
   return String(created.id);
+}
+
+/** Nom à afficher pour un compte : celui de l'utilisateur, sinon la banque. */
+export function accountLabel(
+  account: Pick<Account, "name" | "display_name">,
+): string {
+  return account.display_name?.trim() || account.name;
 }

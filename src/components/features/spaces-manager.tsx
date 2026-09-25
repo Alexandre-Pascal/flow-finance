@@ -10,7 +10,10 @@ import { Check, Pencil, Plus, Trash2, Users, Wallet, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
-import { deleteManualAccountAction } from "@/app/actions/accounts";
+import {
+  deleteManualAccountAction,
+  renameAccountAction,
+} from "@/app/actions/accounts";
 import {
   assignAccountSpaceAction,
   createSpaceAction,
@@ -30,7 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
 import { isManualAccount } from "@/lib/finance/account-transfers";
-import { defaultSpace } from "@/lib/finance/spaces";
+import { accountLabel, defaultSpace } from "@/lib/finance/spaces";
 import { cn } from "@/lib/utils";
 import type { Account, Space, SpaceKind } from "@/types/database";
 
@@ -55,6 +58,8 @@ export function SpacesManager({
   const [newKind, setNewKind] = useState<SpaceKind>("shared");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [draftAccountName, setDraftAccountName] = useState("");
 
   const fallback = defaultSpace(spaces);
 
@@ -106,6 +111,16 @@ export function SpacesManager({
     const formData = new FormData();
     formData.set("id", id);
     runAction(deleteSpaceAction, formData);
+  }
+
+  function handleRenameAccount(accountId: string) {
+    const name = draftAccountName.trim();
+    setEditingAccountId(null);
+    const formData = new FormData();
+    formData.set("id", accountId);
+    // Un nom vide rend la main au libellé de la banque.
+    formData.set("name", name);
+    runAction(renameAccountAction, formData);
   }
 
   function handleDeleteAccount(accountId: string) {
@@ -297,19 +312,87 @@ export function SpacesManager({
                   key={account.id}
                   className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-4 py-3"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {account.name}
-                    </p>
-                    <p className="truncate text-xs tabular-nums text-muted-foreground">
-                      {formatCurrency(account.balance, locale, account.currency)}
-                      {isManualAccount(account)
-                        ? ` · ${(account.match_keywords ?? [])[0]}`
-                        : null}
-                    </p>
-                  </div>
+                  {editingAccountId === account.id ? (
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                      <Input
+                        value={draftAccountName}
+                        onChange={(event) =>
+                          setDraftAccountName(event.target.value)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            handleRenameAccount(account.id);
+                          }
+                          if (event.key === "Escape") {
+                            setEditingAccountId(null);
+                          }
+                        }}
+                        className="h-8"
+                        placeholder={account.name}
+                        aria-label={t("accountRename")}
+                        autoFocus
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 shrink-0 cursor-pointer"
+                        aria-label={t("accountRename")}
+                        disabled={isPending}
+                        onClick={() => handleRenameAccount(account.id)}
+                      >
+                        <Check className="size-4" aria-hidden />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 shrink-0 cursor-pointer"
+                        aria-label={t("spaceRenameCancel")}
+                        disabled={isPending}
+                        onClick={() => setEditingAccountId(null)}
+                      >
+                        <X className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {accountLabel(account)}
+                      </p>
+                      <p className="truncate text-xs tabular-nums text-muted-foreground">
+                        {formatCurrency(
+                          account.balance,
+                          locale,
+                          account.currency,
+                        )}
+                        {account.display_name ? ` · ${account.name}` : null}
+                        {isManualAccount(account)
+                          ? ` · ${(account.match_keywords ?? [])[0]}`
+                          : null}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="flex shrink-0 items-center gap-1">
+                    {isDemo || editingAccountId === account.id ? null : (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="cursor-pointer"
+                        aria-label={t("accountRename")}
+                        title={t("accountRename")}
+                        disabled={isPending}
+                        onClick={() => {
+                          setDraftAccountName(account.display_name ?? "");
+                          setEditingAccountId(account.id);
+                        }}
+                      >
+                        <Pencil className="size-4" aria-hidden />
+                      </Button>
+                    )}
                     <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button

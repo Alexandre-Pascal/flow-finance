@@ -75,6 +75,7 @@ import {
   PAYROLL_INCOME_KEY,
 } from "@/lib/finance/tracked-transfers";
 import { isNeutralTransfer } from "@/lib/finance/account-transfers";
+import { accountLabel } from "@/lib/finance/spaces";
 import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import type {
   Account,
@@ -491,7 +492,7 @@ function TransferAssign({
             onCheckedChange={() => assign(account.id)}
             className="cursor-pointer"
           >
-            <span className="truncate">{account.name}</span>
+            <span className="truncate">{accountLabel(account)}</span>
           </DropdownMenuCheckboxItem>
         ))}
         <DropdownMenuSeparator />
@@ -1215,7 +1216,10 @@ export function TransactionsTable({
           role="tablist"
           aria-label={t("accountTabsLabel")}
         >
-          {[{ id: "all", name: t("accountTabAll") }, ...accounts].map(
+          {[
+            { id: "all", name: t("accountTabAll"), display_name: null },
+            ...accounts,
+          ].map(
             (account) => (
               <Button
                 key={account.id}
@@ -1227,7 +1231,7 @@ export function TransactionsTable({
                 className="h-8 max-w-[14rem] cursor-pointer px-3 text-xs"
                 onClick={() => setAccountFilter(account.id)}
               >
-                <span className="truncate">{account.name}</span>
+                <span className="truncate">{accountLabel(account)}</span>
               </Button>
             ),
           )}

@@ -587,6 +587,7 @@
     "spaceAssignLabel": "Espace du compte",
     "spaceAssignNone": "Sans espace",
     "spaceAccountDelete": "Supprimer ce compte manuel",
+    "accountRename": "Renommer le compte",
     "spaceSaveError": "Impossible d'enregistrer. Réessayez.",
     "spaceSchemaError": "La base de données n'est pas à jour. Exécutez la migration Supabase (spaces).",
     "bankStatus": "Statut",

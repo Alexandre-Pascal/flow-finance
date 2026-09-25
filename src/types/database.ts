@@ -50,7 +50,10 @@ export interface Account {
   user_id: string;
   connection_id: string | null;
   external_uid: string | null;
+  /** Nom donné par la banque : sert à reconnaître les virements. */
   name: string;
+  /** Nom choisi par l'utilisateur, affiché partout quand il existe. */
+  display_name?: string | null;
   iban: string | null;
   type: AccountType;
   balance: number;

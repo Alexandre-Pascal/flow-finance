@@ -12,7 +12,7 @@
  * synchronisé et ferait bouger un budget passé sans que l'utilisateur agisse.
  */
 
-import { defaultSpace } from "@/lib/finance/spaces";
+import { accountLabel, defaultSpace } from "@/lib/finance/spaces";
 import { isInternalTransfer } from "@/lib/pea/transfers";
 import type {
   Account,
@@ -199,7 +199,7 @@ export function annotateAccountTransfers(
       ? {
           counterpart_account_id: counterpartId,
           counterpart_account_name:
-            match.kind === "counterpart" ? match.account.name : null,
+            match.kind === "counterpart" ? accountLabel(match.account) : null,
           direction: tx.amount < 0 ? "out" : "in",
           counterpart_space_id: counterpartSpaceId,
           // Contrepartie inconnue : l'argent reste chez l'utilisateur, faute de
