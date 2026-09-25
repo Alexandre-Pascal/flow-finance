@@ -106,7 +106,7 @@ export interface FinanceData {
  * `remapStoredTransactions()`. La ramener ici multipliait le poids de la
  * réponse sans qu'aucun composant ne l'utilise.
  */
-const TRANSACTION_COLUMNS = [
+export const TRANSACTION_COLUMNS = [
   "id",
   "account_id",
   "entry_reference",
@@ -123,6 +123,8 @@ const TRANSACTION_COLUMNS = [
   "savings_account_id",
   "savings_account_manual",
   "income_source",
+  "transfer_account_id",
+  "transfer_manual",
   "pea_plan_id",
   "pea_manual",
   "created_at",
@@ -154,7 +156,7 @@ function mapAccount(row: Record<string, unknown>): Account {
   };
 }
 
-function mapTransaction(
+export function mapTransaction(
   row: Record<string, unknown>,
   account: Account,
   recurringPaymentName?: string | null,
@@ -181,6 +183,10 @@ function mapTransaction(
       : null,
     savings_account_manual: Boolean(row.savings_account_manual),
     income_source: row.income_source ? String(row.income_source) : null,
+    transfer_account_id: row.transfer_account_id
+      ? String(row.transfer_account_id)
+      : null,
+    transfer_manual: Boolean(row.transfer_manual),
     pea_plan_id: row.pea_plan_id ? String(row.pea_plan_id) : null,
     pea_manual: Boolean(row.pea_manual),
     created_at: String(row.created_at),

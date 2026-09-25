@@ -298,6 +298,7 @@
     "transferAssignLabel": "Virement entre mes comptes",
     "transferAssignNone": "Pas un virement",
     "transferAssignAuto": "Automatique",
+    "transferAssignError": "Le rattachement n'a pas pu être enregistré.",
     "pocketCreateFromLabel": "Créer un compte depuis ce libellé…",
     "pocketTitle": "Nouveau compte depuis un virement",
     "pocketDescription": "Pour une pocket Revolut ou un sous-compte que la banque n'expose pas. Les virements qui citent le fragment ci-dessous lui seront rattachés, et son solde s'en déduira.",

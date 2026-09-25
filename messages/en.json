@@ -298,6 +298,7 @@
     "transferAssignLabel": "Transfer between my accounts",
     "transferAssignNone": "Not a transfer",
     "transferAssignAuto": "Automatic",
+    "transferAssignError": "The assignment could not be saved.",
     "pocketCreateFromLabel": "Create an account from this label…",
     "pocketTitle": "New account from a transfer",
     "pocketDescription": "For a Revolut pocket or a sub-account the bank does not expose. Transfers quoting the fragment below will be attached to it, and its balance follows from them.",

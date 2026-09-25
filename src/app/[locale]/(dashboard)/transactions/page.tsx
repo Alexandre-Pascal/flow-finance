@@ -23,6 +23,7 @@ export default async function TransactionsPage({
       savingsAccounts,
       peaInvestmentPlans,
       recurringPayments,
+      spaces,
       isDemo,
     },
     profileSettings,
@@ -57,6 +58,7 @@ export default async function TransactionsPage({
             recurringPayments={recurringPayments}
             accounts={accounts}
             transferAccounts={allAccounts}
+            spaces={spaces}
             incomeSources={getConfiguredIncomeSources(profileSettings)}
             payrollKeyword={profileSettings.payroll.keyword}
             isDemo={isDemo}

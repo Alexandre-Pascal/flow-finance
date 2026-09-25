@@ -83,6 +83,7 @@ import type {
   PeaInvestmentPlan,
   RecurringPayment,
   SavingsAccount,
+  Space,
   TransactionWithAccount,
 } from "@/types/database";
 import { cn } from "@/lib/utils";
@@ -103,6 +104,8 @@ interface TransactionsTableProps {
   accounts?: Account[];
   /** Tous les comptes, tous espaces : cibles possibles d'un virement. */
   transferAccounts?: Account[];
+  /** Espaces de l'utilisateur, pour situer chaque compte proposé. */
+  spaces?: Space[];
   /** Sources de rentrées configurées, pour rattacher une entrée à la main. */
   incomeSources?: ProfileTrackedIncomeSource[];
   /** Mot-clé du salaire, pour afficher la source détectée automatiquement. */
@@ -429,11 +432,13 @@ function transferLabel(
 function TransferAssign({
   tx,
   accounts,
+  spaces,
   locale,
   isDemo,
 }: {
   tx: TransactionWithAccount;
   accounts: Account[];
+  spaces: Space[];
   locale: string;
   isDemo: boolean;
 }) {
@@ -441,22 +446,33 @@ function TransferAssign({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [creatingPocket, setCreatingPocket] = useState(false);
+  const [error, setError] = useState(false);
 
   const ref = tx.account_transfer;
   const others = accounts.filter((account) => account.id !== tx.account_id);
+  // Plusieurs comptes portent le nom de leur titulaire : sans l'espace, le
+  // compte joint est indiscernable d'un compte perso dans la liste.
+  const spaceNames = useMemo(
+    () => new Map(spaces.map((space) => [space.id, space.name])),
+    [spaces],
+  );
+  const showSpaces = spaces.length > 1;
 
   function assign(value: string) {
     if (isDemo) {
       return;
     }
+    setError(false);
     const formData = new FormData();
     formData.set("transactionId", tx.id);
     formData.set("transferAccountId", value);
     startTransition(async () => {
       const result = await assignTransactionTransferAccountAction(formData);
-      if (!result.error) {
-        router.refresh();
+      if (result.error) {
+        setError(true);
+        return;
       }
+      router.refresh();
     });
   }
 
@@ -469,9 +485,10 @@ function TransferAssign({
           className={cn(
             "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm font-normal transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60",
             ref ? "max-w-[190px] text-muted-foreground" : "px-2 text-muted-foreground/70",
+            error && "border-destructive text-destructive",
           )}
           aria-label={t("transferAssignLabel")}
-          title={t("transferAssignLabel")}
+          title={error ? t("transferAssignError") : t("transferAssignLabel")}
         >
           <ArrowLeftRight className="size-3 shrink-0" aria-hidden />
           {ref ? (
@@ -479,22 +496,39 @@ function TransferAssign({
           ) : null}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-60">
+      <DropdownMenuContent align="end" className="w-72">
         <DropdownMenuLabel>{t("transferAssignLabel")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {others.map((account) => (
-          <DropdownMenuCheckboxItem
-            key={account.id}
-            checked={
-              Boolean(tx.transfer_manual) &&
-              tx.transfer_account_id === account.id
-            }
-            onCheckedChange={() => assign(account.id)}
-            className="cursor-pointer"
-          >
-            <span className="truncate">{accountLabel(account)}</span>
-          </DropdownMenuCheckboxItem>
-        ))}
+        {error ? (
+          <p className="px-2 py-1.5 text-xs text-destructive">
+            {t("transferAssignError")}
+          </p>
+        ) : null}
+        {others.map((account) => {
+          const space = account.space_id
+            ? spaceNames.get(account.space_id)
+            : null;
+          return (
+            <DropdownMenuCheckboxItem
+              key={account.id}
+              checked={
+                Boolean(tx.transfer_manual) &&
+                tx.transfer_account_id === account.id
+              }
+              onCheckedChange={() => assign(account.id)}
+              className="cursor-pointer"
+            >
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate">{accountLabel(account)}</span>
+                {showSpaces && space ? (
+                  <span className="truncate text-xs text-muted-foreground">
+                    {space}
+                  </span>
+                ) : null}
+              </span>
+            </DropdownMenuCheckboxItem>
+          );
+        })}
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
           checked={Boolean(tx.transfer_manual) && !tx.transfer_account_id}
@@ -631,6 +665,7 @@ function TransactionExpenseType({
   savingsAccounts,
   peaInvestmentPlans,
   accounts,
+  spaces,
   incomeSources,
   payrollKeyword,
   locale,
@@ -642,6 +677,7 @@ function TransactionExpenseType({
   savingsAccounts: SavingsAccount[];
   peaInvestmentPlans: PeaInvestmentPlan[];
   accounts: Account[];
+  spaces: Space[];
   incomeSources: ProfileTrackedIncomeSource[];
   payrollKeyword: string | null;
   locale: string;
@@ -700,6 +736,7 @@ function TransactionExpenseType({
       <TransferAssign
         tx={tx}
         accounts={accounts}
+        spaces={spaces}
         locale={locale}
         isDemo={isDemo}
       />
@@ -717,6 +754,7 @@ function TransactionExpenseType({
           <TransferAssign
             tx={tx}
             accounts={accounts}
+            spaces={spaces}
             locale={locale}
             isDemo={isDemo}
           />
@@ -764,6 +802,7 @@ function TransactionExpenseType({
         <TransferAssign
           tx={tx}
           accounts={accounts}
+          spaces={spaces}
           locale={locale}
           isDemo={isDemo}
         />
@@ -898,6 +937,7 @@ export function TransactionsTable({
   peaInvestmentPlans = [],
   accounts = [],
   transferAccounts = [],
+  spaces = [],
   incomeSources = [],
   payrollKeyword = null,
   recurringPayments = [],
@@ -1151,6 +1191,7 @@ export function TransactionsTable({
                 accounts={
                   transferAccounts.length > 0 ? transferAccounts : accounts
                 }
+                spaces={spaces}
                 incomeSources={incomeSources}
                 payrollKeyword={payrollKeyword}
                 locale={locale}
