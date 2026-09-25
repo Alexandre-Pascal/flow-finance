@@ -163,6 +163,7 @@
     "subscriptions": "Fixed costs",
     "uncategorized": "Uncategorized",
     "spaceTransfer": "Joint account",
+    "spaceTransferTo": "To {name}",
     "empty": "No spending to analyze yet. Connect your bank to get started."
   },
   "spendingFlow": {

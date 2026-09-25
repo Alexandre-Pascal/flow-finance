@@ -12,7 +12,7 @@ export default async function CategoriesPage({
   setRequestLocale(locale);
   const t = await getTranslations("categoryAnalytics");
 
-  const { transactions } = await getFinanceData(locale, {
+  const { transactions, spaces } = await getFinanceData(locale, {
     savingsAdjustments: false,
     dismissedSuggestions: false,
     bankConnection: false,
@@ -21,6 +21,12 @@ export default async function CategoriesPage({
     subscriptions: t("subscriptions"),
     uncategorized: t("uncategorized"),
     spaceTransfer: t("spaceTransfer"),
+    spaceNames: Object.fromEntries(
+      spaces.map((space) => [
+        space.id,
+        t("spaceTransferTo", { name: space.name }),
+      ]),
+    ),
   });
 
   return (

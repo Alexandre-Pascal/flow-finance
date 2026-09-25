@@ -43,7 +43,7 @@ export default async function AnalyticsPage({
   ]);
 
   const [
-    { transactions, recurringPayments, savingsAccounts },
+    { transactions, recurringPayments, savingsAccounts, spaces },
     profileSettings,
   ] =
     await Promise.all([
@@ -111,6 +111,12 @@ export default async function AnalyticsPage({
     subscriptions: tCategories("subscriptions"),
     uncategorized: tCategories("uncategorized"),
     spaceTransfer: tCategories("spaceTransfer"),
+    spaceNames: Object.fromEntries(
+      spaces.map((space) => [
+        space.id,
+        tCategories("spaceTransferTo", { name: space.name }),
+      ]),
+    ),
   });
   const contribution = buildContributionFlow(
     transactions,

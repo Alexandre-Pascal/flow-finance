@@ -45,8 +45,14 @@ export interface CategoryBreakdown {
 interface BreakdownLabels {
   subscriptions: string;
   uncategorized: string;
-  /** Libellé des virements vers un autre espace. */
+  /** Libellé de repli quand l'espace visé n'est pas nommé. */
   spaceTransfer: string;
+  /**
+   * Libellé par espace visé, déjà formaté (« Vers Perso »). Un virement
+   * inter-espaces se lit depuis l'espace qu'on regarde : le même mouvement
+   * part d'ici et arrive là-bas.
+   */
+  spaceNames?: Record<string, string>;
 }
 
 function monthKeyFromDate(date: Date): string {
@@ -75,9 +81,14 @@ function resolveBucket(
   // Avant l'abonnement : un versement mensuel au compte joint a exactement la
   // forme d'un prélèvement récurrent, et finirait dans « Abonnements ».
   if (isCrossSpaceTransfer(tx)) {
+    const spaceId = tx.account_transfer?.counterpart_space_id ?? null;
     return {
-      key: SPACE_TRANSFER_KEY,
-      name: labels.spaceTransfer,
+      // Une rubrique par espace visé : sortir vers le perso et contribuer au
+      // joint ne sont pas la même dépense.
+      key: spaceId ? `${SPACE_TRANSFER_KEY}:${spaceId}` : SPACE_TRANSFER_KEY,
+      name:
+        (spaceId ? labels.spaceNames?.[spaceId] : undefined) ??
+        labels.spaceTransfer,
       color: SPACE_TRANSFER_COLOR,
     };
   }

@@ -163,6 +163,7 @@
     "subscriptions": "Charges fixes",
     "uncategorized": "Non classé",
     "spaceTransfer": "Compte joint",
+    "spaceTransferTo": "Vers {name}",
     "empty": "Aucune dépense à analyser. Connectez votre banque pour commencer."
   },
   "spendingFlow": {

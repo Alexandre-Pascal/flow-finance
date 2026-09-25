@@ -9,7 +9,8 @@ import type { TransactionWithAccount } from "@/types/database";
 const labels = {
   subscriptions: "Abonnements",
   uncategorized: "Non classé",
-  spaceTransfer: "Compte joint",
+  spaceTransfer: "Autre espace",
+  spaceNames: { partage: "Vers Joint", perso: "Vers Perso" },
 };
 
 function tx(
@@ -60,8 +61,8 @@ describe("buildCategoryBreakdown — virements", () => {
       labels,
     );
 
-    expect(meta[SPACE_TRANSFER_KEY]?.name).toBe("Compte joint");
-    expect(months.at(-1)?.values[SPACE_TRANSFER_KEY]).toBe(300);
+    expect(meta[`${SPACE_TRANSFER_KEY}:partage`]?.name).toBe("Vers Joint");
+    expect(months.at(-1)?.values[`${SPACE_TRANSFER_KEY}:partage`]).toBe(300);
   });
 
   it("keeps that contribution out of subscriptions, even once detected as one", () => {
@@ -81,8 +82,33 @@ describe("buildCategoryBreakdown — virements", () => {
       labels,
     );
 
-    expect(months.at(-1)?.values[SPACE_TRANSFER_KEY]).toBe(300);
+    expect(months.at(-1)?.values[`${SPACE_TRANSFER_KEY}:partage`]).toBe(300);
     expect(months.at(-1)?.values[SUBSCRIPTIONS_KEY]).toBeUndefined();
+  });
+
+  it("names the bucket after the space the money goes to", () => {
+    // Le même mouvement se lit depuis l'espace qu'on regarde : sortir vers le
+    // perso n'est pas contribuer au joint.
+    const { meta } = buildCategoryBreakdown(
+      [
+        tx({
+          id: "tx-4",
+          amount: -1,
+          booking_date: month,
+          account_transfer: {
+            counterpart_account_id: "revolut",
+            counterpart_account_name: "Alexandre Pascal",
+            direction: "out",
+            counterpart_space_id: "perso",
+            same_space: false,
+          },
+        }),
+      ],
+      "fr",
+      labels,
+    );
+
+    expect(meta[`${SPACE_TRANSFER_KEY}:perso`]?.name).toBe("Vers Perso");
   });
 
   it("ignores a move that stays inside the space", () => {
