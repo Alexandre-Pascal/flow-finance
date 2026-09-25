@@ -15,6 +15,7 @@ import {
   resolveCanonicalRules,
 } from "@/lib/finance/recurring-payments";
 import { annotateAccountTransfers } from "@/lib/finance/account-transfers";
+import { mapSpace } from "@/lib/finance/spaces";
 import {
   annotateSavingsTransfers,
   mapSavingsAccount,
@@ -40,6 +41,7 @@ import type {
   RecurringPayment,
   SavingsAccount,
   SavingsAdjustment,
+  Space,
   TransactionWithAccount,
 } from "@/types/database";
 
@@ -82,6 +84,8 @@ export interface FinanceData {
   bankConnection: BankConnection | null;
   /** Toutes les banques reliées, de la plus récente à la plus ancienne. */
   bankConnections: BankConnection[];
+  /** Espaces de l'utilisateur, du plus prioritaire au moins prioritaire. */
+  spaces: Space[];
   isDemo: boolean;
 }
 
@@ -130,6 +134,7 @@ function mapAccount(row: Record<string, unknown>): Account {
     last_transactions_synced_at: row.last_transactions_synced_at
       ? String(row.last_transactions_synced_at)
       : null,
+    space_id: row.space_id ? String(row.space_id) : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -309,6 +314,7 @@ async function fetchFromSupabase(
       monthlySpending: [],
       bankConnection: null,
       bankConnections: [],
+      spaces: [],
       isDemo: false,
     };
   }
@@ -316,6 +322,7 @@ async function fetchFromSupabase(
   const [
     { rows: accountRows },
     { rows: connectionRows },
+    { rows: spaceRows },
     { rows: recurringRows, error: recurringError },
     { rows: dismissalRows, error: dismissalError },
     { rows: savingsRows, error: savingsError },
@@ -331,6 +338,13 @@ async function fetchFromSupabase(
             .from("bank_connections")
             .select("*")
             .order("created_at", { ascending: false }),
+    ),
+    readRows(
+      supabase
+        .from("spaces")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("position", { ascending: true }),
     ),
     readRows(
       supabase
@@ -391,6 +405,7 @@ async function fetchFromSupabase(
   ]);
 
   const bankConnections = connectionRows.map((row) => mapBankConnection(row));
+  const spaces = spaceRows.map((row) => mapSpace(row));
   const savingsSchemaReady = !savingsError && !adjustmentError;
   const savingsAccounts = savingsRows.map((row) => mapSavingsAccount(row));
   const savingsAdjustments = adjustmentRows.map((row) =>
@@ -478,6 +493,7 @@ async function fetchFromSupabase(
     monthlySpending: buildMonthlySpending(transactions, locale),
     bankConnection: bankConnections[0] ?? null,
     bankConnections,
+    spaces,
     isDemo: false,
   };
 }
@@ -511,6 +527,7 @@ export async function getFinanceData(
       monthlySpending: [],
       bankConnection: null,
       bankConnections: [],
+      spaces: [],
       isDemo: false,
     };
   }
@@ -528,6 +545,7 @@ export async function getFinanceData(
       dismissedSuggestionKeys: [],
       bankConnection: null,
       bankConnections: [],
+      spaces: [],
       isDemo: true,
       subscriptionsSchemaReady: true,
       categoriesSchemaReady: true,

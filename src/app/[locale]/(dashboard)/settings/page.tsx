@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { LanguageSwitcher } from "@/components/features/language-switcher";
 import { BankConnectButtons } from "@/components/features/bank-connect-buttons";
 import { BankSyncButtons } from "@/components/features/bank-sync-buttons";
+import { SpacesManager } from "@/components/features/spaces-manager";
 import { CategoriesManager } from "@/components/features/categories-manager";
 import { ProfileSettingsForm } from "@/components/features/profile-settings-form";
 import { SubscriptionsManager } from "@/components/features/subscriptions-manager";
@@ -39,6 +40,7 @@ export default async function SettingsPage({
       accounts,
       bankConnection,
       bankConnections,
+      spaces,
       transactions,
       recurringPayments,
       categories,
@@ -110,6 +112,20 @@ export default async function SettingsPage({
         </CardHeader>
         <CardContent>
           <LanguageSwitcher />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("spacesTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SpacesManager
+            spaces={spaces}
+            accounts={accounts}
+            locale={locale}
+            isDemo={isDemo}
+          />
         </CardContent>
       </Card>
 

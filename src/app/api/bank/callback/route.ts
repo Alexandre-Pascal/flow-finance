@@ -9,6 +9,7 @@ import { createSession, fetchBalances } from "@/lib/enable-banking/client";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { syncUserFinanceData } from "@/lib/enable-banking/sync";
 import { pickAccountBalance } from "@/lib/enable-banking/types";
+import { ensureDefaultSpaceId } from "@/lib/finance/spaces";
 import { createClient } from "@/lib/supabase/server";
 
 export const maxDuration = 300;
@@ -78,6 +79,10 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${appUrl}/fr/settings?error=no_accounts`);
     }
 
+    // Un compte qui arriverait sans espace deviendrait invisible dès que le
+    // filtrage par espace sera en place.
+    const spaceId = await ensureDefaultSpaceId(supabase, user.id);
+
     const accountRows = await Promise.all(
       session.accounts.map(async (acc) => {
         let balance = 0;
@@ -91,6 +96,7 @@ export async function GET(request: Request) {
         return {
           user_id: user.id,
           connection_id: connection.id,
+          space_id: spaceId,
           external_uid: acc.uid,
           name: acc.name ?? "Compte bancaire",
           iban: acc.account_id?.iban ?? null,

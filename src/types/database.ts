@@ -31,6 +31,20 @@ export interface BankConnection {
   updated_at: string;
 }
 
+/** Regroupement de comptes : un budget perso, un budget partagé. */
+export type SpaceKind = "personal" | "shared";
+
+export interface Space {
+  id: string;
+  user_id: string;
+  name: string;
+  kind: SpaceKind;
+  color: string;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Account {
   id: string;
   user_id: string;
@@ -42,6 +56,8 @@ export interface Account {
   balance: number;
   currency: string;
   last_transactions_synced_at: string | null;
+  /** Espace auquel le compte appartient ; `null` vaut espace personnel. */
+  space_id?: string | null;
   created_at: string;
   updated_at: string;
 }
