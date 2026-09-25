@@ -14,7 +14,10 @@ import {
   mapRecurringPayment,
   resolveCanonicalRules,
 } from "@/lib/finance/recurring-payments";
-import { annotateAccountTransfers } from "@/lib/finance/account-transfers";
+import {
+  annotateAccountTransfers,
+  withManualBalances,
+} from "@/lib/finance/account-transfers";
 import { defaultSpace } from "@/lib/finance/spaces";
 import { mapSpace } from "@/lib/finance/spaces";
 import { getActiveSpace } from "@/lib/get-active-space";
@@ -141,6 +144,10 @@ function mapAccount(row: Record<string, unknown>): Account {
       ? String(row.last_transactions_synced_at)
       : null,
     space_id: row.space_id ? String(row.space_id) : null,
+    match_keywords: Array.isArray(row.match_keywords)
+      ? (row.match_keywords as unknown[]).map(String)
+      : [],
+    base_balance: Number(row.base_balance ?? 0),
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -400,7 +407,7 @@ async function fetchFromSupabase(
     ),
   ]);
 
-  const accounts = accountRows.map((row) => mapAccount(row));
+  let accounts = accountRows.map((row) => mapAccount(row));
 
   // Second étage : transactions et catégories ne dépendent que des comptes,
   // donc ils partent ensemble au lieu de s'enchaîner.
@@ -482,7 +489,10 @@ async function fetchFromSupabase(
   );
   // En dernier : un virement déjà reconnu comme versement d'épargne garde sa
   // qualification, plus parlante qu'un simple déplacement entre comptes.
-  transactions = annotateAccountTransfers(transactions, accounts);
+  transactions = annotateAccountTransfers(transactions, accounts, spaces);
+  // Le solde d'une pocket n'est déclaré par personne : il se déduit des
+  // virements qu'on vient de reconnaître.
+  accounts = withManualBalances(accounts, transactions);
 
   return {
     accounts,

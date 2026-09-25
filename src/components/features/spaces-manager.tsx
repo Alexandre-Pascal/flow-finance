@@ -10,6 +10,7 @@ import { Check, Pencil, Plus, Trash2, Users, Wallet, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
+import { deleteManualAccountAction } from "@/app/actions/accounts";
 import {
   assignAccountSpaceAction,
   createSpaceAction,
@@ -28,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
+import { isManualAccount } from "@/lib/finance/account-transfers";
 import { defaultSpace } from "@/lib/finance/spaces";
 import { cn } from "@/lib/utils";
 import type { Account, Space, SpaceKind } from "@/types/database";
@@ -104,6 +106,12 @@ export function SpacesManager({
     const formData = new FormData();
     formData.set("id", id);
     runAction(deleteSpaceAction, formData);
+  }
+
+  function handleDeleteAccount(accountId: string) {
+    const formData = new FormData();
+    formData.set("id", accountId);
+    runAction(deleteManualAccountAction, formData);
   }
 
   function handleAssign(accountId: string, spaceId: string) {
@@ -293,12 +301,16 @@ export function SpacesManager({
                     <p className="truncate text-sm font-medium text-foreground">
                       {account.name}
                     </p>
-                    <p className="text-xs tabular-nums text-muted-foreground">
+                    <p className="truncate text-xs tabular-nums text-muted-foreground">
                       {formatCurrency(account.balance, locale, account.currency)}
+                      {isManualAccount(account)
+                        ? ` · ${(account.match_keywords ?? [])[0]}`
+                        : null}
                     </p>
                   </div>
 
-                  <DropdownMenu>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
@@ -331,7 +343,25 @@ export function SpacesManager({
                         </DropdownMenuCheckboxItem>
                       ))}
                     </DropdownMenuContent>
-                  </DropdownMenu>
+                    </DropdownMenu>
+
+                    {/* Seul un compte créé à la main se supprime : les autres
+                        appartiennent à la synchronisation bancaire. */}
+                    {isManualAccount(account) && !isDemo ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="cursor-pointer text-destructive"
+                        aria-label={t("spaceAccountDelete")}
+                        title={t("spaceAccountDelete")}
+                        disabled={isPending}
+                        onClick={() => handleDeleteAccount(account.id)}
+                      >
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}

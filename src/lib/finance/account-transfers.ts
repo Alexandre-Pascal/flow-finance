@@ -96,6 +96,24 @@ export function matchAccountTransfer(
   tx: Pick<TransactionWithAccount, "account_id" | "description">,
   accounts: Account[],
 ): AccountTransferMatch | null {
+  const description = tx.description.toUpperCase();
+
+  // Un compte manuel — une pocket Revolut — se reconnaît à un fragment
+  // explicite du libellé. Il prime sur les noms de titulaires, bien plus
+  // vagues, et se compare au libellé brut : « MB:cb78… » ne survivrait pas à
+  // la normalisation des noms.
+  for (const account of accounts) {
+    if (account.id === tx.account_id) {
+      continue;
+    }
+    for (const keyword of account.match_keywords ?? []) {
+      const needle = keyword.trim().toUpperCase();
+      if (needle.length >= 3 && description.includes(needle)) {
+        return { kind: "counterpart", account };
+      }
+    }
+  }
+
   const words = new Set(normalizeHolderLabel(tx.description).split(" "));
 
   let best: Account | null = null;
@@ -233,4 +251,59 @@ export function isNeutralTransfer(
   // Un virement qui change de budget n'est pas neutre : il sort d'ici pour
   // entrer là-bas.
   return isInternalTransfer(tx) || (isAccountTransfer(tx) && !isCrossSpaceTransfer(tx));
+}
+
+/** Un compte créé à la main : son solde ne vient pas de la banque. */
+export function isManualAccount(account: Account): boolean {
+  return (account.match_keywords ?? []).length > 0;
+}
+
+/**
+ * Reconstruit le solde des comptes manuels.
+ *
+ * L'argent d'une pocket a quitté le compte principal : la banque ne le déclare
+ * nulle part. On le retrouve en cumulant les virements reconnus — une sortie du
+ * compte principal est une entrée dans la pocket.
+ */
+export function withManualBalances(
+  accounts: Account[],
+  transactions: TransactionWithAccount[],
+): Account[] {
+  if (!accounts.some((account) => isManualAccount(account))) {
+    return accounts;
+  }
+
+  const moved = new Map<string, number>();
+  for (const tx of transactions) {
+    const target = tx.account_transfer?.counterpart_account_id;
+    if (!target) {
+      continue;
+    }
+    moved.set(target, (moved.get(target) ?? 0) - tx.amount);
+  }
+
+  return accounts.map((account) =>
+    isManualAccount(account)
+      ? {
+          ...account,
+          balance:
+            Math.round(
+              ((account.base_balance ?? 0) + (moved.get(account.id) ?? 0)) * 100,
+            ) / 100,
+        }
+      : account,
+  );
+}
+
+/**
+ * Fragment de libellé qui identifiera une pocket.
+ *
+ * Revolut suffixe ses virements internes d'un identifiant stable
+ * (« MB:cb78bfe2-… ») : c'est lui qui désigne la pocket, le reste du libellé
+ * étant la note tapée par l'utilisateur. Sans identifiant, on retombe sur le
+ * libellé entier, à l'utilisateur de le raccourcir.
+ */
+export function suggestTransferKeyword(description: string): string {
+  const pocket = description.match(/MB:[0-9a-fA-F-]{8,}/);
+  return (pocket?.[0] ?? description).trim();
 }

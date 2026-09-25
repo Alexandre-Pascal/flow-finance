@@ -5,6 +5,8 @@ import {
   isCrossSpaceTransfer,
   isNeutralTransfer,
   matchAccountTransfer,
+  suggestTransferKeyword,
+  withManualBalances,
 } from "./account-transfers";
 import type { Account, Space, TransactionWithAccount } from "@/types/database";
 
@@ -279,5 +281,76 @@ describe("virements et espaces", () => {
 
     expect(row.account_transfer?.counterpart_space_id).toBeNull();
     expect(isNeutralTransfer(row)).toBe(true);
+  });
+});
+
+describe("comptes manuels (pockets)", () => {
+  const pocket: Account = {
+    ...account("pocket", "Pocket vacances", "partage"),
+    external_uid: null,
+    match_keywords: ["MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73"],
+    base_balance: 0,
+  };
+  const withPocket = [...accounts, pocket];
+
+  it("recognises a pocket by its label fragment", () => {
+    // Le libellé commence par une note libre : seul le fragment compte.
+    expect(
+      matchAccountTransfer(
+        tx(
+          "joint",
+          "Parking + taxe séjour hôtel paris To EUR MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73",
+          -72,
+        ),
+        withPocket,
+      ),
+    ).toEqual({ kind: "counterpart", account: pocket });
+  });
+
+  it("prefers the explicit fragment over the holder's name", () => {
+    expect(
+      matchAccountTransfer(
+        tx(
+          "ca",
+          "VIREMENT EMIS WEB M. PASCAL ALEXANDRE MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73",
+          -50,
+        ),
+        withPocket,
+      ),
+    ).toEqual({ kind: "counterpart", account: pocket });
+  });
+
+  it("rebuilds the pocket balance from the transfers it receives", () => {
+    const annotated = annotateAccountTransfers(
+      [
+        tx("joint", "To EUR MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73", -72),
+        tx("joint", "From EUR MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73", 20),
+      ],
+      withPocket,
+      spaces,
+    );
+
+    const [rebuilt] = withManualBalances([pocket], annotated);
+    // 72 € mis de côté, 20 € repris.
+    expect(rebuilt.balance).toBe(52);
+  });
+
+  it("leaves bank accounts' balances alone", () => {
+    const [bank] = withManualBalances([ca], []);
+    expect(bank.balance).toBe(ca.balance);
+  });
+});
+
+describe("suggestTransferKeyword", () => {
+  it("keeps the stable identifier and drops the free-form note", () => {
+    expect(
+      suggestTransferKeyword(
+        "Parking + taxe séjour hôtel paris To EUR MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73",
+      ),
+    ).toBe("MB:cb78bfe2-01f6-44a4-959e-ad71b2d5ee73");
+  });
+
+  it("falls back to the whole label when there is no identifier", () => {
+    expect(suggestTransferKeyword("  To EUR  ")).toBe("To EUR");
   });
 });

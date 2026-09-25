@@ -9,6 +9,7 @@ import {
   ArrowLeftRight,
   CalendarDays,
   ListFilter,
+  Plus,
   Search,
   StickyNote,
   Trash2,
@@ -27,6 +28,7 @@ import {
   assignTransactionTransferAccountAction,
 } from "@/app/actions/transactions";
 import { updateTransactionNoteAction } from "@/app/actions/transactions";
+import { CreatePocketDialog } from "@/components/features/create-pocket-dialog";
 import { MarkAsSubscriptionDialog } from "@/components/features/mark-as-subscription-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -426,15 +428,18 @@ function transferLabel(
 function TransferAssign({
   tx,
   accounts,
+  locale,
   isDemo,
 }: {
   tx: TransactionWithAccount;
   accounts: Account[];
+  locale: string;
   isDemo: boolean;
 }) {
   const t = useTranslations("transactions");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [creatingPocket, setCreatingPocket] = useState(false);
 
   const ref = tx.account_transfer;
   const others = accounts.filter((account) => account.id !== tx.account_id);
@@ -504,7 +509,31 @@ function TransferAssign({
         >
           {t("transferAssignAuto")}
         </DropdownMenuCheckboxItem>
+        {isDemo ? null : (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onSelect={(event) => {
+                // Le menu se referme avant que la boîte s'ouvre, sinon les deux
+                // se disputent le focus.
+                event.preventDefault();
+                setCreatingPocket(true);
+              }}
+            >
+              <Plus className="size-4" aria-hidden />
+              {t("pocketCreateFromLabel")}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
+
+      <CreatePocketDialog
+        tx={tx}
+        locale={locale}
+        open={creatingPocket}
+        onOpenChange={setCreatingPocket}
+      />
     </DropdownMenu>
   );
 }
@@ -603,6 +632,7 @@ function TransactionExpenseType({
   accounts,
   incomeSources,
   payrollKeyword,
+  locale,
   compact,
   isDemo,
 }: {
@@ -613,6 +643,7 @@ function TransactionExpenseType({
   accounts: Account[];
   incomeSources: ProfileTrackedIncomeSource[];
   payrollKeyword: string | null;
+  locale: string;
   compact: boolean;
   isDemo: boolean;
 }) {
@@ -664,7 +695,14 @@ function TransactionExpenseType({
       return <SavingsTransferBadge label={label} />;
     }
 
-    return <TransferAssign tx={tx} accounts={accounts} isDemo={isDemo} />;
+    return (
+      <TransferAssign
+        tx={tx}
+        accounts={accounts}
+        locale={locale}
+        isDemo={isDemo}
+      />
+    );
   }
 
   if (tx.amount >= 0) {
@@ -675,7 +713,12 @@ function TransactionExpenseType({
     return (
       <div className="flex items-center gap-1.5">
         {canAssignTransfer ? (
-          <TransferAssign tx={tx} accounts={accounts} isDemo={isDemo} />
+          <TransferAssign
+            tx={tx}
+            accounts={accounts}
+            locale={locale}
+            isDemo={isDemo}
+          />
         ) : null}
         <IncomeAssign
           tx={tx}
@@ -717,7 +760,12 @@ function TransactionExpenseType({
   return (
     <div className="flex items-center gap-1.5">
       {canAssignTransfer ? (
-        <TransferAssign tx={tx} accounts={accounts} isDemo={isDemo} />
+        <TransferAssign
+          tx={tx}
+          accounts={accounts}
+          locale={locale}
+          isDemo={isDemo}
+        />
       ) : null}
       <CategorySelect tx={tx} categories={categories} isDemo={isDemo} />
     </div>
@@ -936,8 +984,15 @@ export function TransactionsTable({
           return false;
         }
       }
-      if (accountFilter !== "all" && tx.account_id !== accountFilter) {
-        return false;
+      if (accountFilter !== "all") {
+        // Un compte manuel n'a pas de lignes à lui : ses mouvements vivent sur
+        // le compte qui les a émis, et le désignent.
+        const concerns =
+          tx.account_id === accountFilter ||
+          tx.account_transfer?.counterpart_account_id === accountFilter;
+        if (!concerns) {
+          return false;
+        }
       }
 
       if (categoryFilter === "uncategorized") {
@@ -1097,6 +1152,7 @@ export function TransactionsTable({
                 }
                 incomeSources={incomeSources}
                 payrollKeyword={payrollKeyword}
+                locale={locale}
                 compact={compact}
                 isDemo={isDemo}
               />

@@ -58,6 +58,14 @@ export interface Account {
   last_transactions_synced_at: string | null;
   /** Espace auquel le compte appartient ; `null` vaut espace personnel. */
   space_id?: string | null;
+  /**
+   * Fragments de libellé désignant ce compte dans un virement. Renseignés pour
+   * les comptes créés à la main (pockets Revolut), vides pour les comptes
+   * synchronisés.
+   */
+  match_keywords?: string[];
+  /** Solde d'ancrage d'un compte manuel, avant les virements reconnus. */
+  base_balance?: number;
   created_at: string;
   updated_at: string;
 }
