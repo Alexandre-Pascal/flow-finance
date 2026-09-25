@@ -366,6 +366,8 @@
   "savings": {
     "title": "Savings",
     "subtitle": "Checking account, savings accounts, PEA and crypto portfolio — balances and trends in one place.",
+    "accountsTitle": "Accounts",
+    "accountsSubtitle": "The accounts of this space and their history.",
     "totalBalance": "Total wealth",
     "totalBalanceBreakdownAccounts": "Accounts (checking + savings)",
     "totalBalanceBreakdownCrypto": "Crypto",

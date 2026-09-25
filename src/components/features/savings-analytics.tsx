@@ -114,6 +114,11 @@ interface SavingsAnalyticsProps {
   isDemo: boolean;
   schemaReady: boolean;
   showConnectBank: boolean;
+  /**
+   * Livrets, PEA et crypto appartiennent au budget personnel : dans un espace
+   * partagé, seule la liste des comptes a du sens.
+   */
+  showEnvelopes?: boolean;
   bankConfigured: boolean;
 }
 
@@ -135,6 +140,7 @@ export function SavingsAnalytics({
   schemaReady,
   showConnectBank,
   bankConfigured,
+  showEnvelopes = true,
 }: SavingsAnalyticsProps) {
   const t = useTranslations("savings");
   const tCrypto = useTranslations("crypto");
@@ -272,34 +278,40 @@ export function SavingsAnalytics({
             </div>
           }
         />
-        <KpiCard
-          icon={<LineChart className="size-4" aria-hidden />}
-          label={tPea("kpiCurrentValue")}
-          value={formatCurrency(peaValue, locale)}
-          href="/investments/pea"
-          hint={t("kpiPeaManage")}
-        />
-        <KpiCard
-          icon={<Bitcoin className="size-4" aria-hidden />}
-          label={tCrypto("kpiCurrentValue")}
-          value={formatCurrency(cryptoValue, locale)}
-          href="/investments/crypto"
-          hint={t("kpiCryptoManage")}
-        />
-        <KpiCard
-          icon={<Landmark className="size-4" aria-hidden />}
-          label={t("kpiNetWealth")}
-          value={formatCurrency(netAfterSale, locale)}
-          hint={t("kpiNetWealthHint")}
-        />
+        {showEnvelopes ? (
+          <>
+            <KpiCard
+              icon={<LineChart className="size-4" aria-hidden />}
+              label={tPea("kpiCurrentValue")}
+              value={formatCurrency(peaValue, locale)}
+              href="/investments/pea"
+              hint={t("kpiPeaManage")}
+            />
+            <KpiCard
+              icon={<Bitcoin className="size-4" aria-hidden />}
+              label={tCrypto("kpiCurrentValue")}
+              value={formatCurrency(cryptoValue, locale)}
+              href="/investments/crypto"
+              hint={t("kpiCryptoManage")}
+            />
+            <KpiCard
+              icon={<Landmark className="size-4" aria-hidden />}
+              label={t("kpiNetWealth")}
+              value={formatCurrency(netAfterSale, locale)}
+              hint={t("kpiNetWealthHint")}
+            />
+          </>
+        ) : null}
       </div>
 
-      <ContributionFlowPanel
-        transactions={transactions}
-        savingsAccounts={overview.vehicles.map((vehicle) => vehicle.account)}
-        locale={locale}
-        includePea={pea.schemaReady}
-      />
+      {showEnvelopes ? (
+        <ContributionFlowPanel
+          transactions={transactions}
+          savingsAccounts={overview.vehicles.map((vehicle) => vehicle.account)}
+          locale={locale}
+          includePea={pea.schemaReady}
+        />
+      ) : null}
 
       {hasAnyChart ? (
         <div className="flex justify-end">
@@ -356,6 +368,7 @@ export function SavingsAnalytics({
       </section>
 
       {/* Comptes d'épargne */}
+      {showEnvelopes ? (
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -409,6 +422,7 @@ export function SavingsAnalytics({
           </div>
         )}
       </section>
+      ) : null}
 
       <Dialog
         open={formState !== null}

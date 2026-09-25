@@ -21,9 +21,13 @@ export default async function SavingsPage({
   setRequestLocale(locale);
 
   const profileSettings = await getProfileSettings();
-  if (!profileSettings.modules.savings || (await getActiveSpace())?.kind === "shared") {
+  if (!profileSettings.modules.savings) {
     redirect({ href: "/", locale });
   }
+
+  // Dans un espace partagé, la page se réduit aux comptes : livrets, PEA et
+  // crypto appartiennent au budget personnel.
+  const isShared = (await getActiveSpace())?.kind === "shared";
 
   const t = await getTranslations("savings");
 
@@ -49,8 +53,8 @@ export default async function SavingsPage({
 
   const overview = buildSavingsOverview(
     transactions,
-    savingsAccounts,
-    savingsAdjustments,
+    isShared ? [] : savingsAccounts,
+    isShared ? [] : savingsAdjustments,
     locale,
   );
   const checking = buildCheckingOverview(accounts, transactions, locale);
@@ -62,8 +66,12 @@ export default async function SavingsPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {isShared ? t("accountsTitle") : t("title")}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isShared ? t("accountsSubtitle") : t("subtitle")}
+        </p>
       </div>
 
       <SavingsAnalytics
@@ -71,11 +79,11 @@ export default async function SavingsPage({
         checking={checking}
         crypto={{
           summary: crypto.summary,
-          schemaReady: crypto.schemaReady,
+          schemaReady: !isShared && crypto.schemaReady,
         }}
         pea={{
           summary: pea.summary,
-          schemaReady: pea.schemaReady,
+          schemaReady: !isShared && pea.schemaReady,
         }}
         transactions={transactions}
         locale={locale}
@@ -83,6 +91,7 @@ export default async function SavingsPage({
         schemaReady={savingsSchemaReady}
         showConnectBank={bankReady && !isBankLinked}
         bankConfigured={bankReady}
+        showEnvelopes={!isShared}
       />
     </div>
   );

@@ -24,7 +24,7 @@ const navItems = [
   { href: "/analytics", labelKey: "analytics" as const },
   { href: "/categories", labelKey: "categories" as const },
   { href: "/savings", labelKey: "savings" as const, module: "savings" as const },
-  { href: "/goals", labelKey: "goals" as const, module: "savings" as const },
+  { href: "/goals", labelKey: "goals" as const, module: "goals" as const },
   {
     href: "/investments",
     labelKey: "investments" as const,
@@ -37,11 +37,13 @@ const navItems = [
 interface MobileNavProps {
   showSavings?: boolean;
   showInvestments?: boolean;
+  showGoals?: boolean;
 }
 
 export function MobileNav({
   showSavings = true,
   showInvestments = true,
+  showGoals = true,
 }: MobileNavProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
@@ -49,6 +51,7 @@ export function MobileNav({
 
   const visibleItems = navItems.filter((item) => {
     if (item.module === "savings") return showSavings;
+    if (item.module === "goals") return showGoals;
     if (item.module === "investments") return showInvestments;
     return true;
   });

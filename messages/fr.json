@@ -366,6 +366,8 @@
   "savings": {
     "title": "Épargne",
     "subtitle": "Compte courant, livrets d'épargne, PEA et portefeuille crypto — soldes et évolution en un seul endroit.",
+    "accountsTitle": "Comptes",
+    "accountsSubtitle": "Les comptes de cet espace et leur historique.",
     "totalBalance": "Patrimoine total",
     "totalBalanceBreakdownAccounts": "Comptes (courant + épargne)",
     "totalBalanceBreakdownCrypto": "Crypto",

@@ -31,21 +31,28 @@ export default async function DashboardLayout({
     getActiveSpace(),
   ]);
 
-  // Livrets, PEA et crypto appartiennent au budget perso : dans un espace
-  // partagé, ces pages n'auraient rien à montrer.
+  // La page Épargne reste accessible partout : c'est la seule qui liste les
+  // comptes, et un espace partagé en a besoin. Elle s'y réduit d'elle-même aux
+  // comptes. Le PEA et la crypto, eux, sont personnels.
   const isShared = activeSpace?.kind === "shared";
-  const showSavings = profileSettings.modules.savings && !isShared;
+  const showSavings = profileSettings.modules.savings;
   const showInvestments = profileSettings.modules.investments && !isShared;
+  const showGoals = profileSettings.modules.savings && !isShared;
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <AppSidebar showSavings={showSavings} showInvestments={showInvestments} />
+      <AppSidebar
+        showSavings={showSavings}
+        showInvestments={showInvestments}
+        showGoals={showGoals}
+      />
       <div className="flex min-h-screen flex-1 flex-col">
         {user?.isDemo ? <DemoBanner /> : null}
         <header className="flex h-16 items-center gap-3 border-b border-border px-4 md:px-6">
           <MobileNav
             showSavings={showSavings}
             showInvestments={showInvestments}
+            showGoals={showGoals}
           />
           <SpaceSwitcher
             spaces={spaces}

@@ -34,7 +34,7 @@ const navItems = [
     href: "/goals",
     icon: Target,
     labelKey: "goals" as const,
-    module: "savings" as const,
+    module: "goals" as const,
   },
   {
     href: "/investments",
@@ -53,17 +53,20 @@ const navItems = [
 interface AppSidebarProps {
   showSavings?: boolean;
   showInvestments?: boolean;
+  showGoals?: boolean;
 }
 
 export function AppSidebar({
   showSavings = true,
   showInvestments = true,
+  showGoals = true,
 }: AppSidebarProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
 
   const visibleItems = navItems.filter((item) => {
     if (item.module === "savings") return showSavings;
+    if (item.module === "goals") return showGoals;
     if (item.module === "investments") return showInvestments;
     return true;
   });
