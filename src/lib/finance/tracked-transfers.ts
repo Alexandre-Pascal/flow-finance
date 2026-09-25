@@ -44,11 +44,20 @@ function enumerateCalendarMonths(from: Date, to: Date): string[] {
   return keys;
 }
 
+/**
+ * Formulations d'un virement reçu. Les banques françaises annoncent « VIREMENT
+ * EN VOTRE FAVEUR », Revolut écrit « From Anaïs L » ou « Payment from … ».
+ * N'étant interrogée que sur des crédits, la règle peut rester large.
+ */
 function descriptionLooksLikeIncomingTransfer(description: string): boolean {
   return (
     description.includes("VIREMENT EN VOTRE FAVEUR") ||
     description.includes("VOTRE FAVEUR") ||
-    description.includes("VIR INST")
+    description.includes("VIR INST") ||
+    description.startsWith("FROM ") ||
+    description.includes("PAYMENT FROM") ||
+    description.includes("TOPUP FROM") ||
+    description.includes("TRANSFER FROM")
   );
 }
 
@@ -75,13 +84,25 @@ export function isRoundEuroAmount(amount: number): boolean {
   return Math.round(Math.abs(amount) * 100) % 100 === 0;
 }
 
+/**
+ * Compare sans les accents : « Anaïs » saisi sans tréma doit reconnaître
+ * « From Anaïs L », et réciproquement.
+ */
+function plain(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+}
+
 function descriptionMatchesAnyKeyword(
   description: string,
   keywords: string[],
 ): boolean {
+  const haystack = plain(description);
   return keywords.some((keyword) => {
-    const needle = keyword.trim().toUpperCase();
-    return needle.length > 0 && description.includes(needle);
+    const needle = plain(keyword.trim());
+    return needle.length > 0 && haystack.includes(needle);
   });
 }
 
@@ -89,9 +110,10 @@ function descriptionHitsExclude(
   description: string,
   excludeKeywords: string[],
 ): boolean {
+  const haystack = plain(description);
   return excludeKeywords.some((keyword) => {
-    const needle = keyword.trim().toUpperCase();
-    return needle.length > 0 && description.includes(needle);
+    const needle = plain(keyword.trim());
+    return needle.length > 0 && haystack.includes(needle);
   });
 }
 

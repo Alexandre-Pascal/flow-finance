@@ -172,6 +172,7 @@
     "period": "{count, plural, one {# mois} other {# mois}}",
     "salary": "Salaire",
     "otherIncome": "Autres entrées",
+    "incomeFromSpace": "Depuis {name}",
     "budget": "Budget",
     "savings": "Épargne",
     "rest": "Reste disponible",

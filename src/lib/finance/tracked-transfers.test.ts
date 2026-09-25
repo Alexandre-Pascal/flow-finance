@@ -158,6 +158,24 @@ describe("isTrackedIncomeTransfer", () => {
     ).toBe(false);
   });
 
+  it("recognises Revolut's wording for an incoming transfer", () => {
+    // « VIREMENT EN VOTRE FAVEUR » est une formule de banque française ;
+    // Revolut écrit autrement, et ses crédits étaient ignorés.
+    const anais = {
+      id: "anais",
+      keywords: ["ANAIS L"],
+      excludeKeywords: [],
+      requireRoundAmount: false,
+    };
+
+    expect(
+      isTrackedIncomeTransfer(
+        tx({ amount: 50, description: "From Anaïs L" }),
+        anais,
+      ),
+    ).toBe(true);
+  });
+
   it("follows a manual attachment over the keywords", () => {
     const salaryLike = tx({
       amount: 1800,

@@ -5,7 +5,10 @@ import {
   type SpendingFlowIncomeSeries,
 } from "@/components/features/spending-flow-panel";
 import { buildMonthlyOverview } from "@/lib/finance/aggregates";
-import { buildCategoryBreakdown } from "@/lib/finance/category-analytics";
+import {
+  buildCategoryBreakdown,
+  SPACE_TRANSFER_COLOR,
+} from "@/lib/finance/category-analytics";
 import { buildContributionFlow } from "@/lib/finance/contribution-flow";
 import { getFinanceData } from "@/lib/finance/queries";
 import { getProfileSettings } from "@/lib/get-profile-settings";
@@ -43,7 +46,7 @@ export default async function AnalyticsPage({
   ]);
 
   const [
-    { transactions, recurringPayments, savingsAccounts, spaces },
+    { transactions, recurringPayments, savingsAccounts, spaces, activeSpace },
     profileSettings,
   ] =
     await Promise.all([
@@ -141,6 +144,24 @@ export default async function AnalyticsPage({
       color: INCOME_SOURCE_COLORS[index % INCOME_SOURCE_COLORS.length],
       data: series.data,
     })),
+    // L'argent venu d'un autre espace n'est pas une rentrée anonyme : il vient
+    // de l'utilisateur lui-même, depuis son autre budget.
+    ...spaces
+      .filter((space) => space.id !== activeSpace?.id)
+      .map((space) => ({
+        key: `space-${space.id}`,
+        name: tFlow("incomeFromSpace", { name: space.name }),
+        color: SPACE_TRANSFER_COLOR,
+        data: buildMonthlyTransferOverview(
+          transactions,
+          locale,
+          (tx) =>
+            tx.amount > 0 &&
+            tx.account_transfer != null &&
+            !tx.account_transfer.same_space &&
+            tx.account_transfer.counterpart_space_id === space.id,
+        ),
+      })),
   ];
 
   return (
