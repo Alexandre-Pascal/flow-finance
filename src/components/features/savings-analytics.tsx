@@ -67,7 +67,7 @@ import {
   SAVINGS_KINDS,
   SAVINGS_KIND_COLORS,
   buildChartSeriesForPeriod,
-  type CheckingVehicle,
+  type BankAccountVehicle,
   type SavingsChartPoint,
   type SavingsMovementSource,
   type SavingsOverview,
@@ -107,7 +107,9 @@ interface SavingsPeaSummary {
 
 interface SavingsAnalyticsProps {
   overview: SavingsOverview;
-  checking: CheckingVehicle[];
+  checking: BankAccountVehicle[];
+  /** Comptes bancaires déclarés « épargne » : pockets, mises de côté. */
+  bankSavings?: BankAccountVehicle[];
   crypto: SavingsCryptoSummary;
   pea: SavingsPeaSummary;
   transactions: TransactionWithAccount[];
@@ -133,6 +135,7 @@ const SavingsBalanceChart = dynamic(
 export function SavingsAnalytics({
   overview,
   checking,
+  bankSavings = [],
   crypto,
   pea,
   transactions,
@@ -157,8 +160,12 @@ export function SavingsAnalytics({
 
   const accountsBalance = useMemo(
     () =>
-      overview.totalBalance + checking.reduce((sum, vehicle) => sum + vehicle.balance, 0),
-    [overview.totalBalance, checking],
+      overview.totalBalance +
+      [...checking, ...bankSavings].reduce(
+        (sum, vehicle) => sum + vehicle.balance,
+        0,
+      ),
+    [overview.totalBalance, checking, bankSavings],
   );
 
   const cryptoValue = crypto.schemaReady ? crypto.summary.currentValueEur : 0;
@@ -233,7 +240,7 @@ export function SavingsAnalytics({
   }
 
   const hasAccounts = overview.vehicles.length > 0;
-  const hasAnyChart = hasAccounts || checking.length > 0;
+  const hasAnyChart = hasAccounts || checking.length + bankSavings.length > 0;
 
   return (
     <div className="space-y-6">
@@ -367,6 +374,26 @@ export function SavingsAnalytics({
           />
         )}
       </section>
+
+      {/* Mises de côté bancaires : pockets Revolut, comptes mis de côté. */}
+      {bankSavings.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Landmark className="size-4 text-muted-foreground" aria-hidden />
+            {t("bankSavingsTitle")}
+          </div>
+          <div className="grid gap-5 lg:grid-cols-2">
+            {bankSavings.map((vehicle) => (
+              <CheckingCard
+                key={vehicle.account.id}
+                vehicle={vehicle}
+                period={period}
+                locale={locale}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Comptes d'épargne */}
       {showEnvelopes ? (
@@ -1211,7 +1238,7 @@ function CheckingCard({
   period,
   locale,
 }: {
-  vehicle: CheckingVehicle;
+  vehicle: BankAccountVehicle;
   period: MonthlyPeriod;
   locale: string;
 }) {
@@ -1250,7 +1277,11 @@ function CheckingCard({
           </span>
           <div className="min-w-0">
             <CardTitle className="truncate text-base">{accountLabel(account)}</CardTitle>
-            <p className="text-xs text-muted-foreground">{t("checkingLabel")}</p>
+            <p className="text-xs text-muted-foreground">
+              {account.type === "savings"
+                ? t("bankSavingsLabel")
+                : t("checkingLabel")}
+            </p>
           </div>
         </div>
         <div>

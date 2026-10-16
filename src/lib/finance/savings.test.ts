@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCheckingOverview, buildVehicle } from "./savings";
+import { buildBankAccountOverview, buildVehicle } from "./savings";
 import type {
   Account,
   SavingsAccount,
@@ -102,7 +102,7 @@ describe("buildVehicle", () => {
   });
 });
 
-describe("buildCheckingOverview — pockets", () => {
+describe("buildBankAccountOverview — pockets", () => {
   const pocket: Account = {
     id: "pocket",
     user_id: "user-1",
@@ -110,7 +110,7 @@ describe("buildCheckingOverview — pockets", () => {
     external_uid: null,
     name: "Paris",
     iban: null,
-    type: "checking",
+    type: "savings",
     balance: 72,
     currency: "EUR",
     last_transactions_synced_at: null,
@@ -156,7 +156,7 @@ describe("buildCheckingOverview — pockets", () => {
 
   it("reads the transfers that designate the pocket, seen from the pocket", () => {
     const today = new Date().toISOString().slice(0, 10);
-    const [vehicle] = buildCheckingOverview(
+    const [vehicle] = buildBankAccountOverview(
       [pocket],
       // La ligne vit sur le compte joint : une sortie de 72 € y est une
       // entrée de 72 € dans la pocket.

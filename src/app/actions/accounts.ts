@@ -91,7 +91,9 @@ export async function createManualAccountAction(
   const { error } = await supabase.from("accounts").insert({
     user_id: user.id,
     name,
-    type: "checking",
+    // Une pocket est de l'argent mis de côté : elle naît dans l'épargne, et le
+    // réglage des comptes permet de la ramener en trésorerie courante.
+    type: "savings",
     currency: "EUR",
     balance: baseBalance,
     base_balance: baseBalance,
@@ -202,9 +204,19 @@ export async function updateAccountAction(
     .map((keyword) => keyword.trim())
     .filter((keyword) => keyword.length >= KEYWORD_MIN_LENGTH);
 
+  // Une pocket mise de côté n'est pas de la trésorerie courante : le type dit
+  // dans quelle section du patrimoine le compte doit vivre.
+  const typeRaw = String(formData.get("type") ?? "").trim();
+  const type =
+    typeRaw === "savings" || typeRaw === "checking" ? typeRaw : null;
+
   const { error } = await supabase
     .from("accounts")
-    .update({ display_name: raw || null, match_keywords: keywords })
+    .update({
+      display_name: raw || null,
+      match_keywords: keywords,
+      ...(type ? { type } : {}),
+    })
     .eq("id", id)
     .eq("user_id", user.id);
 

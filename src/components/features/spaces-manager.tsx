@@ -35,7 +35,7 @@ import { formatCurrency } from "@/lib/format";
 import { isManualAccount } from "@/lib/finance/account-transfers";
 import { accountLabel, defaultSpace } from "@/lib/finance/spaces";
 import { cn } from "@/lib/utils";
-import type { Account, Space, SpaceKind } from "@/types/database";
+import type { Account, AccountType, Space, SpaceKind } from "@/types/database";
 
 interface SpacesManagerProps {
   spaces: Space[];
@@ -61,6 +61,7 @@ export function SpacesManager({
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [draftAccountName, setDraftAccountName] = useState("");
   const [draftKeywords, setDraftKeywords] = useState("");
+  const [draftType, setDraftType] = useState<AccountType>("checking");
 
   const fallback = defaultSpace(spaces);
 
@@ -120,6 +121,7 @@ export function SpacesManager({
     // Un nom vide rend la main au libellé de la banque.
     formData.set("name", draftAccountName.trim());
     formData.set("keywords", draftKeywords);
+    formData.set("type", draftType);
     setEditingAccountId(null);
     runAction(updateAccountAction, formData);
   }
@@ -369,6 +371,33 @@ export function SpacesManager({
                       <p className="text-xs text-muted-foreground">
                         {t("accountKeywordsHint")}
                       </p>
+                      {/* Une pocket mise de côté ne doit pas peser dans la
+                          trésorerie courante. */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {t("accountTypeLabel")}
+                        </span>
+                        <div className="flex rounded-md border border-border p-0.5">
+                          {(
+                            [
+                              ["checking", "accountTypeChecking"],
+                              ["savings", "accountTypeSavings"],
+                            ] as const
+                          ).map(([value, labelKey]) => (
+                            <Button
+                              key={value}
+                              type="button"
+                              size="sm"
+                              variant={draftType === value ? "default" : "ghost"}
+                              className="h-7 cursor-pointer px-2 text-xs"
+                              disabled={isPending}
+                              onClick={() => setDraftType(value)}
+                            >
+                              {t(labelKey)}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="min-w-0">
@@ -381,6 +410,11 @@ export function SpacesManager({
                           locale,
                           account.currency,
                         )}
+                        {` · ${
+                          account.type === "savings"
+                            ? t("accountTypeSavings")
+                            : t("accountTypeChecking")
+                        }`}
                         {account.display_name ? ` · ${account.name}` : null}
                         {(account.match_keywords ?? []).length > 0
                           ? ` · ${(account.match_keywords ?? []).join(" ; ")}`
@@ -404,6 +438,7 @@ export function SpacesManager({
                           setDraftKeywords(
                             (account.match_keywords ?? []).join(" ; "),
                           );
+                          setDraftType(account.type);
                           setEditingAccountId(account.id);
                         }}
                       >

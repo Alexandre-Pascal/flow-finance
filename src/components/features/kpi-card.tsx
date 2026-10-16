@@ -4,6 +4,10 @@
  */
 
 import type { LucideIcon } from "lucide-react";
+import {
+  BalanceBreakdown,
+  type BalanceBreakdownRow,
+} from "@/components/features/balance-breakdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +17,9 @@ interface KpiCardProps {
   icon: LucideIcon;
   trend?: string;
   variant?: "default" | "accent";
+  /** Détail du montant, révélé au survol. */
+  breakdown?: BalanceBreakdownRow[];
+  breakdownLabel?: string;
 }
 
 export function KpiCard({
@@ -21,6 +28,8 @@ export function KpiCard({
   icon: Icon,
   trend,
   variant = "default",
+  breakdown,
+  breakdownLabel,
 }: KpiCardProps) {
   return (
     <Card className="transition-shadow duration-200 hover:shadow-md">
@@ -40,7 +49,15 @@ export function KpiCard({
         </div>
       </CardHeader>
       <CardContent>
-        <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        {breakdown && breakdown.length > 0 ? (
+          <BalanceBreakdown
+            value={value}
+            rows={breakdown}
+            label={breakdownLabel ?? title}
+          />
+        ) : (
+          <p className="text-2xl font-semibold tracking-tight">{value}</p>
+        )}
         {trend ? (
           <p className="mt-1 text-xs text-muted-foreground">{trend}</p>
         ) : null}

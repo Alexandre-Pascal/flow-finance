@@ -16,6 +16,7 @@ import {
   sumBudgetMonthIncome,
 } from "@/lib/finance/payroll-budget";
 import { getFinanceData } from "@/lib/finance/queries";
+import { accountLabel } from "@/lib/finance/spaces";
 import { getProfileSettings } from "@/lib/get-profile-settings";
 import { getConfiguredIncomeSources } from "@/lib/profile-settings";
 import { formatCurrency } from "@/lib/format";
@@ -40,6 +41,19 @@ export default async function DashboardPage({
     ]);
 
   const totalBalance = sumAccountBalances(accounts);
+  // Le total ne dit pas d'où vient l'argent : le détail par compte s'affiche
+  // au survol, du plus gros solde au plus petit.
+  const balanceRows = [...accounts]
+    .sort((a, b) => b.balance - a.balance)
+    .map((account) => ({
+      id: account.id,
+      label: accountLabel(account),
+      value: formatCurrency(account.balance, locale, account.currency),
+      hint:
+        account.type === "savings"
+          ? t("balanceSavings")
+          : t("balanceChecking"),
+    }));
   const monthTx = getCurrentMonthTransactions(transactions).filter(
     (tx) => !tx.savings_transfer,
   );
@@ -77,6 +91,8 @@ export default async function DashboardPage({
           value={formatCurrency(totalBalance, locale)}
           icon={Wallet}
           variant="accent"
+          breakdown={balanceRows}
+          breakdownLabel={t("balanceBreakdown")}
         />
         <KpiCard
           title={t("monthlySpending")}

@@ -642,7 +642,7 @@ export function buildChartSeriesForPeriod(
   }));
 }
 
-export interface CheckingVehicle {
+export interface BankAccountVehicle {
   account: Account;
   balance: number;
   monthly: SavingsMonthPoint[];
@@ -650,14 +650,18 @@ export interface CheckingVehicle {
 }
 
 /**
- * Reconstruit l'historique des comptes courants à partir de leur solde actuel
+ * Reconstruit l'historique des comptes bancaires à partir de leur solde actuel
  * (issu d'Enable Banking) en remontant les transactions.
+ *
+ * Courants et mises de côté sortent ensemble : c'est le même calcul, et c'est
+ * l'appelant qui les sépare à l'affichage. Une pocket déclarée « épargne »
+ * n'avait sinon nulle part où apparaître.
  */
-export function buildCheckingOverview(
+export function buildBankAccountOverview(
   accounts: Account[],
   transactions: TransactionWithAccount[],
   locale: string,
-): CheckingVehicle[] {
+): BankAccountVehicle[] {
   const intlLocale = locale === "fr" ? "fr-FR" : "en-US";
   const monthFormatter = new Intl.DateTimeFormat(intlLocale, { month: "short" });
   const monthFullFormatter = new Intl.DateTimeFormat(intlLocale, {
@@ -668,7 +672,6 @@ export function buildCheckingOverview(
   const nowMonthKey = monthKeyFromDate(now);
 
   return accounts
-    .filter((account) => account.type === "checking")
     .map((account) => {
       // Un compte manuel — une pocket — n'a pas de lignes à lui : ses
       // mouvements sont les virements qui le désignent, vus à l'envers. Une

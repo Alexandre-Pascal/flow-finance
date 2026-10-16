@@ -4,7 +4,7 @@ import { getCryptoPortfolioData } from "@/lib/crypto/queries";
 import { isEnableBankingConfigured } from "@/lib/enable-banking/jwt";
 import { getFinanceData } from "@/lib/finance/queries";
 import {
-  buildCheckingOverview,
+  buildBankAccountOverview,
   buildSavingsOverview,
 } from "@/lib/finance/savings";
 import { getActiveSpace } from "@/lib/get-active-space";
@@ -57,7 +57,15 @@ export default async function SavingsPage({
     isShared ? [] : savingsAdjustments,
     locale,
   );
-  const checking = buildCheckingOverview(accounts, transactions, locale);
+  // Une pocket mise de côté n'est pas de la trésorerie courante : elle a sa
+  // propre section, même dans un espace partagé où les livrets disparaissent.
+  const bankAccounts = buildBankAccountOverview(accounts, transactions, locale);
+  const checking = bankAccounts.filter(
+    (vehicle) => vehicle.account.type !== "savings",
+  );
+  const bankSavings = bankAccounts.filter(
+    (vehicle) => vehicle.account.type === "savings",
+  );
 
   const bankReady = isEnableBankingConfigured();
   const isBankLinked =
@@ -77,6 +85,7 @@ export default async function SavingsPage({
       <SavingsAnalytics
         overview={overview}
         checking={checking}
+        bankSavings={bankSavings}
         crypto={{
           summary: crypto.summary,
           schemaReady: !isShared && crypto.schemaReady,

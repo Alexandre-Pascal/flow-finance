@@ -40,7 +40,10 @@
     "recentTransactions": "Transactions récentes",
     "spendingChart": "Dépenses sur 6 mois",
     "viewAll": "Voir tout",
-    "viewAnalytics": "Comparer les mois"
+    "viewAnalytics": "Comparer les mois",
+    "balanceBreakdown": "Répartition par compte",
+    "balanceChecking": "courant",
+    "balanceSavings": "épargne"
   },
   "analytics": {
     "title": "Analyses",
@@ -486,7 +489,9 @@
     "contributionPeriodTotal": "Total période",
     "contributionPeriodHint": "Somme des versements nets",
     "contributionNet": "Net",
-    "contributionByEnvelope": "Par enveloppe"
+    "contributionByEnvelope": "Par enveloppe",
+    "bankSavingsTitle": "Mises de côté",
+    "bankSavingsLabel": "Épargne bancaire"
   },
   "goals": {
     "title": "Objectifs",
@@ -668,7 +673,10 @@
     "profileSave": "Enregistrer les préférences",
     "profileSaveError": "Impossible d'enregistrer. Réessayez.",
     "profileSchemaError": "La base de données n'est pas à jour. Exécutez les migrations Supabase (profiles.settings).",
-    "profileDemoError": "Indisponible en mode démo."
+    "profileDemoError": "Indisponible en mode démo.",
+    "accountTypeLabel": "Nature",
+    "accountTypeChecking": "Compte courant",
+    "accountTypeSavings": "Épargne"
   },
   "crypto": {
     "title": "Crypto",

@@ -40,7 +40,10 @@
     "recentTransactions": "Recent transactions",
     "spendingChart": "Spending over 6 months",
     "viewAll": "View all",
-    "viewAnalytics": "Compare months"
+    "viewAnalytics": "Compare months",
+    "balanceBreakdown": "Breakdown by account",
+    "balanceChecking": "checking",
+    "balanceSavings": "savings"
   },
   "analytics": {
     "title": "Analytics",
@@ -486,7 +489,9 @@
     "contributionPeriodTotal": "Period total",
     "contributionPeriodHint": "Sum of net contributions",
     "contributionNet": "Net",
-    "contributionByEnvelope": "By envelope"
+    "contributionByEnvelope": "By envelope",
+    "bankSavingsTitle": "Set aside",
+    "bankSavingsLabel": "Bank savings"
   },
   "goals": {
     "title": "Goals",
@@ -668,7 +673,10 @@
     "profileSave": "Save preferences",
     "profileSaveError": "Could not save. Please try again.",
     "profileSchemaError": "Database schema is out of date. Run the Supabase migrations (profiles.settings).",
-    "profileDemoError": "Not available in demo mode."
+    "profileDemoError": "Not available in demo mode.",
+    "accountTypeLabel": "Kind",
+    "accountTypeChecking": "Checking account",
+    "accountTypeSavings": "Savings"
   },
   "crypto": {
     "title": "Crypto",
