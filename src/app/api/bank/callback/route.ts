@@ -102,7 +102,10 @@ export async function GET(request: Request) {
           iban: acc.account_id?.iban ?? null,
           type: "checking" as const,
           balance,
-          currency: acc.currency ?? "EUR",
+          // « XXX » : la banque ne déclare pas de devise (vu sur le Crédit
+          // Agricole). Le stocker tel quel afficherait « ¤ » partout.
+          currency:
+            acc.currency && acc.currency !== "XXX" ? acc.currency : "EUR",
         };
       }),
     );

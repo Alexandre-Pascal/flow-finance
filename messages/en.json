@@ -42,8 +42,7 @@
     "viewAll": "View all",
     "viewAnalytics": "Compare months",
     "balanceBreakdown": "Breakdown by account",
-    "balanceChecking": "checking",
-    "balanceSavings": "savings"
+    "balanceExcludesSavings": "Excluding money set aside"
   },
   "analytics": {
     "title": "Analytics",

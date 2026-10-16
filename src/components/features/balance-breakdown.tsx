@@ -50,7 +50,7 @@ export function BalanceBreakdown({
           {value}
         </button>
       </TooltipTrigger>
-      <TooltipContent align="start" className="w-64">
+      <TooltipContent align="start" className="w-72">
         <p className="mb-1.5 text-xs font-medium text-muted-foreground">
           {label}
         </p>

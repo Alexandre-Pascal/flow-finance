@@ -40,19 +40,21 @@ export default async function DashboardPage({
       getProfileSettings(),
     ]);
 
-  const totalBalance = sumAccountBalances(accounts);
+  // Ce qui est disponible, pas ce qui est possédé : une mise de côté a sa
+  // place dans le patrimoine, pas dans le solde d'un tableau de bord qui sert
+  // à savoir ce qu'on peut dépenser. Le patrimoine complet vit page Épargne.
+  const spendableAccounts = accounts.filter(
+    (account) => account.type !== "savings",
+  );
+  const totalBalance = sumAccountBalances(spendableAccounts);
   // Le total ne dit pas d'où vient l'argent : le détail par compte s'affiche
   // au survol, du plus gros solde au plus petit.
-  const balanceRows = [...accounts]
+  const balanceRows = [...spendableAccounts]
     .sort((a, b) => b.balance - a.balance)
     .map((account) => ({
       id: account.id,
       label: accountLabel(account),
       value: formatCurrency(account.balance, locale, account.currency),
-      hint:
-        account.type === "savings"
-          ? t("balanceSavings")
-          : t("balanceChecking"),
     }));
   const monthTx = getCurrentMonthTransactions(transactions).filter(
     (tx) => !tx.savings_transfer,
@@ -93,6 +95,11 @@ export default async function DashboardPage({
           variant="accent"
           breakdown={balanceRows}
           breakdownLabel={t("balanceBreakdown")}
+          trend={
+            spendableAccounts.length < accounts.length
+              ? t("balanceExcludesSavings")
+              : undefined
+          }
         />
         <KpiCard
           title={t("monthlySpending")}

@@ -42,8 +42,7 @@
     "viewAll": "Voir tout",
     "viewAnalytics": "Comparer les mois",
     "balanceBreakdown": "Répartition par compte",
-    "balanceChecking": "courant",
-    "balanceSavings": "épargne"
+    "balanceExcludesSavings": "Hors mises de côté"
   },
   "analytics": {
     "title": "Analyses",

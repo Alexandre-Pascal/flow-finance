@@ -6,6 +6,18 @@
 /**
  * Formate un montant en devise locale (EUR par défaut).
  */
+/**
+ * Code ISO exploitable, ou l'euro.
+ *
+ * Une banque qui ne déclare pas la devise d'un compte renvoie « XXX », le code
+ * officiel de l'absence de devise : `Intl` l'affiche alors « ¤ », un montant
+ * sans monnaie que personne ne sait lire.
+ */
+function safeCurrency(currency: string | null | undefined): string {
+  const code = (currency ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(code) && code !== "XXX" ? code : "EUR";
+}
+
 export function formatCurrency(
   amount: number,
   locale: string,
@@ -13,7 +25,7 @@ export function formatCurrency(
 ): string {
   return new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-US", {
     style: "currency",
-    currency,
+    currency: safeCurrency(currency),
   }).format(amount);
 }
 
@@ -40,7 +52,7 @@ export function formatCurrencyRange(
   });
   const currencyFormatter = new Intl.NumberFormat(intlLocale, {
     style: "currency",
-    currency,
+    currency: safeCurrency(currency),
   });
   const currencySuffix = currencyFormatter
     .format(0)
