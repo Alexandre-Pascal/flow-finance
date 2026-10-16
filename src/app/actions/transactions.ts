@@ -152,7 +152,13 @@ export async function assignTransactionIncomeSourceAction(
 
   const { error: updateError } = await supabase
     .from("transactions")
-    .update({ income_source: incomeSource })
+    .update(
+      incomeSource
+        ? // Une rentrée est un revenu ou un remboursement, jamais les deux :
+          // sans ça, la catégorie l'emporterait et le revenu disparaîtrait.
+          { income_source: incomeSource, category_id: null }
+        : { income_source: incomeSource },
+    )
     .eq("id", transactionId);
 
   if (updateError) {
@@ -247,6 +253,83 @@ export async function assignTransactionTransferAccountAction(
   const { error: updateError } = await supabase
     .from("transactions")
     .update(payload)
+    .eq("id", transactionId);
+
+  if (updateError) {
+    return isSchemaError(updateError.message, updateError.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  revalidateFinancePages();
+  return {};
+}
+
+/**
+ * Mois financé par une rentrée.
+ *
+ * Un virement reçu le 28 finance le mois suivant, et la règle automatique ne
+ * décale que le salaire. « auto » rend la main à la détection.
+ */
+export async function assignTransactionBudgetMonthAction(
+  formData: FormData,
+): Promise<{ error?: TransactionNoteError }> {
+  const user = await requireAuth();
+  if (user.isDemo) {
+    return { error: "demo" };
+  }
+
+  const transactionId = String(formData.get("transactionId") ?? "").trim();
+  const raw = String(formData.get("budgetMonthShift") ?? "").trim();
+  if (!transactionId) {
+    return { error: "invalid" };
+  }
+
+  let shift: number | null;
+  if (raw === "" || raw === "auto") {
+    shift = null;
+  } else if (raw === "0" || raw === "1") {
+    shift = Number(raw);
+  } else {
+    return { error: "invalid" };
+  }
+
+  const supabase = await createClient();
+  if (!supabase) {
+    return { error: "config" };
+  }
+
+  const { data: tx, error: txError } = await supabase
+    .from("transactions")
+    .select("id, account_id, amount")
+    .eq("id", transactionId)
+    .maybeSingle();
+
+  if (txError) {
+    return isSchemaError(txError.message, txError.code)
+      ? { error: "schema" }
+      : { error: "save" };
+  }
+
+  // Seule une rentrée finance un mois : une dépense appartient au mois où elle
+  // a été faite.
+  if (!tx || Number(tx.amount) <= 0) {
+    return { error: "invalid" };
+  }
+
+  const { data: account, error: accountError } = await supabase
+    .from("accounts")
+    .select("user_id")
+    .eq("id", tx.account_id)
+    .maybeSingle();
+
+  if (accountError || account?.user_id !== user.id) {
+    return { error: "invalid" };
+  }
+
+  const { error: updateError } = await supabase
+    .from("transactions")
+    .update({ budget_month_shift: shift })
     .eq("id", transactionId);
 
   if (updateError) {

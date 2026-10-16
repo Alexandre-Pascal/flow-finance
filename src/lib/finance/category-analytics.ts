@@ -8,6 +8,7 @@ import {
   isCrossSpaceTransfer,
   isNeutralTransfer,
 } from "@/lib/finance/account-transfers";
+import { isRefund } from "@/lib/finance/refunds";
 import type { TransactionWithAccount } from "@/types/database";
 
 /** Clé spéciale regroupant toutes les transactions liées à un abonnement. */
@@ -78,6 +79,16 @@ function resolveBucket(
   tx: TransactionWithAccount,
   labels: BreakdownLabels,
 ): CategoryMeta & { key: string } {
+  // Un remboursement rejoint la catégorie qu'il allège, avant tout le reste :
+  // c'est l'utilisateur qui l'a désignée.
+  if (isRefund(tx) && tx.category_id && tx.category_name) {
+    return {
+      key: tx.category_id,
+      name: tx.category_name,
+      color: tx.category_color ?? OTHER_COLOR,
+    };
+  }
+
   // Avant l'abonnement : un versement mensuel au compte joint a exactement la
   // forme d'un prélèvement récurrent, et finirait dans « Abonnements ».
   if (isCrossSpaceTransfer(tx)) {
@@ -140,7 +151,10 @@ export function buildCategoryBreakdown(
   const buckets = new Map<string, Map<string, number>>();
 
   for (const tx of transactions) {
-    if (tx.amount >= 0 || isNeutralTransfer(tx)) {
+    // Un remboursement se retranche de sa catégorie ; une rentrée ordinaire
+    // n'a rien à faire dans une répartition de dépenses.
+    const refund = isRefund(tx);
+    if (!refund && (tx.amount >= 0 || isNeutralTransfer(tx))) {
       continue;
     }
 
@@ -151,7 +165,7 @@ export function buildCategoryBreakdown(
     const monthBucket = buckets.get(monthKey) ?? new Map<string, number>();
     monthBucket.set(
       bucket.key,
-      (monthBucket.get(bucket.key) ?? 0) + Math.abs(tx.amount),
+      (monthBucket.get(bucket.key) ?? 0) + (refund ? -tx.amount : Math.abs(tx.amount)),
     );
     buckets.set(monthKey, monthBucket);
   }
@@ -173,7 +187,10 @@ export function buildCategoryBreakdown(
 
     if (monthBucket) {
       for (const [key, value] of monthBucket) {
-        const rounded = Math.round(value * 100) / 100;
+        // Remboursée plus qu'elle n'a coûté — l'avance d'un mois rendue le
+        // suivant —, une catégorie retombe à zéro : une part négative n'a
+        // aucun sens dans une répartition.
+        const rounded = Math.max(0, Math.round(value * 100) / 100);
         values[key] = rounded;
         total += rounded;
       }

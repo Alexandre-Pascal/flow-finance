@@ -11,6 +11,7 @@ import {
 } from "@/lib/finance/tracked-transfers";
 import type { ProfileTrackedIncomeSource } from "@/lib/profile-settings";
 import { isNeutralTransfer } from "@/lib/finance/account-transfers";
+import { isRefund } from "@/lib/finance/refunds";
 import type { TransactionWithAccount } from "@/types/database";
 
 export interface PayrollBudgetOptions {
@@ -59,35 +60,49 @@ export function payrollBudgetMonthKey(
     : bookingMonth;
 }
 
+/**
+ * Mois budgétaire d'une transaction, décalage manuel compris.
+ *
+ * Un virement reçu le 28 finance souvent le mois suivant : la règle du salaire
+ * ne s'applique qu'au salaire, alors l'utilisateur tranche ligne à ligne. Son
+ * choix prime sur toute détection.
+ */
+export function budgetMonthKey(
+  tx: Pick<TransactionWithAccount, "booking_date" | "budget_month_shift">,
+  automaticShift: number,
+): string {
+  const bookingMonth = tx.booking_date.slice(0, 7);
+  if (tx.budget_month_shift != null) {
+    return shiftMonthKey(bookingMonth, tx.budget_month_shift);
+  }
+  return payrollBudgetMonthKey(tx.booking_date, automaticShift);
+}
+
 export function getIncomeMonthKey(
   tx: TransactionWithAccount,
   options: PayrollBudgetOptions = {},
 ): string {
-  const bookingMonth = tx.booking_date.slice(0, 7);
   const keyword = options.payrollKeyword;
   const shift = options.budgetShiftMonths ?? 0;
   const sources = options.incomeSources ?? [];
 
-  // Aide familiale / rentrées suivies : jamais décalées comme un salaire.
-  if (sources.some((source) => isTrackedIncomeTransfer(tx, source))) {
-    return bookingMonth;
-  }
+  // Aide familiale / rentrées suivies : jamais décalées comme un salaire —
+  // sauf si l'utilisateur l'a demandé, ce dont `budgetMonthKey` se charge.
+  const tracked = sources.some((source) => isTrackedIncomeTransfer(tx, source));
+  const automatic =
+    !tracked && tx.amount > 0 && isPayrollTransfer(tx, keyword) ? shift : 0;
 
-  if (shift !== 0 && tx.amount > 0 && isPayrollTransfer(tx, keyword)) {
-    return payrollBudgetMonthKey(tx.booking_date, shift);
-  }
-
-  return bookingMonth;
+  return budgetMonthKey(tx, automatic);
 }
 
 /**
  * Mois de réception bancaire correspondant à un mois budgétaire salaire.
  */
 export function getPayrollBookingMonthKey(
-  budgetMonthKey: string,
+  budgetMonth: string,
   budgetShiftMonths = 1,
 ): string {
-  return shiftMonthKey(budgetMonthKey, -budgetShiftMonths);
+  return shiftMonthKey(budgetMonth, -budgetShiftMonths);
 }
 
 /**
@@ -99,6 +114,12 @@ export function shouldCountAsBudgetIncome(
   options: PayrollBudgetOptions = {},
 ): boolean {
   if (tx.amount <= 0) {
+    return false;
+  }
+
+  // Un remboursement annule une dépense ; le compter en entrée gonflerait le
+  // budget de l'argent qu'on n'a jamais gagné.
+  if (isRefund(tx)) {
     return false;
   }
 
@@ -153,6 +174,23 @@ export function shouldCountAsBudgetExpense(
   }
 
   return true;
+}
+
+/**
+ * Ce qu'une ligne pèse dans les dépenses : positif pour un débit, négatif pour
+ * un remboursement, zéro pour tout le reste.
+ *
+ * Un seul endroit décide du signe, sinon chaque agrégat réinvente la règle et
+ * l'un d'eux finit par compter un remboursement comme une dépense de plus.
+ */
+export function budgetExpenseAmount(
+  tx: TransactionWithAccount,
+  options: PayrollBudgetOptions = {},
+): number {
+  if (isRefund(tx)) {
+    return -tx.amount;
+  }
+  return shouldCountAsBudgetExpense(tx, options) ? Math.abs(tx.amount) : 0;
 }
 
 /**

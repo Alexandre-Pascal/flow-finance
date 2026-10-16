@@ -101,6 +101,11 @@ export interface Transaction {
   /** Compte de l'utilisateur en face d'un virement interne (prime sur le libellé). */
   transfer_account_id?: string | null;
   transfer_manual?: boolean;
+  /**
+   * Mois financé par une rentrée, relatif au mois de réception : 0 pour le mois
+   * courant, 1 pour le suivant. `null` laisse la règle du salaire décider.
+   */
+  budget_month_shift?: number | null;
   created_at: string;
   updated_at: string;
 }

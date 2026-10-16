@@ -125,6 +125,7 @@ export const TRANSACTION_COLUMNS = [
   "income_source",
   "transfer_account_id",
   "transfer_manual",
+  "budget_month_shift",
   "pea_plan_id",
   "pea_manual",
   "created_at",
@@ -187,6 +188,10 @@ export function mapTransaction(
       ? String(row.transfer_account_id)
       : null,
     transfer_manual: Boolean(row.transfer_manual),
+    budget_month_shift:
+      row.budget_month_shift === null || row.budget_month_shift === undefined
+        ? null
+        : Number(row.budget_month_shift),
     pea_plan_id: row.pea_plan_id ? String(row.pea_plan_id) : null,
     pea_manual: Boolean(row.pea_manual),
     created_at: String(row.created_at),

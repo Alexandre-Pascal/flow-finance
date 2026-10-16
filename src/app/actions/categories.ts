@@ -296,11 +296,16 @@ export async function assignTransactionCategoryAction(
     return { error: "invalid" };
   }
 
+  const isRefund = Number(tx.amount) > 0;
+
   const { error: updateError } = await supabase
     .from("transactions")
     .update({
       category_id: categoryId,
       category_manual: true,
+      // Catégoriser une rentrée, c'est déclarer un remboursement : elle cesse
+      // d'être un revenu, et le rattachement à une source n'a plus de sens.
+      ...(isRefund && categoryId ? { income_source: null } : {}),
     })
     .eq("id", transactionId);
 
@@ -310,7 +315,9 @@ export async function assignTransactionCategoryAction(
       : { error: "save" };
   }
 
-  if (categoryId) {
+  // Le libellé d'un remboursement (« Virement de Paul ») ne dit rien d'une
+  // dépense : l'apprendre ferait classer en loisirs tout ce que Paul envoie.
+  if (categoryId && !isRefund) {
     const { data: categoryRow, error: categoryError } = await supabase
       .from("categories")
       .select("*")

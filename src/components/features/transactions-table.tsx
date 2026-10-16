@@ -24,6 +24,7 @@ import {
 } from "@/app/actions/pea";
 import { assignTransactionSavingsAccountAction } from "@/app/actions/savings";
 import {
+  assignTransactionBudgetMonthAction,
   assignTransactionIncomeSourceAction,
   assignTransactionTransferAccountAction,
 } from "@/app/actions/transactions";
@@ -164,10 +165,13 @@ function CategorySelect({
   tx,
   categories,
   isDemo,
+  refund = false,
 }: {
   tx: TransactionWithAccount;
   categories: Category[];
   isDemo: boolean;
+  /** Sur une rentrée, la catégorie désigne la dépense que l'argent rembourse. */
+  refund?: boolean;
 }) {
   const t = useTranslations("transactions");
   const router = useRouter();
@@ -206,13 +210,16 @@ function CategorySelect({
           "h-8 w-full max-w-[180px] cursor-pointer",
           error && "border-destructive",
         )}
-        aria-label={t("expenseType")}
+        aria-label={refund ? t("refundAssignLabel") : t("expenseType")}
+        title={refund ? t("refundAssignLabel") : undefined}
       >
-        <SelectValue placeholder={t("expenseTypeNone")} />
+        <SelectValue
+          placeholder={refund ? t("refundPlaceholder") : t("expenseTypeNone")}
+        />
       </SelectTrigger>
       <SelectContent position="popper">
         <SelectItem value="none" className="cursor-pointer">
-          {t("expenseTypeNone")}
+          {refund ? t("refundNone") : t("expenseTypeNone")}
         </SelectItem>
         {categories.map((category) => (
           <SelectItem
@@ -620,6 +627,29 @@ function IncomeAssign({
     });
   }
 
+  function assignMonth(value: string) {
+    if (isDemo) {
+      return;
+    }
+    const formData = new FormData();
+    formData.set("transactionId", tx.id);
+    formData.set("budgetMonthShift", value);
+    startTransition(async () => {
+      const result = await assignTransactionBudgetMonthAction(formData);
+      if (!result.error) {
+        router.refresh();
+      }
+    });
+  }
+
+  const monthOptions = [
+    { value: "auto", label: t("budgetMonthAuto") },
+    { value: "0", label: t("budgetMonthCurrent") },
+    { value: "1", label: t("budgetMonthNext") },
+  ];
+  const currentMonthChoice =
+    tx.budget_month_shift == null ? "auto" : String(tx.budget_month_shift);
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -654,6 +684,18 @@ function IncomeAssign({
         >
           {t("incomeAssignAuto")}
         </DropdownMenuCheckboxItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("budgetMonthLabel")}</DropdownMenuLabel>
+        {monthOptions.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option.value}
+            checked={currentMonthChoice === option.value}
+            onCheckedChange={() => assignMonth(option.value)}
+            className="cursor-pointer"
+          >
+            {option.label}
+          </DropdownMenuCheckboxItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -759,12 +801,14 @@ function TransactionExpenseType({
             isDemo={isDemo}
           />
         ) : null}
+        {/* Une rentrée est un revenu, ou le remboursement d'une dépense. */}
         <IncomeAssign
           tx={tx}
           incomeSources={incomeSources}
           payrollKeyword={payrollKeyword}
           isDemo={isDemo}
         />
+        <CategorySelect tx={tx} categories={categories} isDemo={isDemo} refund />
       </div>
     );
   }

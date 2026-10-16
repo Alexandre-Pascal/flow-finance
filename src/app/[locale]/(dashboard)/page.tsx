@@ -11,7 +11,10 @@ import {
   getCurrentMonthTransactions,
   sumAccountBalances,
 } from "@/lib/finance/aggregates";
-import { sumBudgetMonthIncome } from "@/lib/finance/payroll-budget";
+import {
+  budgetExpenseAmount,
+  sumBudgetMonthIncome,
+} from "@/lib/finance/payroll-budget";
 import { getFinanceData } from "@/lib/finance/queries";
 import { getProfileSettings } from "@/lib/get-profile-settings";
 import { getConfiguredIncomeSources } from "@/lib/profile-settings";
@@ -40,14 +43,18 @@ export default async function DashboardPage({
   const monthTx = getCurrentMonthTransactions(transactions).filter(
     (tx) => !tx.savings_transfer,
   );
-  const spending = monthTx
-    .filter((tx) => tx.amount < 0)
-    .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
-  const income = sumBudgetMonthIncome(transactions, new Date(), {
+  const payrollOptions = {
     payrollKeyword: profileSettings.payroll.keyword,
     budgetShiftMonths: profileSettings.payroll.budgetShiftMonths,
     incomeSources: getConfiguredIncomeSources(profileSettings),
-  });
+  };
+  // Même règle que partout ailleurs : les virements entre comptes ne coûtent
+  // rien et les remboursements allègent le mois.
+  const spending = Math.max(
+    0,
+    monthTx.reduce((sum, tx) => sum + budgetExpenseAmount(tx, payrollOptions), 0),
+  );
+  const income = sumBudgetMonthIncome(transactions, new Date(), payrollOptions);
 
   const recent = [...transactions]
     .sort((a, b) => b.booking_date.localeCompare(a.booking_date))

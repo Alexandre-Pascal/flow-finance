@@ -5,12 +5,11 @@
 
 import type { Account, TransactionWithAccount } from "@/types/database";
 import {
+  budgetExpenseAmount,
   getIncomeMonthKey,
-  shouldCountAsBudgetExpense,
   shouldCountAsBudgetIncome,
   type PayrollBudgetOptions,
 } from "@/lib/finance/payroll-budget";
-import { isNeutralTransfer } from "@/lib/finance/account-transfers";
 
 export type MonthlyPeriod = 1 | 3 | 6 | 12 | "all";
 
@@ -64,16 +63,16 @@ export function buildMonthlySpending(
         const booked = new Date(tx.booking_date);
         return (
           booked.getFullYear() === date.getFullYear() &&
-          booked.getMonth() === date.getMonth() &&
-          tx.amount < 0 &&
-          !isNeutralTransfer(tx)
+          booked.getMonth() === date.getMonth()
         );
       })
-      .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+      .reduce((sum, tx) => sum + budgetExpenseAmount(tx), 0);
 
     buckets.push({
       month: formatter.format(date),
-      amount: Math.round(spending),
+      // Des remboursements supérieurs aux dépenses du mois donneraient une
+      // barre négative : le mois n'a rien coûté, il n'a pas rapporté.
+      amount: Math.max(0, Math.round(spending)),
     });
   }
 
@@ -119,8 +118,8 @@ export function buildMonthlyOverview(
 
   for (const tx of transactions) {
     const isIncome = shouldCountAsBudgetIncome(tx, payrollOptions);
-    const isExpense = shouldCountAsBudgetExpense(tx, payrollOptions);
-    if (!isIncome && !isExpense) {
+    const expense = budgetExpenseAmount(tx, payrollOptions);
+    if (!isIncome && expense === 0) {
       continue;
     }
 
@@ -131,8 +130,8 @@ export function buildMonthlyOverview(
 
     if (isIncome) {
       bucket.income += tx.amount;
-    } else if (isExpense) {
-      bucket.expenses += Math.abs(tx.amount);
+    } else {
+      bucket.expenses += expense;
     }
 
     buckets.set(key, bucket);
@@ -151,7 +150,9 @@ export function buildMonthlyOverview(
     const date = new Date(year, month - 1, 1);
     const totals = buckets.get(monthKey) ?? { income: 0, expenses: 0 };
     const income = Math.round(totals.income * 100) / 100;
-    const expenses = Math.round(totals.expenses * 100) / 100;
+    // Un mois où l'on s'est fait rembourser plus qu'on n'a dépensé coûte zéro,
+    // il ne rapporte pas : sans ce plancher, le taux d'épargne dépasse 100 %.
+    const expenses = Math.max(0, Math.round(totals.expenses * 100) / 100);
     const net = Math.round((income - expenses) * 100) / 100;
 
     return {
